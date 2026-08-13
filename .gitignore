@@ -1,0 +1,6 @@
+# Local specification-governance working state.
+# Canonical specifications remain tracked under specs/.
+spec-governance/
+
+# Temporary files created while provisioning or validating infrastructure.
+.codex-tmp/
