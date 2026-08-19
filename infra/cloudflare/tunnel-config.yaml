@@ -1,0 +1,11 @@
+tunnel: thesis-trace-named-tunnel
+credentials-file: /run/secrets/tunnel_credentials
+
+ingress:
+  - hostname: thesis-trace.example.invalid
+    service: https://origin-gateway:8443
+    originRequest:
+      noTLSVerify: false
+      caPool: /run/configs/origin_ca.pem
+      connectTimeout: 10s
+  - service: http_status:404

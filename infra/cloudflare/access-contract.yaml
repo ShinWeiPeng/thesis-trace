@@ -1,0 +1,45 @@
+{
+  "contract_version": 1,
+  "application": {
+    "type": "self_hosted",
+    "hostname_ref": "THESIS_TRACE_PUBLIC_HOSTNAME",
+    "path_coverage": "all",
+    "default_action": "deny",
+    "single_application": true
+  },
+  "forbidden_actions": [
+    "bypass",
+    "everyone",
+    "email_domain",
+    "any_valid_identity",
+    "magic_link",
+    "service_token_human"
+  ],
+  "provisioning_order": ["access_application", "named_tunnel_public_hostname_route"],
+  "policies": {
+    "normal_google": {
+      "enabled": true,
+      "provider": "google",
+      "identity_facts_ref": "secret://owner_google_identity_facts",
+      "selector": "exact_identity_facts",
+      "mfa_required": true,
+      "session_minutes": 480
+    },
+    "owner_recovery": {
+      "enabled_by_default": false,
+      "visible_in_normal_login": false,
+      "activation": "manual_cloudflare_management_only",
+      "provider": "cloudflare_account",
+      "identity_fact_ref": "secret://owner_cloudflare_identity_fact",
+      "principal_count": 1,
+      "mfa_every_login": true,
+      "session_minutes": 30,
+      "maps_to_existing_owner": true,
+      "privilege_elevation": false,
+      "first_use_audit": true,
+      "shutdown_action_item": "safety_locked"
+    }
+  },
+  "provider_identity_key": ["provider_id", "provider_type", "provider_subject"],
+  "email_identity_merge": false
+}

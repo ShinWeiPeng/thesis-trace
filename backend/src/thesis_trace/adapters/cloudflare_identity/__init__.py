@@ -1,0 +1,1 @@
+"""Cloudflare Access identity adapter."""

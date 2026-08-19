@@ -4,3 +4,39 @@ spec-governance/
 
 # Temporary files created while provisioning or validating infrastructure.
 .codex-tmp/
+
+# Local on-device bindings and generated runtime evidence.
+.codex/on-device.local.yaml
+.codex/evidence/
+
+# Runtime secrets and local deployment overrides. Commit only *.example files.
+.env
+.env.*
+!.env.example
+!*.env.example
+/secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python, JavaScript, test, and build artifacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# Local database and editor state.
+.postgres-data/
+.idea/
+.vscode/
+*.swp

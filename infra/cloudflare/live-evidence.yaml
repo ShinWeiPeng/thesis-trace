@@ -1,0 +1,10 @@
+{
+  "status": "BLOCKED",
+  "required": [
+    "sanitized_live_access_application_policy_and_idp_export",
+    "google_mfa_and_eight_hour_boundary_drill",
+    "disabled_recovery_policy_and_thirty_minute_every_login_mfa_drill",
+    "named_tunnel_dns_and_credential_rotation_inventory",
+    "provider_and_jwks_outage_fail_closed_evidence"
+  ]
+}

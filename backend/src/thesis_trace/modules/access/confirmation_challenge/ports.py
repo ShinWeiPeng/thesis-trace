@@ -1,0 +1,6 @@
+from __future__ import annotations
+from typing import Protocol
+from thesis_trace.modules.access.confirmation_challenge.contracts import ConfirmationChallenge
+class ChallengeRepositoryPort(Protocol):
+    def save_challenge(self, challenge: ConfirmationChallenge, token_digest: str) -> None: ...
+    def consume_challenge(self, token_digest: str, actor_id: str, action_type: str, target_version: int, payload_digest: str, reason: str, now): ...

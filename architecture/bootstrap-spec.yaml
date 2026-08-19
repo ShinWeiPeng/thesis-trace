@@ -1,0 +1,1741 @@
+standard_version: 2.2.0
+schema_version: 2.2.0
+project:
+  name: thesis-trace
+  documentation_language: zh-TW
+  diagram_language: zh-TW
+source_sets:
+- id: backend-production
+  classification: production
+  include:
+  - backend/src/**
+  exclude:
+  - backend/src/generated/**
+  purpose: Govern maintained Python application source.
+  provenance: Human-maintained repository source.
+- id: frontend-production
+  classification: production
+  include:
+  - frontend/src/**
+  exclude:
+  - frontend/src/generated/**
+  purpose: Govern maintained React and TypeScript source.
+  provenance: Human-maintained repository source.
+- id: tooling-production
+  classification: production
+  include:
+  - tools/**
+  exclude: []
+  purpose: Govern maintained contract and architecture tooling.
+  provenance: Human-maintained repository tooling source.
+- id: generated-contracts
+  classification: generated-production
+  include:
+  - backend/src/generated/**
+  - frontend/src/generated/**
+  exclude: []
+  purpose: Contain generator-owned OpenAPI contracts and clients.
+  provenance: Generated from the versioned OpenAPI contract.
+  generator: project OpenAPI generation pipeline
+  owner: contract_generation_adapter
+- id: development
+  classification: development
+  include:
+  - tests/**
+  - backend/tests/**
+  - frontend/tests/**
+  - .github/**
+  exclude: []
+  purpose: Keep tests and development automation outside formal production catalogs.
+  provenance: Developer-maintained test and CI source.
+- id: derived-docs
+  classification: derived-documentation
+  include:
+  - architecture/generated/**
+  exclude: []
+  purpose: Contain renderer-owned architecture views.
+  provenance: Architecture renderer.
+- id: build-output
+  classification: build-output
+  include:
+  - backend/.venv/**
+  - frontend/node_modules/**
+  - frontend/dist/**
+  - build/**
+  - coverage/**
+  exclude: []
+  purpose: Exclude dependencies, build output, and coverage artifacts.
+  provenance: Language toolchains and build pipeline.
+modules:
+- id: thesis_trace_application
+  level: L0
+  role: orchestration
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/application
+  parent: null
+  depends_on:
+  - access_domain
+  - research_domain
+  - thesis_domain
+  - portfolio_domain
+  - recommendation_domain
+  - workflow_domain
+  - notification_domain
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/application/contracts.py
+  description:
+    purpose: Coordinate authenticated cross-domain product flows without owning domain
+      state.
+    diagram_summaries:
+      zh-TW: 協調跨領域產品流程
+    input_ports:
+    - application.submit_evidence
+    output_ports:
+    - application.events
+    emitted_events:
+    - application.evidence_submission_completed
+    owned_state: []
+    side_effects:
+    - description: Coordinate child commands and map child events.
+    errors:
+    - id: thesis_trace_application-error-1
+      condition: Reject unauthenticated or unauthorized commands
+      event: application.evidence_submission_completed
+      handling: Reject unauthenticated or unauthorized commands
+    - id: thesis_trace_application-error-2
+      condition: Propagate child admission failures.
+      event: application.evidence_submission_completed
+      handling: Propagate child admission failures.
+    invariants:
+    - Sibling domains communicate only through this parent
+    - Domain state remains child-owned.
+  entrypoints:
+  - path: backend/src/thesis_trace/application/flows/evidence_intake.py
+    symbol: submit_evidence_url
+    kind: orchestrator
+  public_symbols:
+  - path: backend/src/thesis_trace/application/contracts.py
+    symbol: SubmitEvidenceRequest
+    kind: contract
+- id: backend_composition
+  level: L0
+  role: composition
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/bootstrap
+  parent: null
+  depends_on:
+  - fastapi_entrypoint
+  - cloudflare_access_jwt_adapter
+  - postgres_research_adapter
+  - postgres_audit_adapter
+  - postgres_outbox_queue_adapter
+  - restricted_http_collector_adapter
+  - system_clock_adapter
+  - uuid_adapter
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/bootstrap/application.py
+  description:
+    purpose: Construct the release application and wire functional ports to concrete
+      adapters.
+    diagram_summaries:
+      zh-TW: 組裝正式應用與技術介面
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Create process-scoped adapters and application instances.
+    errors:
+    - id: backend_composition-error-1
+      condition: Fail startup when mandatory configuration or adapters are unavailable.
+      event: application.evidence_submission_completed
+      handling: Fail startup when mandatory configuration or adapters are unavailable.
+    invariants:
+    - Only this module selects concrete adapters
+    - Exactly one release composition root exists.
+  entrypoints:
+  - path: backend/src/thesis_trace/bootstrap/application.py
+    symbol: compose_application
+    kind: initializer
+  public_symbols:
+  - path: backend/src/thesis_trace/bootstrap/application.py
+    symbol: compose_application
+    kind: composition-root
+- id: access_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/access
+  parent: thesis_trace_application
+  depends_on:
+  - request_identity
+  - authorization_policy
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/access/contracts.py
+  description:
+    purpose: Own authenticated actor identity and application authorization decisions.
+    diagram_summaries:
+      zh-TW: 管理身分與應用授權
+    input_ports:
+    - access.authorize_owner
+    output_ports:
+    - access.events
+    emitted_events:
+    - access.owner_authorized
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: access_domain-error-1
+      condition: Reject absent
+      event: access.owner_authorized
+      handling: Reject absent
+    - id: access_domain-error-2
+      condition: expired
+      event: access.owner_authorized
+      handling: expired
+    - id: access_domain-error-3
+      condition: or unauthorized identities.
+      event: access.owner_authorized
+      handling: or unauthorized identities.
+    invariants:
+    - Provider identity never collapses by email alone
+    - Authorization fails closed.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/access/service.py
+    symbol: AccessService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/access/contracts.py
+    symbol: AuthenticatedActor
+    kind: contract
+- id: request_identity
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/access/request_identity
+  parent: access_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/access/request_identity/contracts.py
+  description:
+    purpose: Convert verified provider identity into a stable internal actor snapshot.
+    diagram_summaries:
+      zh-TW: 建立已驗證行動者快照
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: request_identity-error-1
+      condition: Reject unverified identity material.
+      event: application.evidence_submission_completed
+      handling: Reject unverified identity material.
+    invariants:
+    - No wire JWT claims enter public domain contracts.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/access/request_identity/service.py
+    symbol: resolve_actor
+    kind: function
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/access/request_identity/contracts.py
+    symbol: AuthenticatedActor
+    kind: contract
+- id: authorization_policy
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/access/authorization_policy
+  parent: access_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/access/authorization_policy/contracts.py
+  description:
+    purpose: Decide whether an authenticated actor may invoke an Owner command.
+    diagram_summaries:
+      zh-TW: 判定 Owner 指令授權
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: authorization_policy-error-1
+      condition: Return a non-disclosing denial.
+      event: application.evidence_submission_completed
+      handling: Return a non-disclosing denial.
+    invariants:
+    - Client roles never override server authority.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/access/authorization_policy/policy.py
+    symbol: authorize_owner
+    kind: function
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/access/authorization_policy/contracts.py
+    symbol: AuthorizationDecision
+    kind: contract
+- id: research_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/research
+  parent: thesis_trace_application
+  depends_on:
+  - company_catalog
+  - evidence_intake
+  - evidence_collection
+  - evidence_stage
+  - anomaly_assessment
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/contracts.py
+  description:
+    purpose: Own companies, evidence provenance, collection lifecycle, evidence stages,
+      and anomaly facts.
+    diagram_summaries:
+      zh-TW: 管理公司與研究證據
+    input_ports:
+    - research.submit_evidence
+    - research.query_evidence
+    output_ports:
+    - research.unit_of_work
+    - research.collection_jobs
+    - research.source_fetch
+    - research.events
+    emitted_events:
+    - research.evidence_received
+    - research.collection_succeeded
+    - research.collection_failed
+    owned_state: []
+    side_effects:
+    - description: Persist evidence state through demand-owned ports
+    - description: Request restricted source collection.
+    errors:
+    - id: research_domain-error-1
+      condition: Reject invalid URLs or stale company versions
+      event: research.evidence_received
+      handling: Reject invalid URLs or stale company versions
+    - id: research_domain-error-2
+      condition: Record safe retry and terminal failures.
+      event: research.evidence_received
+      handling: Record safe retry and terminal failures.
+    invariants:
+    - State commits before success events
+    - Evidence streams are serialized
+    - Source records are immutable.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/service.py
+    symbol: ResearchService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/contracts.py
+    symbol: SubmitEvidenceUrlCommand
+    kind: contract
+- id: company_catalog
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/research/company_catalog
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/company_catalog/contracts.py
+  description:
+    purpose: Own company identity, version, and lookup snapshots.
+    diagram_summaries:
+      zh-TW: 管理公司識別與版本
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: company_catalog-error-1
+      condition: Reject unknown or stale company references.
+      event: application.evidence_submission_completed
+      handling: Reject unknown or stale company references.
+    invariants:
+    - Company identity is stable and server-owned.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/company_catalog/service.py
+    symbol: CompanyCatalog
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/company_catalog/contracts.py
+    symbol: CompanyRef
+    kind: contract
+- id: evidence_intake
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/research/evidence_intake
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+  description:
+    purpose: Admit Evidence URLs and atomically create received state, audit fact,
+      and collection job.
+    diagram_summaries:
+      zh-TW: 接收證據網址並建立工作
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: evidence_intake-error-1
+      condition: Reject invalid URL
+      event: application.evidence_submission_completed
+      handling: Reject invalid URL
+    - id: evidence_intake-error-2
+      condition: duplicate admission
+      event: application.evidence_submission_completed
+      handling: duplicate admission
+    - id: evidence_intake-error-3
+      condition: stale version
+      event: application.evidence_submission_completed
+      handling: stale version
+    - id: evidence_intake-error-4
+      condition: or unavailable persistence.
+      event: application.evidence_submission_completed
+      handling: or unavailable persistence.
+    invariants:
+    - Evidence
+    - audit
+    - and job commit atomically
+    - Accepted commands return a record and version.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/service.py
+    symbol: EvidenceIntake
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceAccepted
+    kind: contract
+- id: evidence_collection
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/research/evidence_collection
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/evidence_collection/contracts.py
+  description:
+    purpose: Collect restricted sources and commit immutable snapshots or safe failures.
+    diagram_summaries:
+      zh-TW: 擷取來源並保存不可變快照
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: evidence_collection-error-1
+      condition: Retry transient failures and dead-letter terminal failures without
+        leaking secrets.
+      event: application.evidence_submission_completed
+      handling: Retry transient failures and dead-letter terminal failures without
+        leaking secrets.
+    invariants:
+    - A lease token is opaque
+    - Success is published only after snapshot commit.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_collection/service.py
+    symbol: EvidenceCollector
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_collection/contracts.py
+    symbol: CollectedSourceSnapshot
+    kind: contract
+- id: evidence_stage
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/research/evidence_stage
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+  description:
+    purpose: Derive E0-E6 stages from committed evidence snapshots.
+    diagram_summaries:
+      zh-TW: 推導 E0 至 E6 階段
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: evidence_stage-error-1
+      condition: Abstain when gates are incomplete.
+      event: application.evidence_submission_completed
+      handling: Abstain when gates are incomplete.
+    invariants:
+    - AI cannot set the final stage.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/policy.py
+    symbol: derive_stage
+    kind: function
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+    symbol: EvidenceStage
+    kind: contract
+- id: anomaly_assessment
+  level: L2
+  role: component
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/research/anomaly_assessment
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+  description:
+    purpose: Classify clues and derive fail-closed Hard or Soft anomaly facts.
+    diagram_summaries:
+      zh-TW: 評估異常證據與安全等級
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: anomaly_assessment-error-1
+      condition: Downgrade to Soft when proof is incomplete.
+      event: application.evidence_submission_completed
+      handling: Downgrade to Soft when proof is incomplete.
+    invariants:
+    - C clues never satisfy a Hard quorum.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/policy.py
+    symbol: assess_anomaly
+    kind: function
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AnomalyAssessment
+    kind: contract
+- id: thesis_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/thesis
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/thesis/contracts.py
+  description:
+    purpose: Own Thesis lifecycle
+    valuation inputs: null
+    outcomes: null
+    and reflections.: null
+    diagram_summaries:
+      zh-TW: 管理 Thesis 生命週期與反思
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: thesis_domain-error-1
+      condition: Reject illegal lifecycle transitions.
+      event: application.evidence_submission_completed
+      handling: Reject illegal lifecycle transitions.
+    invariants:
+    - Historical decisions are append-only.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/thesis/service.py
+    symbol: ThesisService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/thesis/contracts.py
+    symbol: ThesisId
+    kind: contract
+- id: portfolio_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/portfolio
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/portfolio/contracts.py
+  description:
+    purpose: Own holdings
+    trades: null
+    allocation: null
+    exposure: null
+    and immutable risk snapshots.: null
+    diagram_summaries:
+      zh-TW: 管理投資組合與風險快照
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: portfolio_domain-error-1
+      condition: Reject incomplete or over-allocated trades.
+      event: application.evidence_submission_completed
+      handling: Reject incomplete or over-allocated trades.
+    invariants:
+    - Risk aggregates all buckets for a security.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/portfolio/service.py
+    symbol: PortfolioService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/portfolio/contracts.py
+    symbol: PortfolioSnapshotId
+    kind: contract
+- id: recommendation_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/recommendation
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/recommendation/contracts.py
+  description:
+    purpose: Own immutable recommendations
+    critic decisions: null
+    and Owner decisions.: null
+    diagram_summaries:
+      zh-TW: 管理建議與 Owner 決策
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: recommendation_domain-error-1
+      condition: Abstain when validation or risk inputs fail.
+      event: application.evidence_submission_completed
+      handling: Abstain when validation or risk inputs fail.
+    invariants:
+    - AI cannot override deterministic policy.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/recommendation/service.py
+    symbol: RecommendationService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationId
+    kind: contract
+- id: workflow_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/workflow
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/workflow/contracts.py
+  description:
+    purpose: Own actionable work items
+    priority: null
+    safety locks: null
+    assignment: null
+    and recurrence.: null
+    diagram_summaries:
+      zh-TW: 管理人工行動收件匣
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: workflow_domain-error-1
+      condition: Reject unsafe or unauthorized transitions.
+      event: application.evidence_submission_completed
+      handling: Reject unsafe or unauthorized transitions.
+    invariants:
+    - System priority and safety floors are server-owned.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/workflow/service.py
+    symbol: WorkflowService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/workflow/contracts.py
+    symbol: ActionItemId
+    kind: contract
+- id: notification_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/notification
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/notification/contracts.py
+  description:
+    purpose: Own notification classification
+    safe content: null
+    and delivery intent.: null
+    diagram_summaries:
+      zh-TW: 管理通知分類與安全內容
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: notification_domain-error-1
+      condition: Dead-letter permanent delivery failures.
+      event: application.evidence_submission_completed
+      handling: Dead-letter permanent delivery failures.
+    invariants:
+    - Forbidden portfolio data never enters message content.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/notification/service.py
+    symbol: NotificationService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/notification/contracts.py
+    symbol: NotificationIntent
+    kind: contract
+- id: fastapi_entrypoint
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/entrypoints/api
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/entrypoints/api/app.py
+  description:
+    purpose: Translate versioned JSON HTTP requests into application commands and
+      queries.
+    diagram_summaries:
+      zh-TW: 轉換 HTTP 與應用契約
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Serve HTTP and OpenAPI.
+    errors:
+    - id: fastapi_entrypoint-error-1
+      condition: Return the uniform non-disclosing error envelope.
+      event: application.evidence_submission_completed
+      handling: Return the uniform non-disclosing error envelope.
+    invariants:
+    - Client values never become server authority.
+  entrypoints:
+  - path: backend/src/thesis_trace/entrypoints/api/app.py
+    symbol: create_api
+    kind: factory
+  public_symbols:
+  - path: backend/src/thesis_trace/entrypoints/api/app.py
+    symbol: create_api
+    kind: adapter
+- id: cloudflare_access_jwt_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/access
+  parent: null
+  depends_on:
+  - access_domain
+  implements_ports:
+  - access.identity_provider
+  public_headers:
+  - backend/src/thesis_trace/platform/access/cloudflare_jwt.py
+  description:
+    purpose: Verify Access JWTs and supply semantic identity through a demand-owned
+      port.
+    diagram_summaries:
+      zh-TW: 驗證 Cloudflare Access JWT
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Fetch and cache signing keys.
+    errors:
+    - id: cloudflare_access_jwt_adapter-error-1
+      condition: Fail closed when a token or key cannot be verified.
+      event: application.evidence_submission_completed
+      handling: Fail closed when a token or key cannot be verified.
+    invariants:
+    - Headers alone never prove identity.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/access/cloudflare_jwt.py
+    symbol: CloudflareAccessIdentityProvider
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/access/cloudflare_jwt.py
+    symbol: CloudflareAccessIdentityProvider
+    kind: adapter
+- id: postgres_research_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/postgres/research
+  parent: null
+  depends_on:
+  - research_domain
+  implements_ports:
+  - research.unit_of_work
+  public_headers:
+  - backend/src/thesis_trace/platform/postgres/research/adapter.py
+  description:
+    purpose: Persist Research semantic state with PostgreSQL transactions.
+    diagram_summaries:
+      zh-TW: 保存研究領域狀態
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Read and write PostgreSQL.
+    errors:
+    - id: postgres_research_adapter-error-1
+      condition: Map storage failures to semantic unavailable errors.
+      event: application.evidence_submission_completed
+      handling: Map storage failures to semantic unavailable errors.
+    invariants:
+    - ORM and SQL types never leak into functional contracts.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/postgres/research/adapter.py
+    symbol: PostgresResearchUnitOfWork
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/postgres/research/adapter.py
+    symbol: PostgresResearchUnitOfWork
+    kind: adapter
+- id: postgres_audit_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/postgres/audit
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/platform/postgres/audit/adapter.py
+  description:
+    purpose: Map semantic audit facts into append-only storage inside the caller transaction.
+    diagram_summaries:
+      zh-TW: 保存追加式稽核事實
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Append audit rows.
+    errors:
+    - id: postgres_audit_adapter-error-1
+      condition: Abort the containing transaction on audit failure.
+      event: application.evidence_submission_completed
+      handling: Abort the containing transaction on audit failure.
+    invariants:
+    - Audit never commits after domain state in a separate transaction.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/postgres/audit/adapter.py
+    symbol: PostgresAuditWriter
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/postgres/audit/adapter.py
+    symbol: PostgresAuditWriter
+    kind: adapter
+- id: postgres_outbox_queue_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/postgres/jobs
+  parent: null
+  depends_on:
+  - research_domain
+  implements_ports:
+  - research.collection_jobs
+  public_headers:
+  - backend/src/thesis_trace/platform/postgres/jobs/adapter.py
+  description:
+    purpose: Store and lease durable collection jobs with idempotent acknowledgement
+      and retry.
+    diagram_summaries:
+      zh-TW: 管理 PostgreSQL 耐久工作佇列
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Claim and transition job rows.
+    errors:
+    - id: postgres_outbox_queue_adapter-error-1
+      condition: Retry or dead-letter according to the semantic contract.
+      event: application.evidence_submission_completed
+      handling: Retry or dead-letter according to the semantic contract.
+    invariants:
+    - A stream has one active lease and duplicate delivery is safe.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/postgres/jobs/adapter.py
+    symbol: PostgresCollectionJobQueue
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/postgres/jobs/adapter.py
+    symbol: PostgresCollectionJobQueue
+    kind: adapter
+- id: restricted_http_collector_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/http
+  parent: null
+  depends_on:
+  - research_domain
+  implements_ports:
+  - research.source_fetch
+  public_headers:
+  - backend/src/thesis_trace/platform/http/restricted_fetch.py
+  description:
+    purpose: Fetch approved HTTP sources while enforcing network and content restrictions.
+    diagram_summaries:
+      zh-TW: 受限制地擷取證據來源
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Perform bounded outbound HTTPS requests.
+    errors:
+    - id: restricted_http_collector_adapter-error-1
+      condition: Reject forbidden targets and return safe retryability.
+      event: application.evidence_submission_completed
+      handling: Reject forbidden targets and return safe retryability.
+    invariants:
+    - Private and management networks are never fetched.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/http/restricted_fetch.py
+    symbol: RestrictedHttpSourceFetcher
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/http/restricted_fetch.py
+    symbol: RestrictedHttpSourceFetcher
+    kind: adapter
+- id: system_clock_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/time
+  parent: null
+  depends_on:
+  - research_domain
+  implements_ports:
+  - research.clock
+  public_headers:
+  - backend/src/thesis_trace/platform/time/system_clock.py
+  description:
+    purpose: Supply trusted observed and retrieved times through a demand-owned clock
+      port.
+    diagram_summaries:
+      zh-TW: 提供可信系統時間
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Read system time.
+    errors:
+    - id: system_clock_adapter-error-1
+      condition: Report unavailable time without fabricating timestamps.
+      event: application.evidence_submission_completed
+      handling: Report unavailable time without fabricating timestamps.
+    invariants:
+    - Domain logic can substitute a fake clock in tests.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/time/system_clock.py
+    symbol: SystemClock
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/time/system_clock.py
+    symbol: SystemClock
+    kind: adapter
+- id: uuid_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/platform/ids
+  parent: null
+  depends_on:
+  - research_domain
+  implements_ports:
+  - research.ids
+  public_headers:
+  - backend/src/thesis_trace/platform/ids/uuid7.py
+  description:
+    purpose: Generate opaque unique identifiers through a demand-owned port.
+    diagram_summaries:
+      zh-TW: 產生不透明唯一識別碼
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Read secure randomness and clock input.
+    errors:
+    - id: uuid_adapter-error-1
+      condition: Reject generation failure.
+      event: application.evidence_submission_completed
+      handling: Reject generation failure.
+    invariants:
+    - Callers never construct persistent IDs from user data.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/ids/uuid7.py
+    symbol: UuidIdGenerator
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/ids/uuid7.py
+    symbol: UuidIdGenerator
+    kind: adapter
+- id: contract_generation_adapter
+  level: L3+
+  role: technical
+  implementation_status: planned
+  paths:
+  - tools/contracts
+  parent: null
+  depends_on:
+  - fastapi_entrypoint
+  implements_ports: []
+  public_headers:
+  - tools/contracts/generate.py
+  description:
+    purpose: Generate TypeScript API contracts from the versioned FastAPI OpenAPI
+      document.
+    diagram_summaries:
+      zh-TW: 產生前端 API 契約
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Write generated-production sources.
+    errors:
+    - id: contract_generation_adapter-error-1
+      condition: Fail when generated output is stale or invalid.
+      event: application.evidence_submission_completed
+      handling: Fail when generated output is stale or invalid.
+    invariants:
+    - Generated contracts are never hand edited.
+  entrypoints:
+  - path: tools/contracts/generate.py
+    symbol: generate_contracts
+    kind: generator
+  public_symbols:
+  - path: tools/contracts/generate.py
+    symbol: generate_contracts
+    kind: generator
+ports:
+- id: application.submit_evidence
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: []
+  description:
+    purpose: Submit an authenticated Evidence URL intent.
+    data: Actor
+    company reference: null
+    URL: null
+    and idempotency key.: null
+    timing: async
+    immediate_rejections:
+    - code: unauthenticated
+      condition: unauthenticated
+    - code: forbidden
+      condition: forbidden
+    - code: invalid_url
+      condition: invalid url
+    - code: company_version_conflict
+      condition: company version conflict
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceRequest
+- id: application.events
+  owner: thesis_trace_application
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: []
+  description:
+    purpose: Publish application-visible evidence submission results.
+    data: Record identity
+    version: null
+    and committed status.: null
+    timing: async
+    immediate_rejections: []
+  symbols:
+  - SubmitEvidenceRequest
+- id: access.authorize_owner
+  owner: access_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/access/contracts.py
+  implemented_by: []
+  description:
+    purpose: Decide whether the actor may submit Owner evidence.
+    data: Immutable authenticated actor snapshot.
+    timing: sync
+    immediate_rejections:
+    - code: unauthenticated
+      condition: unauthenticated
+    - code: forbidden
+      condition: forbidden
+  symbols:
+  - AuthenticatedActor
+- id: access.identity_provider
+  owner: access_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/access/ports.py
+  implemented_by:
+  - cloudflare_access_jwt_adapter
+  description:
+    purpose: Obtain a verified semantic identity without exposing JWT wire data.
+    data: Semantic identity or a non-disclosing rejection.
+    timing: sync
+    immediate_rejections:
+    - code: unverifiable
+      condition: unverifiable
+    - code: expired
+      condition: expired
+    - code: wrong_issuer
+      condition: wrong issuer
+    - code: wrong_audience
+      condition: wrong audience
+  symbols:
+  - AuthenticatedActor
+- id: access.events
+  owner: access_domain
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/modules/access/contracts.py
+  implemented_by: []
+  description:
+    purpose: Publish authorization facts after validation.
+    data: Actor ID and authorization purpose.
+    timing: sync
+    immediate_rejections: []
+  symbols:
+  - AuthenticatedActor
+- id: research.submit_evidence
+  owner: research_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/research/contracts.py
+  implemented_by: []
+  description:
+    purpose: Atomically admit one Evidence URL.
+    data: Authorized actor
+    company reference: null
+    URL: null
+    and idempotency key.: null
+    timing: sync
+    immediate_rejections:
+    - code: invalid_url
+      condition: invalid url
+    - code: duplicate
+      condition: duplicate
+    - code: company_version_conflict
+      condition: company version conflict
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.query_evidence
+  owner: research_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/research/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return an authorized immutable Evidence status snapshot.
+    data: Evidence ID and server version.
+    timing: sync
+    immediate_rejections:
+    - code: not_found_or_forbidden
+      condition: not found or forbidden
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.unit_of_work
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by:
+  - postgres_research_adapter
+  description:
+    purpose: Atomically save evidence state
+    audit fact: null
+    and durable job.: null
+    data: Semantic records without ORM representations.
+    timing: sync
+    immediate_rejections:
+    - code: conflict
+      condition: conflict
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.collection_jobs
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by:
+  - postgres_outbox_queue_adapter
+  description:
+    purpose: Lease
+    acknowledge: null
+    retry: null
+    or dead-letter durable collection work.: null
+    data: Collection request and opaque lease token.
+    timing: async
+    immediate_rejections:
+    - code: lease_unavailable
+      condition: lease unavailable
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.source_fetch
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by:
+  - restricted_http_collector_adapter
+  description:
+    purpose: Fetch one admitted external source under SSRF and size restrictions.
+    data: Evidence URL and semantic fetch result.
+    timing: async
+    immediate_rejections:
+    - code: forbidden_target
+      condition: forbidden target
+    - code: invalid_scheme
+      condition: invalid scheme
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.clock
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by:
+  - system_clock_adapter
+  description:
+    purpose: Supply observed and retrieved times.
+    data: Time value with provenance.
+    timing: sync
+    immediate_rejections:
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.ids
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by:
+  - uuid_adapter
+  description:
+    purpose: Generate persistent semantic identifiers.
+    data: Opaque unique identifier.
+    timing: sync
+    immediate_rejections:
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceUrlCommand
+- id: research.events
+  owner: research_domain
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/modules/research/contracts.py
+  implemented_by: []
+  description:
+    purpose: Publish committed evidence lifecycle transitions.
+    data: Persistent event envelope and semantic payload.
+    timing: async
+    immediate_rejections: []
+  symbols:
+  - SubmitEvidenceUrlCommand
+events:
+- id: research.evidence_received
+  owner: research_domain
+  output_port: research.events
+  delivery: at-least-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  - event_id
+  - retry
+  lifecycle:
+  - received
+  - validated
+  - accepted
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - cancelled
+  - dead-letter
+  description:
+    purpose: Report that received evidence
+    audit: null
+    and collection work committed.: null
+    emitted_when: The atomic intake transaction has committed.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Stable evidence stream identity.
+    - name: version
+      type: EvidenceVersion
+      meaning: Committed server version.
+    intended_consumers:
+    - thesis_trace_application
+    - research_domain
+  idempotency: Persistent event_id and stream sequence; consumers record processed
+    event IDs.
+- id: research.collection_succeeded
+  owner: research_domain
+  output_port: research.events
+  delivery: at-least-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  - event_id
+  - retry
+  lifecycle:
+  - received
+  - validated
+  - accepted
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - cancelled
+  - dead-letter
+  description:
+    purpose: Report a committed immutable source snapshot.
+    emitted_when: The snapshot and succeeded state have committed.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Evidence stream identity.
+    - name: content_hash
+      type: string
+      meaning: Immutable content digest.
+    intended_consumers:
+    - thesis_trace_application
+  idempotency: Persistent event_id and stream sequence; consumers record processed
+    event IDs.
+- id: research.collection_failed
+  owner: research_domain
+  output_port: research.events
+  delivery: at-least-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  - event_id
+  - retry
+  lifecycle:
+  - received
+  - validated
+  - accepted
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - cancelled
+  - dead-letter
+  description:
+    purpose: Report a committed retryable or terminal safe failure.
+    emitted_when: Failure state and retry metadata have committed.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Evidence stream identity.
+    - name: code
+      type: string
+      meaning: Non-secret stable failure code.
+    intended_consumers:
+    - thesis_trace_application
+  idempotency: Persistent event_id and stream sequence; consumers record processed
+    event IDs.
+- id: access.owner_authorized
+  owner: access_domain
+  output_port: access.events
+  delivery: at-most-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  lifecycle:
+  - received
+  - validated
+  - processing
+  - succeeded
+  - failed
+  description:
+    purpose: Record a successful Owner authorization decision.
+    emitted_when: Identity and role checks have succeeded.
+    payload_fields:
+    - name: actor_id
+      type: ActorId
+      meaning: Authorized internal actor.
+    intended_consumers:
+    - thesis_trace_application
+- id: application.evidence_submission_completed
+  owner: thesis_trace_application
+  output_port: application.events
+  delivery: at-most-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  lifecycle:
+  - received
+  - validated
+  - processing
+  - succeeded
+  - failed
+  description:
+    purpose: Notify delivery adapters that current evidence status can be queried.
+    emitted_when: A Research lifecycle event has been mapped after commit.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Evidence record to refresh.
+    intended_consumers:
+    - fastapi_entrypoint
+types: []
+type_exclusions: []
+state_objects: []
+boundary_mappings: []
+flows:
+- id: owner_evidence_intake
+  owner: thesis_trace_application
+  description: Admit an Owner Evidence URL and expose durable lifecycle state.
+  trigger:
+    kind: command
+    ref: application.submit_evidence
+    description: An authenticated Owner submits a company and Evidence URL.
+  steps:
+  - id: owner_evidence_intake.authorize
+    order: 1
+    module: access_domain
+    action: Verify the semantic actor and Owner permission.
+    receives:
+    - application.submit_evidence
+    emits:
+    - access.owner_authorized
+    state_changes: []
+    side_effects: []
+  - id: owner_evidence_intake.map
+    order: 2
+    module: thesis_trace_application
+    action: Map the authorized request into a Research command.
+    receives:
+    - access.owner_authorized
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_evidence_intake.commit
+    order: 3
+    module: research_domain
+    action: Validate and atomically commit received evidence
+    audit: null
+    and collection job.: null
+    receives:
+    - research.submit_evidence
+    emits:
+    - research.evidence_received
+    state_changes:
+    - Evidence status becomes received at a new server version.
+    side_effects:
+    - PostgreSQL transaction writes evidence
+    - audit
+    - and job.
+  - id: owner_evidence_intake.collect
+    order: 4
+    module: research_domain
+    action: Lease the durable job and fetch the restricted source.
+    receives:
+    - research.evidence_received
+    emits:
+    - research.collection_succeeded
+    - research.collection_failed
+    state_changes:
+    - Evidence becomes processing then succeeded
+    - failed
+    - retrying
+    - or dead-letter.
+    side_effects:
+    - Bounded HTTPS fetch and PostgreSQL transaction.
+  - id: owner_evidence_intake.query
+    order: 5
+    module: thesis_trace_application
+    action: Return the current server-owned record and version to the UI.
+    receives:
+    - research.query_evidence
+    emits:
+    - application.evidence_submission_completed
+    state_changes: []
+    side_effects: []
+  success:
+    result: UI observes a succeeded immutable source snapshot by record and version.
+    events:
+    - research.evidence_received
+    - research.collection_succeeded
+    - application.evidence_submission_completed
+  errors:
+  - condition: Identity or admission fails before acceptance.
+    events: []
+    event: application.evidence_submission_completed
+    handling: Return a stable non-disclosing error without creating state.
+  - condition: Collection fails after acceptance.
+    failed: null
+    or dead-letter and expose safe status.: null
+    events:
+    - research.collection_failed
+    event: research.collection_failed
+    handling: Commit retrying
+adr_exceptions: []
+c_analyzer:
+  ast:
+    status: not-applicable
+    rationale: ThesisTrace has no governed C or C++ production source.
+  functional_boundary:
+    status: configured
+    rationale: Python and TypeScript boundaries are governed by module contracts and
+      their analyzers.
+    forbidden_includes: []
+    forbidden_symbols: []
+  forbidden_public_includes: []
+  forbidden_public_symbols: []
+  forbidden_source_symbols: []
+python_analyzer:
+  status: required
+  rationale: FastAPI and worker production sources are governed Python modules.
+workloads:
+- id: owner_evidence_intake_workload
+  flow: owner_evidence_intake
+  steps:
+  - owner_evidence_intake.authorize
+  - owner_evidence_intake.map
+  - owner_evidence_intake.commit
+  - owner_evidence_intake.collect
+  - owner_evidence_intake.query
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: one Evidence URL and one bounded source response
+  budgets:
+  - metric: freshness
+    operator: <=
+    threshold: 10
+    unit: minutes
+    method: rolling fixture SLO defined by REQ-051
+execution_profiles:
+- id: linux_server_functional
+  status: proposed
+  assurance_scope:
+  - functional-compatibility
+  target:
+    platform: Ubuntu Server 26.04 LTS VM
+    cpu: pending deployment confirmation
+    runtime: CPython and container runtime
+    compiler: Python and TypeScript toolchains
+    cache_topology: {}
+    scheduler_capabilities: []
+execution_units:
+- id: api_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded request and PostgreSQL I/O
+  allocation: static
+- id: collector_worker_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded queue
+  PostgreSQL: null
+  and HTTPS I/O: null
+  allocation: static
+- id: ai_worker_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded provider I/O
+  allocation: static
+- id: email_worker_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded Gmail I/O
+  allocation: static
+execution_mappings:
+- id: intake_api_mapping
+  profile: linux_server_functional
+  workload: owner_evidence_intake_workload
+  steps:
+  - owner_evidence_intake.authorize
+  - owner_evidence_intake.map
+  - owner_evidence_intake.commit
+  - owner_evidence_intake.query
+  units:
+  - api_process
+  serialization: one transaction per Evidence stream
+  reentrant: false
+  activation: HTTP command or query
+  wcet: not established
+- id: collection_worker_mapping
+  profile: linux_server_functional
+  workload: owner_evidence_intake_workload
+  steps:
+  - owner_evidence_intake.collect
+  units:
+  - collector_worker_process
+  serialization: leased per Evidence stream
+  reentrant: false
+  activation: durable job availability
+  wcet: not established
+execution_channels:
+- id: collection_job_channel
+  profile: linux_server_functional
+  from_unit: api_process
+  to_unit: collector_worker_process
+  kind: queue
+  contract_refs:
+  - research.collection_jobs
+  - research.evidence_received
+  capacity: 1000
+  ordering: serialized per Evidence stream
+  copy_policy: persist semantic payload once and map on claim
+  timeout_ms: 300000
+  overload: backpressure
+data_access_profiles: []
+microarchitecture_profiles: []
+platform_variants:
+- id: linux_server_functional_variant
+  profile: linux_server_functional
+  units:
+  - api_process
+  - collector_worker_process
+  - ai_worker_process
+  - email_worker_process
+  data_access_profiles: []
+  microarchitecture_profiles: []
+  parameters:
+    deployment: Docker Compose on local VM
+  release: false
+realtime_scheduling_studies: []
+composition_roots:
+- id: thesis_trace_release
+  module: backend_composition
+  path: backend/src/thesis_trace/bootstrap/application.py
+  symbol: compose_application
+  purpose: Compose version-matched API and worker roles with concrete adapters.
+  source_set: backend-production
+  kind: release
+validation_profiles:
+- id: host_development_validation
+  applicability: not-applicable
+  rationale: Wave 0 design and host tests do not claim final target-runtime acceptance.
+adoption:
+  schema_version: 2.2.0
+  project_stage: new
+  applicable_analyzers:
+  - python
+  runtime_validation:
+    applicability: not-applicable
+    rationale: Wave 0 does not claim final runtime acceptance.
+  tool_host_evidence:
+    operating_systems:
+    - linux
+    python_versions:
+    - '3.11'
+    - '3.12'
+    - '3.13'

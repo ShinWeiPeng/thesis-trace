@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:thesis-trace:wave1:access-contract:v1",
+  "type": "object",
+  "required": ["contract_version", "application", "forbidden_actions", "provisioning_order", "policies", "provider_identity_key", "email_identity_merge"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {"const": 1},
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "hostname_ref", "path_coverage", "default_action", "single_application"],
+      "properties": {
+        "type": {"const": "self_hosted"},
+        "hostname_ref": {"const": "THESIS_TRACE_PUBLIC_HOSTNAME"},
+        "path_coverage": {"const": "all"},
+        "default_action": {"const": "deny"},
+        "single_application": {"const": true}
+      }
+    },
+    "forbidden_actions": {
+      "type": "array",
+      "uniqueItems": true,
+      "allOf": [{"contains": {"const": "bypass"}}, {"contains": {"const": "everyone"}}, {"contains": {"const": "email_domain"}}, {"contains": {"const": "magic_link"}}, {"contains": {"const": "service_token_human"}}]
+    },
+    "provisioning_order": {"const": ["access_application", "named_tunnel_public_hostname_route"]},
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["normal_google", "owner_recovery"],
+      "properties": {
+        "normal_google": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "provider", "identity_facts_ref", "selector", "mfa_required", "session_minutes"],
+          "properties": {
+            "enabled": {"const": true},
+            "provider": {"const": "google"},
+            "identity_facts_ref": {"type": "string", "pattern": "^secret://[a-z0-9_]+$"},
+            "selector": {"const": "exact_identity_facts"},
+            "mfa_required": {"const": true},
+            "session_minutes": {"const": 480}
+          }
+        },
+        "owner_recovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled_by_default", "visible_in_normal_login", "activation", "provider", "identity_fact_ref", "principal_count", "mfa_every_login", "session_minutes", "maps_to_existing_owner", "privilege_elevation", "first_use_audit", "shutdown_action_item"],
+          "properties": {
+            "enabled_by_default": {"const": false},
+            "visible_in_normal_login": {"const": false},
+            "activation": {"const": "manual_cloudflare_management_only"},
+            "provider": {"const": "cloudflare_account"},
+            "identity_fact_ref": {"type": "string", "pattern": "^secret://[a-z0-9_]+$"},
+            "principal_count": {"const": 1},
+            "mfa_every_login": {"const": true},
+            "session_minutes": {"type": "integer", "minimum": 1, "maximum": 30},
+            "maps_to_existing_owner": {"const": true},
+            "privilege_elevation": {"const": false},
+            "first_use_audit": {"const": true},
+            "shutdown_action_item": {"const": "safety_locked"}
+          }
+        }
+      }
+    },
+    "provider_identity_key": {"const": ["provider_id", "provider_type", "provider_subject"]},
+    "email_identity_merge": {"const": false}
+  }
+}

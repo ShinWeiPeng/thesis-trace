@@ -1,0 +1,66 @@
+{
+  "secrets": {
+    "postgres_password": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/postgres_password"
+    },
+    "api_database_url": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/api_database_url"
+    },
+    "collector_database_url": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/collector_database_url"
+    },
+    "migration_database_url": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/migration_database_url"
+    },
+    "api_database_password": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/api_database_password"
+    },
+    "collector_database_password": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/collector_database_password"
+    },
+    "migration_database_password": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/migration_database_password"
+    },
+    "access_issuer": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/access_issuer"
+    },
+    "access_audience": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/access_audience"
+    },
+    "owner_identities": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/owner_identities"
+    },
+    "recovery_identity": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/recovery_identity"
+    },
+    "origin_tls_cert": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/origin_tls_cert"
+    },
+    "origin_tls_key": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/origin_tls_key"
+    },
+    "tunnel_credentials": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/tunnel_credentials"
+    }
+  },
+  "configs": {
+    "origin_ca": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/origin_ca.pem"
+    }
+  }
+}

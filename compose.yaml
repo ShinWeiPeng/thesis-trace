@@ -1,0 +1,264 @@
+name: thesis-trace
+
+x-backend-common: &backend-common
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  image: thesis-trace/backend:${THESIS_TRACE_IMAGE_TAG:-development}
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  environment:
+    THESIS_TRACE_BUILD_ID: ${THESIS_TRACE_IMAGE_TAG:-development}
+  networks:
+    - data
+  depends_on:
+    postgres:
+      condition: service_healthy
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  api:
+    <<: *backend-common
+    command: ["python", "-m", "thesis_trace.entrypoints.api"]
+    environment:
+      THESIS_TRACE_BUILD_ID: ${THESIS_TRACE_IMAGE_TAG:-development}
+      THESIS_TRACE_DATABASE_URL_FILE: /run/secrets/api_database_url
+      THESIS_TRACE_ACCESS_ISSUER_FILE: /run/secrets/access_issuer
+      THESIS_TRACE_ACCESS_AUDIENCE_FILE: /run/secrets/access_audience
+      THESIS_TRACE_OWNER_IDENTITIES_FILE: /run/secrets/owner_identities
+      THESIS_TRACE_RECOVERY_IDENTITY_FILE: /run/secrets/recovery_identity
+      THESIS_TRACE_RECOVERY_POLICY_VERSION: ${THESIS_TRACE_RECOVERY_POLICY_VERSION:-unverified}
+      THESIS_TRACE_RECOVERY_POLICY_ENABLED: ${THESIS_TRACE_RECOVERY_POLICY_ENABLED:-false}
+    secrets:
+      - api_database_url
+      - access_issuer
+      - access_audience
+      - owner_identities
+      - recovery_identity
+    networks:
+      - edge-app
+      - data
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2); raise SystemExit(0 if response.status == 200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    expose:
+      - "8000"
+
+  collector:
+    <<: *backend-common
+    command: ["python", "-m", "thesis_trace.entrypoints.collector_worker"]
+    environment:
+      THESIS_TRACE_BUILD_ID: ${THESIS_TRACE_IMAGE_TAG:-development}
+      THESIS_TRACE_DATABASE_URL_FILE: /run/secrets/collector_database_url
+      THESIS_TRACE_PROCESS_ROLE: collector-worker
+    secrets:
+      - collector_database_url
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "thesis_trace.entrypoints.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  migration:
+    <<: *backend-common
+    restart: "no"
+    command: ["python", "/run/platform/run-production-migrations.py"]
+    environment:
+      THESIS_TRACE_DATABASE_URL_FILE: /run/secrets/migration_database_url
+    secrets:
+      - migration_database_url
+    volumes:
+      - ./infra/postgres/run-production-migrations.py:/run/platform/run-production-migrations.py:ro
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: thesis-trace/web:${THESIS_TRACE_IMAGE_TAG:-development}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=4m,mode=0755
+    expose:
+      - "8080"
+    networks:
+      - edge-app
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  origin-gateway:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /data:size=16m,mode=0700
+      - /config:size=8m,mode=0700
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    secrets:
+      - origin_tls_cert
+      - origin_tls_key
+    expose:
+      - "8443"
+    networks:
+      - origin
+      - edge-app
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "--quiet", "--spider", "https://127.0.0.1:8443/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.0
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    cap_drop:
+      - ALL
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yaml", "run"]
+    volumes:
+      - ./infra/cloudflare/tunnel-config.yaml:/etc/cloudflared/config.yaml:ro
+    secrets:
+      - tunnel_credentials
+    configs:
+      - source: origin_ca
+        target: /run/configs/origin_ca.pem
+    networks:
+      - origin
+      - tunnel-egress
+    depends_on:
+      origin-gateway:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_DB: thesis_trace
+      POSTGRES_USER: thesis_trace
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+      - api_database_password
+      - collector_database_password
+      - migration_database_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/production-roles.sql:/docker-entrypoint-initdb.d/00-production-roles.sql:ro
+      - ./infra/postgres/01-role-passwords.sh:/docker-entrypoint-initdb.d/01-role-passwords.sh:ro
+    networks:
+      - data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=thesis_trace", "--dbname=thesis_trace", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+networks:
+  edge-app:
+    internal: true
+  data:
+    internal: true
+  origin:
+    internal: true
+  tunnel-egress: {}
+
+volumes:
+  postgres-data:
+
+secrets:
+  postgres_password:
+    external: true
+    name: thesis_trace_postgres_password
+  api_database_url:
+    external: true
+    name: thesis_trace_api_database_url
+  collector_database_url:
+    external: true
+    name: thesis_trace_collector_database_url
+  migration_database_url:
+    external: true
+    name: thesis_trace_migration_database_url
+  api_database_password:
+    external: true
+    name: thesis_trace_api_database_password
+  collector_database_password:
+    external: true
+    name: thesis_trace_collector_database_password
+  migration_database_password:
+    external: true
+    name: thesis_trace_migration_database_password
+  access_issuer:
+    external: true
+    name: thesis_trace_access_issuer
+  access_audience:
+    external: true
+    name: thesis_trace_access_audience
+  owner_identities:
+    external: true
+    name: thesis_trace_owner_identities
+  recovery_identity:
+    external: true
+    name: thesis_trace_recovery_identity
+  origin_tls_cert:
+    external: true
+    name: thesis_trace_origin_tls_cert
+  origin_tls_key:
+    external: true
+    name: thesis_trace_origin_tls_key
+  tunnel_credentials:
+    external: true
+    name: thesis_trace_tunnel_credentials
+
+configs:
+  origin_ca:
+    external: true
+    name: thesis_trace_origin_ca

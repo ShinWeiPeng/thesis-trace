@@ -1,0 +1,185 @@
+version: "1.1"
+architecture:
+  manifest: architecture/manifest.yaml
+  manifest_sha256: 1dc62f2fea7b886172a7d77c9fe5f8213710ae9bae0556d2899a835f46b80923
+  execution_profile: linux_server_functional
+target:
+  platform: linux
+  provider: structured-log
+  native_max_bytes: 1048576
+transport:
+  type: import
+  timeout_seconds: 900
+  max_bytes: 1048576
+actions: {}
+scenarios:
+  - id: live-enablement-inventory
+    title: SPEC-0001 Live 驗收環境 Enablement
+    purpose: 確認正式 Ubuntu Server VM、Cloudflare 管理入口、外部手機瀏覽器與安全復原通道可供後續 bounded acceptance 使用。
+    phase: enablement
+    evidence_mode: flow
+    max_duration_ms: 900000
+    prerequisites: []
+    actions: []
+    cleanup_actions: []
+    architecture_refs:
+      - linux_server_functional
+      - backend_composition
+      - cloudflare_identity_adapter
+    completion:
+      trigger_criteria: [server-target]
+      required_criteria: [server-target, dashboard-access, external-browser, recovery-channel]
+      session_end_reason: complete
+    criteria:
+      - id: server-target
+        label: 正式 Server target
+        description: 正式 home-service 為 Ubuntu Server 26.04 LTS、4 vCPU 且可執行唯讀盤點命令。
+        type: observation
+        code: server_target_matches
+        step: 1
+        result: pass
+      - id: dashboard-access
+        label: Cloudflare 管理入口
+        description: Owner 可進入正確 Cloudflare Zero Trust account，且未揭露任何 credential。
+        type: observation
+        code: dashboard_access_available
+        step: 2
+        result: pass
+      - id: external-browser
+        label: 外部手機瀏覽器
+        description: 手機可關閉 Wi-Fi、VPN、WARP 與其他代理並以行動網路開啟一般瀏覽器。
+        type: observation
+        code: external_browser_available
+        step: 3
+        result: pass
+      - id: recovery-channel
+        label: 管理與復原通道
+        description: 執行 outage 或 credential rotation 前，筆電保有 LAN 內的 Proxmox 或 SSH 復原通道。
+        type: observation
+        code: recovery_channel_available
+        step: 4
+        result: pass
+    guided_steps:
+      - id: verify-server-target
+        instruction: 在 home-service VM 執行本場次提供的唯讀 OS/CPU 命令，將輸出存成已遮蔽的文字證據。
+        expected_observation: 輸出顯示 Ubuntu Server 26.04 LTS、4 個 online CPU，且不含 hostname、IP、帳號或秘密。
+        required: true
+        evidence_required: true
+        observation_code: server_target_matches
+      - id: verify-cloudflare-dashboard
+        instruction: 使用筆電登入 Cloudflare Zero Trust Dashboard 的正確 account，只確認可讀取 Access 與 Networks/Tunnels 頁面，不修改設定。
+        expected_observation: 可看到 Access application 與 named tunnel 的管理頁；截圖需遮蔽 account ID、hostname、email 與 credential。
+        required: true
+        evidence_required: true
+        observation_code: dashboard_access_available
+      - id: verify-external-browser
+        instruction: 在手機關閉 Wi-Fi、VPN、WARP、Private Relay 或其他代理，確認一般瀏覽器可透過行動網路使用。
+        expected_observation: 手機顯示行動網路連線，且沒有啟用 VPN/WARP 狀態。
+        required: true
+        evidence_required: false
+        observation_code: external_browser_available
+      - id: verify-recovery-channel
+        instruction: 在筆電確認仍可從家中 LAN 開啟 Proxmox Web 或以 SSH 連至 home-service；不得停止或重啟任何服務。
+        expected_observation: 至少一條管理通道可用，供後續故障測試復原。
+        required: true
+        evidence_required: true
+        observation_code: recovery_channel_available
+
+  - id: access-live-login-session
+    title: Cloudflare Access 登入與 Session Live 驗收
+    purpose: 驗證核准 identity、MFA、八小時邊界、登出與 provider 隔離符合 AC-007。
+    phase: acceptance
+    evidence_mode: flow
+    max_duration_ms: 32400000
+    prerequisites: [live-enablement-inventory]
+    actions: []
+    cleanup_actions: []
+    architecture_refs:
+      - access_session_bootstrap
+      - access_session_revocation
+      - access.identity_provider
+      - postgres_access_adapter
+      - react_access_adapter
+    completion:
+      trigger_criteria: [policy-export]
+      required_criteria: [policy-export, approved-login, denied-login, session-boundary, logout-revocation, provider-separation]
+      session_end_reason: complete
+    criteria:
+      - {id: policy-export, label: Access policy export, description: Sanitized live export 與 canonical contract 一致且無 Bypass。, type: observation, code: access_policy_matches, step: 1, result: pass}
+      - {id: approved-login, label: 核准登入, description: 核准 Google identity 經 MFA 可登入。, type: observation, code: approved_google_login, step: 2, result: pass}
+      - {id: denied-login, label: 未核准登入拒絕, description: 未列名或未完成 MFA 的 identity 無法進入應用程式。, type: observation, code: unapproved_login_denied, step: 3, result: pass}
+      - {id: session-boundary, label: 八小時 Session 邊界, description: 等於或超過八小時後須重新完成 Google identity 與 MFA。, type: observation, code: eight_hour_boundary, step: 4, result: pass}
+      - {id: logout-revocation, label: 登出撤銷, description: 登出後舊 ThesisTrace session cookie 不可重用。, type: observation, code: logout_revokes_session, step: 5, result: pass}
+      - {id: provider-separation, label: Provider identity 隔離, description: 相同 email 字串的不同 provider identity 不會自動合併。, type: observation, code: provider_identity_separated, step: 6, result: pass}
+    guided_steps:
+      - {id: export-access-policy, instruction: 從 Cloudflare 匯出並遮蔽 Access application、IdP 與 policy 設定。, expected_observation: 完整 hostname/path、default deny、exact identity、MFA、480 分鐘且無 Bypass。, required: true, evidence_required: true, observation_code: access_policy_matches}
+      - {id: login-approved-google, instruction: 以核准 Google identity 從無痕瀏覽器完成 MFA 登入。, expected_observation: Access 與 ThesisTrace 均接受，且 session 到期時間不超過 Access JWT。, required: true, evidence_required: true, observation_code: approved_google_login}
+      - {id: reject-unapproved, instruction: 以專用未核准測試 identity 或未完成 MFA 的流程嘗試存取。, expected_observation: 在載入敏感 Web/API 前遭拒絕，回應不洩漏資源存在性。, required: true, evidence_required: true, observation_code: unapproved_login_denied}
+      - {id: verify-eight-hour-expiry, instruction: 保存起始時間並在 Access 八小時邊界後再次存取。, expected_observation: 下一次存取要求重新完成 Google identity 與 MFA，自有 cookie 不可延長。, required: true, evidence_required: true, observation_code: eight_hour_boundary}
+      - {id: verify-logout, instruction: 登出 ThesisTrace 後以原瀏覽器返回受保護頁面。, expected_observation: 舊應用程式 session 已撤銷，必須重新建立有效 session。, required: true, evidence_required: true, observation_code: logout_revokes_session}
+      - {id: verify-provider-separation, instruction: 比較經核准的 Google identity 與 Owner recovery identity 對應結果。, expected_observation: 兩個 provider triple 保持獨立，只依明確設定映射同一 Owner，不依 email 合併。, required: true, evidence_required: true, observation_code: provider_identity_separated}
+
+  - id: tunnel-origin-live-isolation
+    title: Tunnel 與 Origin 隔離 Live 驗收
+    purpose: 驗證只有 Access 保護 hostname 可抵達 Web/API，origin 與管理服務不對 Internet 開放，符合 AC-001 與 AC-011。
+    phase: acceptance
+    evidence_mode: flow
+    max_duration_ms: 1800000
+    prerequisites: [live-enablement-inventory]
+    actions: []
+    cleanup_actions: []
+    architecture_refs:
+      - backend_composition
+      - api_process
+      - cloudflare_identity_adapter
+    completion:
+      trigger_criteria: [protected-hostname]
+      required_criteria: [protected-hostname, all-path-access, origin-denied, service-ports-denied, tunnel-outage, credential-rotation]
+      session_end_reason: complete
+    criteria:
+      - {id: protected-hostname, label: 受保護 hostname, description: 手機行動網路只能經 Cloudflare Access 進入 Web/API。, type: observation, code: protected_hostname_reachable, step: 1, result: pass}
+      - {id: all-path-access, label: 所有 path 受保護, description: Web 與 API path 均無未驗證 Bypass。, type: observation, code: all_paths_protected, step: 2, result: pass}
+      - {id: origin-denied, label: Origin Internet inbound 關閉, description: 明確指定 origin 位址從 Internet 不可連線。, type: observation, code: origin_inbound_denied, step: 3, result: pass}
+      - {id: service-ports-denied, label: 管理服務不公開, description: 指定主機的 SSH、PostgreSQL、Docker API 與管理端口從 Internet 不可達。, type: observation, code: management_ports_denied, step: 4, result: pass}
+      - {id: tunnel-outage, label: Tunnel outage fail closed, description: cloudflared 停止期間 public hostname 不可繞過到 origin，復原後資料保持完整。, type: observation, code: tunnel_outage_fail_closed, step: 5, result: pass}
+      - {id: credential-rotation, label: Tunnel credential 輪替, description: 新 credential 生效且舊 credential 撤銷，不產生公開 fallback。, type: observation, code: tunnel_credential_rotated, step: 6, result: pass}
+    guided_steps:
+      - {id: verify-protected-hostname, instruction: 以手機行動網路開啟 public hostname 並完成核准登入。, expected_observation: 只經 Access 登入後可看到 ThesisTrace。, required: true, evidence_required: true, observation_code: protected_hostname_reachable}
+      - {id: verify-all-paths, instruction: 對已知 Web 與 API path 做少量限時請求，包含未驗證狀態。, expected_observation: 所有 path 都由 Access 與 app JWT 驗證保護。, required: true, evidence_required: true, observation_code: all_paths_protected}
+      - {id: probe-explicit-origin, instruction: 經核准後只對已確認屬於你的單一 origin 位址進行限時連線測試。, expected_observation: Internet 來源無法直接連到 origin。, required: true, evidence_required: true, observation_code: origin_inbound_denied}
+      - {id: probe-explicit-service-ports, instruction: 經核准後只對指定主機及契約列出的少量管理端口進行限時探測，不掃描網段。, expected_observation: SSH、PostgreSQL、Docker API 與管理端口均不可從 Internet 抵達。, required: true, evidence_required: true, observation_code: management_ports_denied}
+      - {id: drill-tunnel-outage, instruction: 在已驗證復原通道與 rollback 後停止 cloudflared，從外部測試，再立即復原。, expected_observation: outage 期間 fail closed，復原後只能經 Access hostname 使用且本地資料完整。, required: true, evidence_required: true, observation_code: tunnel_outage_fail_closed}
+      - {id: rotate-tunnel-credential, instruction: 依核准 runbook 輪替 named tunnel credential、targeted restart 並撤銷舊值。, expected_observation: 新值正常、舊值失效、無 secret 洩漏且無公開 bypass。, required: true, evidence_required: true, observation_code: tunnel_credential_rotated}
+
+  - id: owner-recovery-live-drill
+    title: Owner Recovery Policy Live Drill
+    purpose: 驗證備援入口預設關閉、Owner-only MFA、三十分鐘限制、停用與 session 撤銷；Workflow consumer 完成前不得宣稱 AC-040 全部 PASS。
+    phase: acceptance
+    evidence_mode: flow
+    max_duration_ms: 2700000
+    prerequisites: [live-enablement-inventory]
+    actions: []
+    cleanup_actions: []
+    architecture_refs:
+      - access_session_bootstrap
+      - access_session_revocation
+      - access.recovery_session_detected
+      - postgres_access_adapter
+    completion:
+      trigger_criteria: [disabled-default]
+      required_criteria: [disabled-default, owner-mfa, no-elevation, recovery-audit, thirty-minute-boundary, disabled-session-rejected]
+      session_end_reason: complete
+    criteria:
+      - {id: disabled-default, label: Recovery 預設關閉, description: Policy 平時停用且一般登入選項不可見。, type: observation, code: recovery_disabled_default, step: 1, result: pass}
+      - {id: owner-mfa, label: Owner-only MFA, description: 只有精確核准 Owner Cloudflare identity 且每次 MFA 可登入。, type: observation, code: recovery_owner_mfa_only, step: 2, result: pass}
+      - {id: no-elevation, label: 無權限提升, description: Recovery identity 映射既有 Owner 且不增加權限。, type: observation, code: recovery_no_elevation, step: 3, result: pass}
+      - {id: recovery-audit, label: Recovery audit/outbox, description: 首次進入形成不可修改 security audit 與 durable safety request。, type: observation, code: recovery_audit_created, step: 4, result: pass}
+      - {id: thirty-minute-boundary, label: 三十分鐘邊界, description: 等於或超過三十分鐘後舊 recovery session 不可使用。, type: observation, code: recovery_thirty_minute_limit, step: 5, result: pass}
+      - {id: disabled-session-rejected, label: 停用後立即失效, description: 修復後關閉 policy，所有舊 recovery application sessions 立即失效。, type: observation, code: recovery_disable_revokes, step: 6, result: pass}
+    guided_steps:
+      - {id: verify-recovery-disabled, instruction: 在 Cloudflare Dashboard 確認 recovery policy 停用且一般登入頁不可見。, expected_observation: 正常 Google 登入可用時 recovery 不接受登入。, required: true, evidence_required: true, observation_code: recovery_disabled_default}
+      - {id: enable-and-login-recovery, instruction: 在既有復原通道可用時由 Owner 手動啟用 recovery policy，使用精確核准 identity 完成 MFA。, expected_observation: 只有該 Owner identity 可登入，其他 account member 或缺 MFA 均拒絕。, required: true, evidence_required: true, observation_code: recovery_owner_mfa_only}
+      - {id: verify-recovery-role, instruction: 檢查 recovery session 的 server profile 與可用 capability。, expected_observation: 映射既有 Owner user ID，無額外權限。, required: true, evidence_required: true, observation_code: recovery_no_elevation}
+      - {id: verify-recovery-audit, instruction: 讀取安全 audit 與 durable workflow outbox，不修改資料。, expected_observation: 只產生一次含安全 provider facts、時間與 recovery reason 的 audit 和 safety request。, required: true, evidence_required: true, observation_code: recovery_audit_created}
+      - {id: verify-recovery-expiry, instruction: 在三十分鐘邊界後以舊 recovery session 再次請求。, expected_observation: 舊 session 被拒絕並要求重新 MFA，不被 app cookie 延長。, required: true, evidence_required: true, observation_code: recovery_thirty_minute_limit}
+      - {id: disable-and-reuse, instruction: 修復主要入口後立即停用 recovery policy，再嘗試使用舊 recovery session。, expected_observation: 舊 session 全部失效，停用被稽核且 policy 回到預設關閉。, required: true, evidence_required: true, observation_code: recovery_disable_revokes}

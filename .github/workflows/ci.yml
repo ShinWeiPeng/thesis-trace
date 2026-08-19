@@ -1,0 +1,132 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: thesis_trace_test
+          POSTGRES_USER: thesis_trace_test
+          POSTGRES_PASSWORD: thesis_trace_ci_only
+        options: >-
+          --health-cmd "pg_isready --username=thesis_trace_test --dbname=thesis_trace_test --quiet"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      THESIS_TRACE_TEST_DATABASE_URL: postgresql://thesis_trace_test:thesis_trace_ci_only@postgres:5432/thesis_trace_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --requirement backend/requirements.lock
+          python -m pip install --no-deps --editable backend
+
+      - name: Test backend, including PostgreSQL integration
+        run: python -m pytest -q backend/tests
+
+      - name: Test Wave 1 PostgreSQL RLS and append-only audit contract
+        run: python scripts/test_wave1_rls.py
+
+      - name: Test production PostgreSQL role separation
+        run: python scripts/test_production_database_roles.py
+
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: thesis_trace_acceptance
+          POSTGRES_USER: thesis_trace_acceptance
+          POSTGRES_PASSWORD: thesis_trace_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=thesis_trace_acceptance --dbname=thesis_trace_acceptance --quiet"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      THESIS_TRACE_TEST_DATABASE_URL: postgresql://thesis_trace_acceptance:thesis_trace_ci_only@127.0.0.1:5432/thesis_trace_acceptance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install acceptance backend
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/python -m pip install --requirement backend/requirements.lock
+          backend/.venv/bin/python -m pip install --no-deps --editable backend
+
+      - name: Validate repository skeleton
+        run: ./scripts/validate-repository.sh
+
+      - name: Test Wave 1 platform contracts
+        run: python -m unittest scripts/tests/test_platform_contracts.py
+
+      - name: Validate Access, Tunnel, origin, secret scope, and redaction
+        run: python scripts/validate_wave1_platform.py
+
+      - name: Validate development architecture
+        run: >-
+          python tools/architecture/architecture_cli.py gate
+          --phase development
+          --manifest architecture/manifest.yaml
+          --adoption architecture/adoption.yaml
+          --baseline architecture/baseline.yaml
+          --format text
+
+      - uses: actions/setup-node@v4
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify generated client is current
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        run: ./scripts/check-generated-client.sh
+
+      - name: Test and build frontend
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        working-directory: frontend
+        run: |
+          npm test -- --run
+          npm run build
+
+      - name: Install Playwright Chromium
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run responsive browser acceptance
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Run real Wave 0 cross-process acceptance
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        working-directory: frontend
+        run: npx playwright test --config e2e/wave0.config.ts

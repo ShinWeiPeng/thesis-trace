@@ -1,0 +1,14 @@
+schema_version: 2.2.0
+project_stage: new
+applicable_analyzers:
+- python
+runtime_validation:
+  applicability: not-applicable
+  rationale: Wave 0 does not claim final runtime acceptance.
+tool_host_evidence:
+  operating_systems:
+  - linux
+  python_versions:
+  - '3.11'
+  - '3.12'
+  - '3.13'

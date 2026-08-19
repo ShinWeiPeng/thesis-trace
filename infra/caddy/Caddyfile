@@ -1,0 +1,26 @@
+{
+	admin off
+	auto_https off
+}
+
+:8443 {
+	tls /run/secrets/origin_tls_cert /run/secrets/origin_tls_key
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+
+	header {
+		-Server
+		Cache-Control "no-store"
+		Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+}

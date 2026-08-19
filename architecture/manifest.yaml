@@ -1,0 +1,3521 @@
+standard_version: 2.2.0
+schema_version: 2.2.0
+project:
+  name: thesis-trace
+  documentation_language: zh-TW
+  diagram_language: zh-TW
+source_sets:
+- id: backend-production
+  classification: production
+  include:
+  - backend/src/**
+  exclude:
+  - backend/src/generated/**
+  - backend/src/thesis_trace/platform/in_memory.py
+  purpose: Govern maintained Python application source.
+  provenance: Human-maintained repository source.
+- id: frontend-production
+  classification: production
+  include:
+  - frontend/src/**
+  exclude:
+  - frontend/src/generated/**
+  purpose: Govern maintained React and TypeScript source.
+  provenance: Human-maintained repository source.
+- id: tooling-production
+  classification: production
+  include:
+  - tools/**
+  - frontend/scripts/**/*.mjs
+  - scripts/validate-*.py
+  - scripts/validate-*.sh
+  - scripts/check-generated-client.sh
+  exclude:
+  - frontend/scripts/**/*.test.mjs
+  purpose: Govern maintained contract and architecture tooling.
+  provenance: Human-maintained repository tooling source.
+- id: deployment-production
+  classification: production
+  include:
+  - compose.yaml
+  - infra/**
+  exclude:
+  - infra/README.md
+  purpose: Govern maintained deployment, network, secret, and database-role contracts.
+  provenance: Human-maintained deployment source.
+- id: generated-contracts
+  classification: generated-production
+  include:
+  - backend/src/generated/**
+  - frontend/src/generated/**
+  exclude: []
+  purpose: Contain generator-owned OpenAPI contracts and clients.
+  provenance: Generated from the versioned OpenAPI contract.
+  generator: project OpenAPI generation pipeline
+  owner: fastapi_entrypoint
+- id: development
+  classification: development
+  include:
+  - tests/**
+  - backend/tests/**
+  - frontend/tests/**
+  - frontend/e2e/**
+  - frontend/scripts/**/*.test.mjs
+  - frontend/playwright.config.ts
+  - .github/**
+  - scripts/tests/**
+  - scripts/test_*.py
+  - backend/src/thesis_trace/platform/in_memory.py
+  exclude: []
+  purpose: Keep tests and development automation outside formal production catalogs.
+  provenance: Developer-maintained test and CI source.
+- id: derived-docs
+  classification: derived-documentation
+  include:
+  - architecture/generated/**
+  exclude: []
+  purpose: Contain renderer-owned architecture views.
+  provenance: Architecture renderer.
+- id: build-output
+  classification: build-output
+  include:
+  - backend/.venv/**
+  - frontend/node_modules/**
+  - frontend/dist/**
+  - build/**
+  - coverage/**
+  exclude: []
+  purpose: Exclude dependencies, build output, and coverage artifacts.
+  provenance: Language toolchains and build pipeline.
+modules:
+- id: thesis_trace_application
+  level: L0
+  role: orchestration
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/application
+  parent: null
+  depends_on:
+  - access_domain
+  - research_domain
+  - thesis_domain
+  - portfolio_domain
+  - recommendation_domain
+  - workflow_domain
+  - notification_domain
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/application/contracts.py
+  description:
+    purpose: Coordinate authenticated cross-domain product flows without owning domain
+      state.
+    diagram_summaries:
+      zh-TW: 協調跨領域產品流程
+    input_ports:
+    - application.submit_evidence
+    output_ports:
+    - application.events
+    emitted_events:
+    - application.evidence_submission_completed
+    owned_state: []
+    side_effects:
+    - description: Coordinate child commands and map child events.
+    errors:
+    - id: thesis_trace_application-error-1
+      condition: Reject unauthenticated or unauthorized commands
+      event: application.evidence_submission_completed
+      handling: Reject unauthenticated or unauthorized commands
+    - id: thesis_trace_application-error-2
+      condition: Propagate child admission failures.
+      event: application.evidence_submission_completed
+      handling: Propagate child admission failures.
+    invariants:
+    - Sibling domains communicate only through this parent
+    - Domain state remains child-owned.
+  entrypoints:
+  - path: backend/src/thesis_trace/application/flows/evidence_intake.py
+    symbol: EvidenceIntakeFlow
+    kind: orchestrator
+  public_symbols:
+  - path: backend/src/thesis_trace/application/contracts.py
+    symbol: SubmitEvidenceRequest
+    kind: contract
+- id: backend_composition
+  level: L0
+  role: composition
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/bootstrap
+  parent: null
+  depends_on:
+  - fastapi_entrypoint
+  - access_domain
+  - evidence_collection
+  - postgres_research_adapter
+  - restricted_source_fetch_adapter
+  - runtime_configuration_adapter
+  - postgres_access_adapter
+  - cloudflare_identity_adapter
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/bootstrap/application.py
+  description:
+    purpose: Construct the release application and wire functional ports to concrete
+      adapters.
+    diagram_summaries:
+      zh-TW: 組裝正式應用與技術介面
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Create process-scoped adapters and application instances.
+    errors:
+    - id: backend_composition-error-1
+      condition: Fail startup when mandatory configuration or adapters are unavailable.
+      event: application.evidence_submission_completed
+      handling: Fail startup when mandatory configuration or adapters are unavailable.
+    invariants:
+    - Only this module selects concrete adapters
+    - Exactly one release composition root exists.
+  entrypoints:
+  - path: backend/src/thesis_trace/bootstrap/application.py
+    symbol: compose_application
+    kind: initializer
+  public_symbols:
+  - path: backend/src/thesis_trace/bootstrap/application.py
+    symbol: compose_application
+    kind: composition-root
+- id: access_domain
+  level: L1
+  role: domain
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/modules/access
+  parent: thesis_trace_application
+  depends_on:
+  - identity_registry
+  - session_management
+  - account_administration
+  - confirmation_challenge
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/access/contracts.py
+  - backend/src/thesis_trace/modules/access/orchestration.py
+  - backend/src/thesis_trace/modules/access/recovery_policy.py
+  description:
+    purpose: Own authenticated actor identity and application authorization decisions.
+    diagram_summaries:
+      zh-TW: 管理身分與應用授權
+    input_ports:
+    - access.authorize_owner
+    output_ports:
+    - access.events
+    - access.security_context
+    emitted_events:
+    - access.owner_authorized
+    - access.session_established
+    - access.account_changed
+    - access.confirmation_consumed
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: access_domain-error-1
+      condition: Reject absent
+      event: access.owner_authorized
+      handling: Reject absent
+    - id: access_domain-error-2
+      condition: expired
+      event: access.owner_authorized
+      handling: expired
+    - id: access_domain-error-3
+      condition: or unauthorized identities.
+      event: access.owner_authorized
+      handling: or unauthorized identities.
+    invariants:
+    - Provider identity never collapses by email alone
+    - JWT subject and provider discriminator resolve through a preapproved mapping.
+    - Unknown provider, identity, session, role, or challenge fails closed without existence disclosure.
+    - Authorization fails closed.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/access/contracts.py
+    symbol: AuthenticatedActor
+    kind: contract
+  - path: backend/src/thesis_trace/modules/access/orchestration.py
+    symbol: AccountActionService
+    kind: orchestrator
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/access/contracts.py
+    symbol: AuthenticatedActor
+    kind: contract
+  - path: backend/src/thesis_trace/modules/access/contracts.py
+    symbol: SecurityContext
+    kind: contract
+  - path: backend/src/thesis_trace/modules/access/orchestration.py
+    symbol: AccountActionService
+    kind: service
+  - path: backend/src/thesis_trace/modules/access/recovery_policy.py
+    symbol: RecoveryPolicyConfiguration
+    kind: configuration
+- id: research_domain
+  level: L1
+  role: domain
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/modules/research
+  parent: thesis_trace_application
+  depends_on:
+  - evidence_intake
+  - evidence_collection
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/contracts.py
+  description:
+    purpose: Own companies, evidence provenance, collection lifecycle, evidence stages,
+      and anomaly facts.
+    diagram_summaries:
+      zh-TW: 管理公司與研究證據
+    input_ports:
+    - research.submit_evidence
+    - research.query_evidence
+    output_ports:
+    - research.events
+    emitted_events:
+    - research.evidence_received
+    - research.collection_succeeded
+    - research.collection_failed
+    owned_state: []
+    side_effects:
+    - description: Persist evidence state through demand-owned ports
+    - description: Request restricted source collection.
+    errors:
+    - id: research_domain-error-1
+      condition: Reject invalid URLs or stale company versions
+      event: research.evidence_received
+      handling: Reject invalid URLs or stale company versions
+    - id: research_domain-error-2
+      condition: Record safe retry and terminal failures.
+      event: research.evidence_received
+      handling: Record safe retry and terminal failures.
+    invariants:
+    - State commits before success events
+    - Evidence streams are serialized
+    - Source records are immutable.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceRecord
+    kind: contract
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceRecord
+    kind: contract
+- id: evidence_intake
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/modules/research/evidence_intake
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+  description:
+    purpose: Admit Evidence URLs and atomically create received state, audit fact,
+      and collection job.
+    diagram_summaries:
+      zh-TW: 接收證據網址並建立工作
+    input_ports: []
+    output_ports:
+    - research.unit_of_work
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: evidence_intake-error-1
+      condition: Reject invalid URL
+      event: application.evidence_submission_completed
+      handling: Reject invalid URL
+    - id: evidence_intake-error-2
+      condition: duplicate admission
+      event: application.evidence_submission_completed
+      handling: duplicate admission
+    - id: evidence_intake-error-3
+      condition: stale version
+      event: application.evidence_submission_completed
+      handling: stale version
+    - id: evidence_intake-error-4
+      condition: or unavailable persistence.
+      event: application.evidence_submission_completed
+      handling: or unavailable persistence.
+    invariants:
+    - Evidence
+    - audit
+    - and job commit atomically
+    - Accepted commands return a record and version.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceAccepted
+    kind: contract
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceAccepted
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/evidence_intake/ports.py
+    symbol: EvidenceIntakeUnitOfWorkPort
+    kind: port
+- id: evidence_collection
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/modules/research/evidence_collection
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/evidence_collection/contracts.py
+  description:
+    purpose: Collect restricted sources and commit immutable snapshots or safe failures.
+    diagram_summaries:
+      zh-TW: 擷取來源並保存不可變快照
+    input_ports: []
+    output_ports:
+    - research.collection_jobs
+    - research.source_fetch
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: evidence_collection-error-1
+      condition: Retry transient failures and dead-letter terminal failures without
+        leaking secrets.
+      event: application.evidence_submission_completed
+      handling: Retry transient failures and dead-letter terminal failures without
+        leaking secrets.
+    invariants:
+    - A lease token is opaque
+    - Success is published only after snapshot commit.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_collection/service.py
+    symbol: EvidenceCollector
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_collection/contracts.py
+    symbol: CollectedSourceSnapshot
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
+    symbol: CollectionStorePort
+    kind: port
+  - path: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
+    symbol: SourceFetchPort
+    kind: port
+- id: thesis_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/thesis
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/thesis/contracts.py
+  description:
+    purpose: Own Thesis lifecycle
+    valuation inputs: null
+    outcomes: null
+    and reflections.: null
+    diagram_summaries:
+      zh-TW: 管理 Thesis 生命週期與反思
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: thesis_domain-error-1
+      condition: Reject illegal lifecycle transitions.
+      event: application.evidence_submission_completed
+      handling: Reject illegal lifecycle transitions.
+    invariants:
+    - Historical decisions are append-only.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/thesis/service.py
+    symbol: thesis_domain_contract
+    kind: boundary
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/thesis/service.py
+    symbol: thesis_domain_contract
+    kind: boundary
+- id: portfolio_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/portfolio
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/portfolio/contracts.py
+  description:
+    purpose: Own holdings
+    trades: null
+    allocation: null
+    exposure: null
+    and immutable risk snapshots.: null
+    diagram_summaries:
+      zh-TW: 管理投資組合與風險快照
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: portfolio_domain-error-1
+      condition: Reject incomplete or over-allocated trades.
+      event: application.evidence_submission_completed
+      handling: Reject incomplete or over-allocated trades.
+    invariants:
+    - Risk aggregates all buckets for a security.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/portfolio/service.py
+    symbol: portfolio_domain_contract
+    kind: boundary
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/portfolio/service.py
+    symbol: portfolio_domain_contract
+    kind: boundary
+- id: recommendation_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/recommendation
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/recommendation/contracts.py
+  description:
+    purpose: Own immutable recommendations
+    critic decisions: null
+    and Owner decisions.: null
+    diagram_summaries:
+      zh-TW: 管理建議與 Owner 決策
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: recommendation_domain-error-1
+      condition: Abstain when validation or risk inputs fail.
+      event: application.evidence_submission_completed
+      handling: Abstain when validation or risk inputs fail.
+    invariants:
+    - AI cannot override deterministic policy.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/recommendation/service.py
+    symbol: recommendation_domain_contract
+    kind: boundary
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/recommendation/service.py
+    symbol: recommendation_domain_contract
+    kind: boundary
+- id: workflow_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/workflow
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/workflow/contracts.py
+  description:
+    purpose: Own actionable work items
+    priority: null
+    safety locks: null
+    assignment: null
+    and recurrence.: null
+    diagram_summaries:
+      zh-TW: 管理人工行動收件匣
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: workflow_domain-error-1
+      condition: Reject unsafe or unauthorized transitions.
+      event: application.evidence_submission_completed
+      handling: Reject unsafe or unauthorized transitions.
+    invariants:
+    - System priority and safety floors are server-owned.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/workflow/service.py
+    symbol: workflow_domain_contract
+    kind: boundary
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/workflow/service.py
+    symbol: workflow_domain_contract
+    kind: boundary
+- id: notification_domain
+  level: L1
+  role: domain
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/modules/notification
+  parent: thesis_trace_application
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/notification/contracts.py
+  description:
+    purpose: Own notification classification
+    safe content: null
+    and delivery intent.: null
+    diagram_summaries:
+      zh-TW: 管理通知分類與安全內容
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: []
+    errors:
+    - id: notification_domain-error-1
+      condition: Dead-letter permanent delivery failures.
+      event: application.evidence_submission_completed
+      handling: Dead-letter permanent delivery failures.
+    invariants:
+    - Forbidden portfolio data never enters message content.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/notification/service.py
+    symbol: notification_domain_contract
+    kind: boundary
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/notification/service.py
+    symbol: notification_domain_contract
+    kind: boundary
+- id: fastapi_entrypoint
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/api.py
+  - backend/src/thesis_trace/entrypoints/api.py
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/api.py
+  description:
+    purpose: Translate versioned JSON HTTP requests into application commands and
+      queries.
+    diagram_summaries:
+      zh-TW: 轉換 HTTP 與應用契約
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Serve HTTP and OpenAPI.
+    errors:
+    - id: fastapi_entrypoint-error-1
+      condition: Return the uniform non-disclosing error envelope.
+      event: application.evidence_submission_completed
+      handling: Return the uniform non-disclosing error envelope.
+    invariants:
+    - Client values never become server authority.
+  entrypoints:
+  - path: backend/src/thesis_trace/api.py
+    symbol: create_fastapi_app
+    kind: factory
+  public_symbols:
+  - path: backend/src/thesis_trace/api.py
+    symbol: EvidenceApi
+    kind: adapter
+- id: postgres_research_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/platform/postgres.py
+  parent: null
+  depends_on:
+  - evidence_intake
+  - evidence_collection
+  implements_ports:
+  - research.unit_of_work
+  - research.collection_jobs
+  public_headers:
+  - backend/src/thesis_trace/platform/postgres.py
+  description:
+    purpose: Implement atomic Research persistence and leased collector work using PostgreSQL.
+    diagram_summaries:
+      zh-TW: 實作研究交易與持久工作租約
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Resolve the database secret at connection time and execute bounded SQL transactions.
+    errors:
+    - id: postgres_research_adapter-error-1
+      condition: PostgreSQL or secret resolution is unavailable.
+      event: application.evidence_submission_completed
+      handling: Raise a stable non-secret postgres_unavailable error.
+    invariants:
+    - The adapter stores a secret provider and never a resolved database URL.
+    - Evidence, audit, and durable work commit atomically.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/postgres.py
+    symbol: PostgresEvidenceStore
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/postgres.py
+    symbol: PostgresEvidenceStore
+    kind: adapter
+- id: restricted_source_fetch_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/platform/source_fetch.py
+  parent: null
+  depends_on:
+  - evidence_collection
+  implements_ports:
+  - research.source_fetch
+  public_headers:
+  - backend/src/thesis_trace/platform/source_fetch.py
+  description:
+    purpose: Fetch approved HTTPS sources through bounded DNS and transport policy.
+    diagram_summaries:
+      zh-TW: 依限制政策擷取外部 HTTPS 來源
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Resolve public addresses and perform bounded HTTPS requests.
+    errors:
+    - id: restricted_source_fetch_adapter-error-1
+      condition: Address, redirect, media, size, or upstream policy fails.
+      event: research.collection_failed
+      handling: Return a stable retryable or terminal failure code.
+    invariants:
+    - Resolved private and special-purpose addresses are rejected.
+    - Raw transport errors and response bodies never cross the port.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/source_fetch.py
+    symbol: RestrictedHttpSourceFetcher
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/source_fetch.py
+    symbol: RestrictedHttpSourceFetcher
+    kind: adapter
+- id: runtime_configuration_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/platform/runtime.py
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/platform/runtime.py
+  description:
+    purpose: Resolve mandatory runtime configuration and file-referenced secrets fail closed.
+    diagram_summaries:
+      zh-TW: 解析必要設定與檔案引用祕密
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Read a deployment-owned secret file only at the point of use.
+    errors:
+    - id: runtime_configuration_adapter-error-1
+      condition: A setting, file reference, or secret value is absent.
+      event: application.evidence_submission_completed
+      handling: Fail startup or readiness without revealing the value or file path.
+    invariants:
+    - Database secrets require a file reference.
+    - Provider representations are always redacted.
+  entrypoints:
+  - path: backend/src/thesis_trace/platform/runtime.py
+    symbol: required_secret_provider
+    kind: factory
+  public_symbols:
+  - path: backend/src/thesis_trace/platform/runtime.py
+    symbol: SecretProvider
+    kind: port
+- id: collector_worker_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/entrypoints/collector_worker.py
+  - backend/src/thesis_trace/entrypoints/healthcheck.py
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/entrypoints/collector_worker.py
+  description:
+    purpose: Start and probe the collector using only factories owned by the release composition root.
+    diagram_summaries:
+      zh-TW: 啟動並探測收集器程序
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Delegate process startup and readiness to backend composition factories.
+    errors:
+    - id: collector_worker_adapter-error-1
+      condition: Composition or readiness fails.
+      event: research.collection_failed
+      handling: Exit non-zero without selecting an adapter in the entrypoint.
+    invariants:
+    - Entrypoints never select concrete stores, fetchers, or configuration providers.
+  entrypoints:
+  - path: backend/src/thesis_trace/entrypoints/collector_worker.py
+    symbol: main
+    kind: process-entrypoint
+  public_symbols:
+  - path: backend/src/thesis_trace/entrypoints/collector_worker.py
+    symbol: main
+    kind: process-entrypoint
+- id: identity_registry
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/modules/access/identity_registry]
+  parent: access_domain
+  depends_on: []
+  implements_ports: []
+  public_headers: [backend/src/thesis_trace/modules/access/identity_registry/contracts.py]
+  description:
+    purpose: Own preapproved provider-subject mappings to stable internal users without merging identities by email.
+    diagram_summaries: {zh-TW: 管理外部身分與內部帳號映射}
+    input_ports: [access.resolve_identity]
+    output_ports: [access.account_repository, access.identity_provider]
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Persist versioned account and provider mappings through an Access-owned repository port.}]
+    errors: [{id: identity-registry-error-1, condition: Provider discriminator or preapproved mapping is absent or disabled., event: access.identity_rejected, handling: Reject with the uniform access_denied outcome.}]
+    invariants: [Provider type plus provider ID plus subject uniquely identify one mapping, Same email never merges distinct provider identities, At most ten accounts are enabled.]
+  entrypoints: [{path: backend/src/thesis_trace/modules/access/identity_registry/service.py, symbol: IdentityRegistry, kind: service}]
+  public_symbols:
+  - {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: ProviderIdentity, kind: contract}
+  - {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: VerifiedPrincipal, kind: contract}
+  - {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: AccessAccount, kind: contract}
+  - {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: ProviderIdentityMapping, kind: contract}
+- id: session_management
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/modules/access/session_management]
+  parent: access_domain
+  depends_on: []
+  implements_ports: []
+  public_headers: [backend/src/thesis_trace/modules/access/session_management/contracts.py]
+  description:
+    purpose: Own bounded application sessions and role-filtered session profiles derived from verified Access identity.
+    diagram_summaries: {zh-TW: 管理受限工作階段與角色設定檔}
+    input_ports: [access.bootstrap_session, access.revoke_session]
+    output_ports: [access.session_repository]
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Persist revocable sessions whose expiry never exceeds the verified Access token.}]
+    errors: [{id: session-management-error-1, condition: Identity, MFA assurance, expiry, or session binding is invalid., event: access.identity_rejected, handling: Reject and expose no profile or protected route data.}]
+    invariants: [Google sessions are bounded by eight hours, Recovery sessions are Owner-only and bounded by thirty minutes, Logout and recovery disablement revoke reuse.]
+  entrypoints: [{path: backend/src/thesis_trace/modules/access/session_management/service.py, symbol: SessionService, kind: service}]
+  public_symbols:
+  - {path: backend/src/thesis_trace/modules/access/session_management/contracts.py, symbol: SessionProfile, kind: contract}
+  - {path: backend/src/thesis_trace/modules/access/session_management/contracts.py, symbol: AccessSession, kind: contract}
+- id: account_administration
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/modules/access/account_administration]
+  parent: access_domain
+  depends_on: []
+  implements_ports: []
+  public_headers: [backend/src/thesis_trace/modules/access/account_administration/contracts.py]
+  description:
+    purpose: Own Admin-visible account lifecycle commands while excluding all research and portfolio fields.
+    diagram_summaries: {zh-TW: 管理帳號生命週期與角色}
+    input_ports: [access.query_accounts, access.manage_accounts]
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Apply confirmed identity and role changes with append-only security audit.}]
+    errors: [{id: account-administration-error-1, condition: Actor lacks Admin capability or target/version is unavailable., event: access.identity_rejected, handling: Return the same resource_unavailable envelope for forbidden and absent targets.}]
+    invariants: [Client cannot select data ownership, Account payloads never include research or investment data, Consequential changes require a consumed confirmation challenge.]
+  entrypoints: [{path: backend/src/thesis_trace/modules/access/account_administration/service.py, symbol: AccountAdministration, kind: service}]
+  public_symbols: [{path: backend/src/thesis_trace/modules/access/account_administration/contracts.py, symbol: AccountSummary, kind: contract}]
+- id: confirmation_challenge
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/modules/access/confirmation_challenge]
+  parent: access_domain
+  depends_on: []
+  implements_ports: []
+  public_headers: [backend/src/thesis_trace/modules/access/confirmation_challenge/contracts.py]
+  description:
+    purpose: Own single-use five-minute actor, action, target-version, and payload-digest bound confirmation challenges.
+    diagram_summaries: {zh-TW: 管理高風險操作的單次確認}
+    input_ports: [access.preview_consequential_action, access.confirm_consequential_action]
+    output_ports: [access.challenge_repository]
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Persist opaque challenge metadata and atomically consume it with the consequential change.}]
+    errors: [{id: confirmation-challenge-error-1, condition: Challenge is expired, reused, actor-mismatched, version-stale, or payload-mismatched., event: access.identity_rejected, handling: Destroy client challenge state and require a fresh preview.}]
+    invariants: [Challenge lifetime never exceeds five minutes, Challenge token is never persisted by the browser, Blank reasons and repeated confirmation are rejected.]
+  entrypoints: [{path: backend/src/thesis_trace/modules/access/confirmation_challenge/service.py, symbol: ConfirmationService, kind: service}]
+  public_symbols: [{path: backend/src/thesis_trace/modules/access/confirmation_challenge/contracts.py, symbol: ConfirmationChallenge, kind: contract}]
+- id: cloudflare_identity_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/adapters/cloudflare_identity]
+  parent: null
+  depends_on: [identity_registry]
+  implements_ports: [access.identity_provider]
+  public_headers: [backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py]
+  description:
+    purpose: Verify full Cloudflare Access JWT and map get-identity provider discriminator facts into semantic identity.
+    diagram_summaries: {zh-TW: 驗證完整 Access 身分與提供者}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Fetch JWKS and get-identity only from the canonical tenant origin without redirects then verify signature issuer audience expiry MFA subject and idp.id/type.}]
+    errors: [{id: cloudflare-identity-error-1, condition: JWT or get-identity is absent, inconsistent, stale, or unverifiable., event: access.identity_rejected, handling: Fail closed as access_denied without trusting email or headers.}]
+    invariants: [JWT sub never identifies provider by itself, Provider discriminator is idp.id plus idp.type, Every JWKS or identity redirect fails before a second request, Only a preapproved mapping yields an internal user.]
+  entrypoints: [{path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareIdentityAdapter, kind: adapter}, {path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareJwksDecoder, kind: adapter}]
+  public_symbols: [{path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareIdentityAdapter, kind: adapter}, {path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareJwksDecoder, kind: adapter}]
+- id: postgres_access_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/adapters/postgres_access]
+  parent: null
+  depends_on: [identity_registry, session_management, confirmation_challenge, access_domain]
+  implements_ports: [access.account_repository, access.session_repository, access.challenge_repository, access.security_context]
+  public_headers: [backend/src/thesis_trace/adapters/postgres_access/adapter.py]
+  description:
+    purpose: Persist Access aggregates and bind request security context to PostgreSQL RLS transactions.
+    diagram_summaries: {zh-TW: 保存 Access 狀態並設定 RLS 安全脈絡}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Set transaction-local user, role, and ownership context and persist append-only security audit.}]
+    errors: [{id: postgres-access-error-1, condition: Context, transaction, constraint, or persistence is unavailable., event: access.identity_rejected, handling: Roll back and fail closed with a non-disclosing error.}]
+    invariants: [Security context is transaction local, RLS never trusts client role or owner fields, Challenge consumption and consequential mutation are atomic.]
+  entrypoints: [{path: backend/src/thesis_trace/adapters/postgres_access/adapter.py, symbol: PostgresAccessAdapter, kind: adapter}]
+  public_symbols: [{path: backend/src/thesis_trace/adapters/postgres_access/adapter.py, symbol: PostgresAccessAdapter, kind: adapter}]
+- id: react_access_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [frontend/src/access]
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers: [frontend/src/access/routes.tsx]
+  description:
+    purpose: Present role-filtered session, account, workspace, denial, and volatile confirmation UI through generated contracts.
+    diagram_summaries: {zh-TW: 呈現角色隔離的 Access 介面}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Submit user intent and retain challenge tokens only in volatile dialog memory.}]
+    errors: [{id: react-access-error-1, condition: Session expires, route is unavailable, or confirmation becomes invalid., event: access.identity_rejected, handling: Clear sensitive volatile state and show uniform denial or reauthentication.}]
+    invariants: [Owner-only fields never enter Learner or Admin payloads or DOM, Challenge tokens never enter URL or browser persistence, Forbidden and absent deep links render identically.]
+  entrypoints: [{path: frontend/src/access/routes.tsx, symbol: AccessRoutes, kind: router}]
+  public_symbols: [{path: frontend/src/access/contracts.ts, symbol: SessionProfile, kind: view-contract}]
+- id: postgres_migration_entrypoint
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [infra/postgres/run-production-migrations.py]
+  parent: null
+  depends_on: [postgres_research_adapter, postgres_access_adapter]
+  implements_ports: []
+  public_headers: []
+  description:
+    purpose: Run forward-only schema migration and least-privilege grants once under the database-owner migration credential.
+    diagram_summaries: {zh-TW: 以獨立資料庫擁有者執行單次遷移}
+    input_ports: []
+    output_ports: [platform.migration_events]
+    emitted_events: [platform.migration_failed]
+    owned_state: []
+    side_effects: [{description: Apply versioned migrations and grant API and collector runtime roles only their required table privileges.}]
+    errors: [{id: postgres-migration-error-1, condition: Migration credential, checksum, schema, or grant application fails., event: platform.migration_failed, handling: Exit nonzero before API or collector starts with a redacted status.}]
+    invariants: [The migration role is the only DDL authority, API and collector roles are non-owner NOBYPASSRLS, Migration never serves runtime traffic.]
+  entrypoints: [{path: infra/postgres/run-production-migrations.py, symbol: run_production_migrations, kind: initializer}]
+  public_symbols: [{path: infra/postgres/run-production-migrations.py, symbol: run_production_migrations, kind: initializer}]
+ports:
+- id: platform.migration_events
+  owner: postgres_migration_entrypoint
+  direction: output
+  kind: event
+  contract: infra/postgres/run-production-migrations.py
+  implemented_by: []
+  description:
+    purpose: Describe the redacted terminal outcome of the one-shot migration process.
+    data: Stable migration outcome code without credentials or schema values.
+    timing: sync
+    delivery: in-process
+    delivery_semantics: at-most-once
+    ordering: process-local
+    backpressure: process exit
+    immediate_rejections: []
+    errors: [{code: migration_failed, condition: Migration or grants cannot commit., handling: Exit nonzero and keep runtime services stopped.}]
+  symbols: []
+- id: application.submit_evidence
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: []
+  description:
+    purpose: Submit an authenticated Evidence URL intent.
+    data: Actor
+    company reference: null
+    URL: null
+    and idempotency key.: null
+    timing: async
+    immediate_rejections:
+    - code: unauthenticated
+      condition: unauthenticated
+    - code: forbidden
+      condition: forbidden
+    - code: invalid_url
+      condition: invalid url
+    - code: company_version_conflict
+      condition: company version conflict
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SubmitEvidenceRequest
+- id: application.events
+  owner: thesis_trace_application
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: []
+  description:
+    purpose: Publish application-visible evidence submission results.
+    data: Record identity
+    version: null
+    and committed status.: null
+    timing: async
+    immediate_rejections: []
+  symbols:
+  - SubmitEvidenceRequest
+- id: access.authorize_owner
+  owner: access_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/access/contracts.py
+  implemented_by: []
+  description:
+    purpose: Decide whether the actor may submit Owner evidence.
+    data: Immutable authenticated actor snapshot.
+    timing: sync
+    immediate_rejections:
+    - code: unauthenticated
+      condition: unauthenticated
+    - code: forbidden
+      condition: forbidden
+  symbols:
+  - AuthenticatedActor
+- id: access.events
+  owner: access_domain
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/modules/access/contracts.py
+  implemented_by: []
+  description:
+    purpose: Publish authorization facts after validation.
+    data: Actor ID and authorization purpose.
+    timing: sync
+    immediate_rejections: []
+  symbols:
+  - AuthenticatedActor
+- id: access.resolve_identity
+  owner: identity_registry
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/access/identity_registry/contracts.py
+  implemented_by: []
+  description:
+    purpose: Resolve a verified provider discriminator and subject through a preapproved mapping.
+    data: ProviderIdentity and verified token facts.
+    timing: sync
+    immediate_rejections: [{code: access_denied, condition: Mapping is absent, disabled, ambiguous, or provider facts disagree.}]
+  symbols: [ProviderIdentity]
+- id: access.bootstrap_session
+  owner: session_management
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/access/session_management/contracts.py
+  implemented_by: []
+  description:
+    purpose: Establish or refresh a bounded application session and role-safe profile.
+    data: Resolved internal user, provider facts, MFA assurance, and Access expiry.
+    timing: sync
+    immediate_rejections: [{code: access_denied, condition: Identity, MFA, provider, or expiry is invalid.}]
+  symbols: [SessionProfile]
+- id: access.revoke_session
+  owner: session_management
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/access/session_management/contracts.py
+  implemented_by: []
+  description:
+    purpose: Revoke logout, recovery, disabled-account, or expired sessions.
+    data: Session ID, actor, reason, and expected session version.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Session is absent or not owned by the actor.}]
+  symbols: [AccessSession]
+- id: access.query_accounts
+  owner: account_administration
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/access/account_administration/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return Admin-safe account summaries without research or portfolio fields.
+    data: Authorized Admin actor and optional bounded filter.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Actor lacks account administration capability.}]
+  symbols: [AccountSummary]
+- id: access.manage_accounts
+  owner: account_administration
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/access/account_administration/contracts.py
+  implemented_by: []
+  description:
+    purpose: Apply a previously confirmed identity, role, or account lifecycle mutation.
+    data: Actor, target account/version, immutable confirmed payload, and reason.
+    timing: sync
+    immediate_rejections: [{code: confirmation_required, condition: Confirmation is absent or invalid.}, {code: resource_unavailable, condition: Target is absent or forbidden.}]
+  symbols: [AccountSummary]
+- id: access.preview_consequential_action
+  owner: confirmation_challenge
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/access/confirmation_challenge/contracts.py
+  implemented_by: []
+  description:
+    purpose: Generate a server-authoritative impact summary and opaque bounded challenge.
+    data: Actor, action type, target record/version, payload digest input, and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Actor or target is unauthorized or unavailable.}]
+  symbols: [ConfirmationChallenge]
+- id: access.confirm_consequential_action
+  owner: confirmation_challenge
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/access/confirmation_challenge/contracts.py
+  implemented_by: []
+  description:
+    purpose: Atomically validate and consume one challenge with a nonblank reason.
+    data: Opaque token, actor, exact payload, reason, and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: challenge_invalid, condition: Challenge is expired, reused, mismatched, or stale.}, {code: reason_required, condition: Reason is blank.}]
+  symbols: [ConfirmationChallenge]
+- id: access.identity_provider
+  owner: identity_registry
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/access/identity_registry/ports.py
+  implemented_by: [cloudflare_identity_adapter]
+  description:
+    purpose: Verify Cloudflare JWT and get-identity provider discriminator facts.
+    data: VerifiedPrincipal without raw token or header representations.
+    timing: sync
+    immediate_rejections: [{code: access_denied, condition: Full identity evidence cannot be verified.}]
+  symbols: [ProviderIdentity, VerifiedPrincipal]
+- id: access.account_repository
+  owner: identity_registry
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/access/identity_registry/ports.py
+  implemented_by: [postgres_access_adapter]
+  description:
+    purpose: Persist and query versioned users and provider mappings.
+    data: AccessAccount and ProviderIdentityMapping.
+    timing: sync
+    immediate_rejections: [{code: conflict, condition: Mapping, version, primary Admin, or enabled-account constraint fails.}]
+  symbols: [AccessAccount, ProviderIdentityMapping]
+- id: access.session_repository
+  owner: session_management
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/access/session_management/ports.py
+  implemented_by: [postgres_access_adapter]
+  description:
+    purpose: Persist, retrieve, and revoke bounded application sessions.
+    data: AccessSession metadata without JWT or credential values.
+    timing: sync
+    immediate_rejections: [{code: unavailable, condition: Session persistence is unavailable.}]
+  symbols: [AccessSession]
+- id: access.challenge_repository
+  owner: confirmation_challenge
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/access/confirmation_challenge/ports.py
+  implemented_by: [postgres_access_adapter]
+  description:
+    purpose: Persist opaque challenge metadata and atomically consume single-use challenges.
+    data: Challenge digest, bindings, expiry, consumed state, and audit metadata.
+    timing: sync
+    immediate_rejections: [{code: conflict, condition: Challenge was consumed or target version changed.}]
+  symbols: [ConfirmationChallenge]
+- id: access.security_context
+  owner: access_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/access/ports.py
+  implemented_by: [postgres_access_adapter]
+  description:
+    purpose: Bind server-derived user, role, and ownership scope to one PostgreSQL transaction for RLS.
+    data: SecurityContext without client-supplied authority fields.
+    timing: sync
+    immediate_rejections: [{code: access_denied, condition: Context is absent, stale, or cannot be transaction-locally bound.}]
+  symbols: [SecurityContext]
+- id: research.submit_evidence
+  owner: research_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/research/contracts.py
+  implemented_by: []
+  description:
+    purpose: Atomically admit one Evidence URL.
+    data: Authorized actor
+    company reference: null
+    URL: null
+    and idempotency key.: null
+    timing: sync
+    immediate_rejections:
+    - code: invalid_url
+      condition: invalid url
+    - code: duplicate
+      condition: duplicate
+    - code: company_version_conflict
+      condition: company version conflict
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - EvidenceRecord
+- id: research.query_evidence
+  owner: research_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/research/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return an authorized immutable Evidence status snapshot.
+    data: Evidence ID and server version.
+    timing: sync
+    immediate_rejections:
+    - code: not_found_or_forbidden
+      condition: not found or forbidden
+  symbols:
+  - EvidenceRecord
+- id: research.unit_of_work
+  owner: evidence_intake
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/evidence_intake/ports.py
+  implemented_by:
+  - postgres_research_adapter
+  description:
+    purpose: Atomically save evidence state
+    audit fact: null
+    and durable job.: null
+    data: Semantic records without ORM representations.
+    timing: sync
+    immediate_rejections:
+    - code: conflict
+      condition: conflict
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - EvidenceIntakeUnitOfWorkPort
+- id: research.collection_jobs
+  owner: evidence_collection
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
+  implemented_by:
+  - postgres_research_adapter
+  description:
+    purpose: Lease
+    acknowledge: null
+    retry: null
+    or dead-letter durable collection work.: null
+    data: Collection request and opaque lease token.
+    timing: async
+    immediate_rejections:
+    - code: lease_unavailable
+      condition: lease unavailable
+  symbols:
+  - CollectionStorePort
+- id: research.source_fetch
+  owner: evidence_collection
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
+  implemented_by:
+  - restricted_source_fetch_adapter
+  description:
+    purpose: Fetch one admitted external source under SSRF and size restrictions.
+    data: Evidence URL and semantic fetch result.
+    timing: async
+    immediate_rejections:
+    - code: forbidden_target
+      condition: forbidden target
+    - code: invalid_scheme
+      condition: invalid scheme
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - SourceFetchPort
+- id: research.clock
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by: []
+  description:
+    purpose: Supply observed and retrieved times.
+    data: Time value with provenance.
+    timing: sync
+    immediate_rejections:
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - EvidenceRecord
+- id: research.ids
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/ports.py
+  implemented_by: []
+  description:
+    purpose: Generate persistent semantic identifiers.
+    data: Opaque unique identifier.
+    timing: sync
+    immediate_rejections:
+    - code: unavailable
+      condition: unavailable
+  symbols:
+  - EvidenceRecord
+- id: research.events
+  owner: research_domain
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/modules/research/contracts.py
+  implemented_by: []
+  description:
+    purpose: Publish committed evidence lifecycle transitions.
+    data: Persistent event envelope and semantic payload.
+    timing: async
+    immediate_rejections: []
+  symbols:
+  - EvidenceRecord
+events:
+- id: platform.migration_failed
+  owner: postgres_migration_entrypoint
+  output_port: platform.migration_events
+  delivery: at-most-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload]
+  lifecycle: [received, validated, processing, succeeded, failed]
+  description:
+    purpose: Describe a redacted terminal migration failure for process supervision.
+    emitted_when: A forward migration or least-privilege grant cannot commit.
+    payload_fields: [{name: code, type: string, meaning: Stable non-secret migration failure category.}]
+    intended_consumers: [backend_composition]
+- id: research.evidence_received
+  owner: research_domain
+  output_port: research.events
+  delivery: at-least-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  - event_id
+  - retry
+  lifecycle:
+  - received
+  - validated
+  - accepted
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - cancelled
+  - dead-letter
+  description:
+    purpose: Report that received evidence
+    audit: null
+    and collection work committed.: null
+    emitted_when: The atomic intake transaction has committed.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Stable evidence stream identity.
+    - name: version
+      type: EvidenceVersion
+      meaning: Committed server version.
+    intended_consumers:
+    - thesis_trace_application
+    - research_domain
+  idempotency: Persistent event_id and stream sequence; consumers record processed
+    event IDs.
+- id: research.collection_succeeded
+  owner: research_domain
+  output_port: research.events
+  delivery: at-least-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  - event_id
+  - retry
+  lifecycle:
+  - received
+  - validated
+  - accepted
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - cancelled
+  - dead-letter
+  description:
+    purpose: Report a committed immutable source snapshot.
+    emitted_when: The snapshot and succeeded state have committed.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Evidence stream identity.
+    - name: content_hash
+      type: string
+      meaning: Immutable content digest.
+    intended_consumers:
+    - thesis_trace_application
+  idempotency: Persistent event_id and stream sequence; consumers record processed
+    event IDs.
+- id: research.collection_failed
+  owner: research_domain
+  output_port: research.events
+  delivery: at-least-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  - event_id
+  - retry
+  lifecycle:
+  - received
+  - validated
+  - accepted
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - cancelled
+  - dead-letter
+  description:
+    purpose: Report a committed retryable or terminal safe failure.
+    emitted_when: Failure state and retry metadata have committed.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Evidence stream identity.
+    - name: code
+      type: string
+      meaning: Non-secret stable failure code.
+    intended_consumers:
+    - thesis_trace_application
+  idempotency: Persistent event_id and stream sequence; consumers record processed
+    event IDs.
+- id: access.owner_authorized
+  owner: access_domain
+  output_port: access.events
+  delivery: at-most-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  lifecycle:
+  - received
+  - validated
+  - processing
+  - succeeded
+  - failed
+  description:
+    purpose: Record a successful Owner authorization decision.
+    emitted_when: Identity and role checks have succeeded.
+    payload_fields:
+    - name: actor_id
+      type: ActorId
+      meaning: Authorized internal actor.
+    intended_consumers:
+    - thesis_trace_application
+- id: access.identity_resolved
+  owner: access_domain
+  output_port: access.events
+  delivery: at-most-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload]
+  lifecycle: [received, validated, processing, succeeded, failed]
+  description:
+    purpose: Record successful resolution of provider-discriminated identity to one internal user.
+    emitted_when: Full JWT and get-identity facts match one enabled preapproved mapping.
+    payload_fields: [{name: user_id, type: UserId, meaning: Stable internal user identity.}, {name: provider_identity, type: ProviderIdentity, meaning: Provider discriminator and subject without email authority.}]
+    intended_consumers: [access_domain]
+- id: access.identity_rejected
+  owner: access_domain
+  output_port: access.events
+  delivery: at-most-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload]
+  lifecycle: [received, validated, processing, succeeded, failed]
+  description:
+    purpose: Record a non-disclosing identity rejection category.
+    emitted_when: Provider evidence or preapproved mapping fails closed.
+    payload_fields: [{name: code, type: string, meaning: Stable non-secret rejection category.}]
+    intended_consumers: [thesis_trace_application]
+- id: access.session_established
+  owner: access_domain
+  output_port: access.events
+  delivery: at-least-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload, event_id]
+  lifecycle: [received, validated, accepted, processing, succeeded, failed]
+  description:
+    purpose: Report a committed bounded application session.
+    emitted_when: Session binding and expiry have committed.
+    payload_fields: [{name: session_id, type: SessionId, meaning: Opaque session identity.}, {name: recovery, type: boolean, meaning: Whether the Owner recovery provider established this session.}]
+    intended_consumers: [thesis_trace_application, workflow_domain]
+  idempotency: Persistent event_id; consumers deduplicate recovery actions.
+- id: access.session_revoked
+  owner: access_domain
+  output_port: access.events
+  delivery: at-least-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload, event_id]
+  lifecycle: [received, validated, accepted, processing, succeeded, failed]
+  description:
+    purpose: Report that a session can no longer authorize requests.
+    emitted_when: Revocation has committed.
+    payload_fields: [{name: session_id, type: SessionId, meaning: Revoked opaque session.}, {name: reason, type: string, meaning: Stable revocation category.}]
+    intended_consumers: [thesis_trace_application]
+  idempotency: Persistent event_id and session version.
+- id: access.recovery_session_detected
+  owner: access_domain
+  output_port: access.events
+  delivery: at-least-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload, event_id]
+  lifecycle: [received, validated, accepted, processing, succeeded, failed]
+  description:
+    purpose: Trigger immutable security audit and a safety-locked task to disable recovery access.
+    emitted_when: The first valid recovery session for an activation window commits.
+    payload_fields: [{name: user_id, type: UserId, meaning: Existing Owner user.}, {name: recovery_reason, type: string, meaning: Server-approved bounded recovery category.}]
+    intended_consumers: [workflow_domain, thesis_trace_application]
+  idempotency: Recovery activation identity and first-session event ID.
+- id: access.account_changed
+  owner: access_domain
+  output_port: access.events
+  delivery: at-least-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload, event_id]
+  lifecycle: [received, validated, accepted, processing, succeeded, failed]
+  description:
+    purpose: Report a committed identity, role, or account lifecycle change.
+    emitted_when: Consequential mutation, confirmation consumption, and audit commit atomically.
+    payload_fields: [{name: user_id, type: UserId, meaning: Changed account.}, {name: version, type: AccountVersion, meaning: New account version.}]
+    intended_consumers: [session_management, thesis_trace_application]
+  idempotency: Persistent event_id and account version.
+- id: access.confirmation_issued
+  owner: access_domain
+  output_port: access.events
+  delivery: at-most-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload]
+  lifecycle: [received, validated, processing, succeeded, failed]
+  description:
+    purpose: Record issuance of a short-lived challenge without publishing its token.
+    emitted_when: Challenge bindings and expiry commit.
+    payload_fields: [{name: challenge_id, type: ChallengeId, meaning: Server-side opaque challenge identity.}, {name: expires_at, type: Instant, meaning: Expiry no later than five minutes after issue.}]
+    intended_consumers: [thesis_trace_application]
+- id: access.confirmation_consumed
+  owner: access_domain
+  output_port: access.events
+  delivery: at-least-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload, event_id]
+  lifecycle: [received, validated, accepted, processing, succeeded, failed]
+  description:
+    purpose: Report atomic challenge consumption and consequential mutation.
+    emitted_when: Challenge, reason, mutation, and append-only audit commit.
+    payload_fields: [{name: challenge_id, type: ChallengeId, meaning: Consumed challenge identity.}, {name: action_type, type: ConsequentialActionType, meaning: Confirmed action category.}]
+    intended_consumers: [thesis_trace_application]
+  idempotency: Challenge ID and command idempotency key prevent repeated mutation.
+- id: application.evidence_submission_completed
+  owner: thesis_trace_application
+  output_port: application.events
+  delivery: at-most-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  lifecycle:
+  - received
+  - validated
+  - processing
+  - succeeded
+  - failed
+  description:
+    purpose: Notify delivery adapters that current evidence status can be queried.
+    emitted_when: A Research lifecycle event has been mapped after commit.
+    payload_fields:
+    - name: evidence_id
+      type: EvidenceId
+      meaning: Evidence record to refresh.
+    intended_consumers:
+    - fastapi_entrypoint
+types:
+- id: evidenceapi
+  owner: fastapi_entrypoint
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/api.py
+    symbol: EvidenceApi
+    kind: class
+  visibility: private
+  semantic_kind: wire-representation
+  description: Govern the EvidenceApi semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - fastapi_entrypoint
+  references: []
+  fields: []
+- id: submitevidencerequest
+  owner: thesis_trace_application
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/application/contracts.py
+    symbol: SubmitEvidenceRequest
+    kind: class
+  visibility: module-public
+  semantic_kind: command
+  description: Govern the SubmitEvidenceRequest semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - thesis_trace_application
+  references:
+  - authenticatedactor
+  fields:
+  - name: actor
+    type: AuthenticatedActor
+    role: domain-value
+    meaning: SubmitEvidenceRequest actor value.
+  - name: company_id
+    type: str
+    role: domain-value
+    meaning: SubmitEvidenceRequest company_id value.
+  - name: company_version
+    type: int
+    role: domain-value
+    meaning: SubmitEvidenceRequest company_version value.
+  - name: url
+    type: str
+    role: domain-value
+    meaning: SubmitEvidenceRequest url value.
+  - name: idempotency_key
+    type: str
+    role: domain-value
+    meaning: SubmitEvidenceRequest idempotency_key value.
+- id: evidenceintakeflow
+  owner: thesis_trace_application
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/application/flows/evidence_intake.py
+    symbol: EvidenceIntakeFlow
+    kind: class
+  visibility: private
+  semantic_kind: private-helper
+  description: Govern the EvidenceIntakeFlow semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - thesis_trace_application
+  references: []
+  fields: []
+- id: role
+  owner: access_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/access/contracts.py
+    symbol: Role
+    kind: enum
+  visibility: module-public
+  semantic_kind: policy
+  description: Govern the Role semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - access_domain
+  references: []
+  fields: []
+  values:
+  - owner
+  - learner
+  - admin
+- id: authenticatedactor
+  owner: access_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/access/contracts.py
+    symbol: AuthenticatedActor
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Govern the AuthenticatedActor semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - access_domain
+  references:
+  - role
+  fields:
+  - name: actor_id
+    type: str
+    role: domain-value
+    meaning: AuthenticatedActor actor_id value.
+  - name: role
+    type: Role
+    role: domain-value
+    meaning: AuthenticatedActor role value.
+  - name: identity_version
+    type: int
+    role: domain-value
+    meaning: AuthenticatedActor identity_version value.
+- id: fetchedsource
+  owner: evidence_collection
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_collection/contracts.py
+    symbol: FetchedSource
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Govern the FetchedSource semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_collection
+  references: []
+  fields:
+  - name: canonical_url
+    type: str
+    role: domain-value
+    meaning: FetchedSource canonical_url value.
+  - name: publisher
+    type: str
+    role: domain-value
+    meaning: FetchedSource publisher value.
+  - name: content
+    type: bytes
+    role: domain-value
+    meaning: FetchedSource content value.
+  - name: retrieved_at
+    type: str
+    role: domain-value
+    meaning: FetchedSource retrieved_at value.
+- id: collectedsourcesnapshot
+  owner: evidence_collection
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_collection/contracts.py
+    symbol: CollectedSourceSnapshot
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Govern the CollectedSourceSnapshot semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_collection
+  references: []
+  fields:
+  - name: canonical_url
+    type: str
+    role: domain-value
+    meaning: CollectedSourceSnapshot canonical_url value.
+  - name: publisher
+    type: str
+    role: domain-value
+    meaning: CollectedSourceSnapshot publisher value.
+  - name: content_hash
+    type: str
+    role: domain-value
+    meaning: CollectedSourceSnapshot content_hash value.
+  - name: retrieved_at
+    type: str
+    role: domain-value
+    meaning: CollectedSourceSnapshot retrieved_at value.
+- id: sourcefetchport
+  owner: evidence_collection
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
+    symbol: SourceFetchPort
+    kind: protocol
+  visibility: module-public
+  semantic_kind: port
+  description: Govern the SourceFetchPort semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - research_domain
+  references: []
+  fields: []
+- id: collectionstoreport
+  owner: evidence_collection
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
+    symbol: CollectionStorePort
+    kind: protocol
+  visibility: module-public
+  semantic_kind: port
+  description: Govern the CollectionStorePort semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - research_domain
+  references: []
+  fields: []
+- id: evidencecollector
+  owner: evidence_collection
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_collection/service.py
+    symbol: EvidenceCollector
+    kind: class
+  visibility: private
+  semantic_kind: private-helper
+  description: Govern the EvidenceCollector semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_collection
+  references: []
+  fields: []
+- id: evidencestatus
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceStatus
+    kind: enum
+  visibility: private
+  semantic_kind: runtime-state
+  description: Govern the EvidenceStatus semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references: []
+  fields: []
+  values:
+  - received
+  - processing
+  - succeeded
+  - failed
+  - retrying
+  - dead_letter
+- id: evidenceaccepted
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceAccepted
+    kind: class
+  visibility: module-public
+  semantic_kind: event-payload
+  description: Govern the EvidenceAccepted semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references: []
+  fields:
+  - name: evidence_id
+    type: str
+    role: domain-value
+    meaning: EvidenceAccepted evidence_id value.
+  - name: version
+    type: int
+    role: domain-value
+    meaning: EvidenceAccepted version value.
+- id: submissionresult
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: SubmissionResult
+    kind: class
+  visibility: module-public
+  semantic_kind: event-payload
+  description: Govern the SubmissionResult semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references:
+  - evidenceaccepted
+  fields:
+  - name: accepted
+    type: EvidenceAccepted | None
+    role: domain-value
+    meaning: SubmissionResult accepted value.
+  - name: rejection_code
+    type: str | None
+    role: domain-value
+    meaning: SubmissionResult rejection_code value.
+- id: evidencerecord
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceRecord
+    kind: class
+  visibility: private
+  semantic_kind: runtime-state
+  description: Govern the EvidenceRecord semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references:
+  - evidencestatus
+  fields:
+  - name: evidence_id
+    type: str
+    role: domain-value
+    meaning: EvidenceRecord evidence_id value.
+  - name: version
+    type: int
+    role: domain-value
+    meaning: EvidenceRecord version value.
+  - name: company_id
+    type: str
+    role: domain-value
+    meaning: EvidenceRecord company_id value.
+  - name: company_version
+    type: int
+    role: domain-value
+    meaning: EvidenceRecord company_version value.
+  - name: url
+    type: str
+    role: domain-value
+    meaning: EvidenceRecord url value.
+  - name: status
+    type: EvidenceStatus
+    role: domain-value
+    meaning: EvidenceRecord status value.
+- id: evidencestatussnapshot
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceStatusSnapshot
+    kind: class
+  visibility: module-public
+  semantic_kind: query
+  description: Govern the EvidenceStatusSnapshot semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references:
+  - evidencestatus
+  fields:
+  - name: evidence_id
+    type: str
+    role: domain-value
+    meaning: EvidenceStatusSnapshot evidence_id value.
+  - name: version
+    type: int
+    role: domain-value
+    meaning: EvidenceStatusSnapshot version value.
+  - name: status
+    type: EvidenceStatus
+    role: domain-value
+    meaning: EvidenceStatusSnapshot status value.
+- id: evidenceauditfact
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: EvidenceAuditFact
+    kind: class
+  visibility: module-public
+  semantic_kind: event-payload
+  description: Govern the EvidenceAuditFact semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references: []
+  fields:
+  - name: actor_id
+    type: str
+    role: domain-value
+    meaning: EvidenceAuditFact actor_id value.
+  - name: action
+    type: str
+    role: domain-value
+    meaning: EvidenceAuditFact action value.
+  - name: subject_id
+    type: str
+    role: domain-value
+    meaning: EvidenceAuditFact subject_id value.
+  - name: subject_version
+    type: int
+    role: domain-value
+    meaning: EvidenceAuditFact subject_version value.
+- id: collectionrequest
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: CollectionRequest
+    kind: class
+  visibility: module-public
+  semantic_kind: command
+  description: Govern the CollectionRequest semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_intake
+  references: []
+  fields:
+  - name: evidence_id
+    type: str
+    role: domain-value
+    meaning: CollectionRequest evidence_id value.
+  - name: evidence_version
+    type: int
+    role: domain-value
+    meaning: CollectionRequest evidence_version value.
+  - name: url
+    type: str
+    role: domain-value
+    meaning: CollectionRequest url value.
+  - name: idempotency_key
+    type: str
+    role: domain-value
+    meaning: CollectionRequest idempotency_key value.
+- id: evidenceintakeunitofworkport
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/ports.py
+    symbol: EvidenceIntakeUnitOfWorkPort
+    kind: protocol
+  visibility: module-public
+  semantic_kind: port
+  description: Govern the EvidenceIntakeUnitOfWorkPort semantic type.
+  lifetime: Request, job, or process lifetime according to its public contract.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - research_domain
+  references: []
+  fields: []
+- id: jwtverificationerror
+  owner: access_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/access/jwt_verifier.py
+    symbol: JwtVerificationError
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Stable non-secret failure raised when an Access credential cannot be verified.
+  lifetime: Request lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - fastapi_entrypoint
+  references: []
+  fields: []
+- id: accessjwtconfiguration
+  owner: access_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/access/jwt_verifier.py
+    symbol: AccessJwtConfiguration
+    kind: class
+  visibility: module-public
+  semantic_kind: configuration
+  description: Fail-closed issuer, audience, and identity allowlist for Cloudflare Access JWT verification.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - backend_composition
+  references: []
+  fields:
+  - name: issuer
+    type: str
+    role: configuration
+    meaning: Expected Cloudflare Access issuer.
+  - name: audience
+    type: str
+    role: configuration
+    meaning: Required Access application audience.
+  - name: allowed_identity_facts
+    type: frozenset[str]
+    role: configuration
+    meaning: One-way SHA-256 facts derived from normalized identities admitted as the Wave 0 Owner; raw identities are not retained.
+- id: cloudflarejwtverifier
+  owner: access_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/access/jwt_verifier.py
+    symbol: CloudflareJwtVerifier
+    kind: class
+  visibility: module-public
+  semantic_kind: policy
+  description: Verify Access JWT claims and map an allowed provider subject to an authenticated Owner.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - fastapi_entrypoint
+  references:
+  - accessjwtconfiguration
+  - jwtverificationerror
+  - authenticatedactor
+  fields: []
+- id: leasedcollectionjob
+  owner: evidence_intake
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
+    symbol: LeasedCollectionJob
+    kind: class
+  visibility: module-public
+  semantic_kind: command
+  description: Durable collection work claimed under an opaque expiring lease token.
+  lifetime: One worker attempt.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - evidence_collection
+  references: []
+  fields:
+  - name: job_id
+    type: str
+    role: domain-identity
+    meaning: Durable job identity.
+  - name: evidence_id
+    type: str
+    role: domain-identity
+    meaning: Evidence stream identity.
+  - name: evidence_version
+    type: int
+    role: contract-control
+    meaning: Evidence version the job must collect.
+  - name: url
+    type: str
+    role: domain-value
+    meaning: Admitted HTTPS source URL.
+  - name: idempotency_key
+    type: str
+    role: contract-control
+    meaning: Stable collection operation key.
+  - name: lease_token
+    type: str
+    role: contract-control
+    meaning: Opaque token required to commit an attempt result.
+  - name: attempt
+    type: int
+    role: contract-control
+    meaning: Current bounded attempt number.
+- id: createcompanycommand
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: CreateCompanyCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Authenticated command to create a Research company.
+  lifetime: Request lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application]
+  references: [authenticatedactor]
+  fields: []
+- id: listcompaniesquery
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ListCompaniesQuery, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Authenticated query for visible Research companies.
+  lifetime: Request lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application]
+  references: [authenticatedactor]
+  fields: []
+- id: companyrecord
+  owner: evidence_intake
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py, symbol: CompanyRecord, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Server-owned company identity and optimistic version snapshot.
+  lifetime: Persisted company lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, postgres_research_adapter]
+  references: []
+  fields: []
+- id: companycreatebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: CompanyCreateBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Validated HTTP company creation body.
+  lifetime: Request lifetime.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: companyresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: CompanyResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Versioned HTTP company response.
+  lifetime: Request lifetime.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: evidencesubmissionbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: EvidenceSubmissionBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Validated HTTP Evidence submission body.
+  lifetime: Request lifetime.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: evidenceresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: EvidenceResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Versioned HTTP Evidence status response.
+  lifetime: Request lifetime.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: secretprovider
+  owner: runtime_configuration_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/runtime.py, symbol: SecretProvider, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Callable capability that resolves a secret only at its point of use.
+  lifetime: Process lifetime reference; resolved value is operation scoped.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, postgres_research_adapter]
+  references: []
+  fields: []
+- id: filesecretprovider
+  owner: runtime_configuration_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/runtime.py, symbol: FileSecretProvider, kind: class}
+  visibility: private
+  semantic_kind: adapter-binding
+  description: Redacted reference to a deployment-owned secret file.
+  lifetime: Process lifetime reference; file content is read per call.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [runtime_configuration_adapter]
+  references: [secretprovider]
+  fields: []
+- id: postgresunavailable
+  owner: postgres_research_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/postgres.py, symbol: PostgresUnavailable, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Stable redacted failure for unavailable PostgreSQL capability.
+  lifetime: Error propagation lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: []
+  fields: []
+- id: apiruntime
+  owner: backend_composition
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/bootstrap/application.py
+    symbol: ApiRuntime
+    kind: class
+  visibility: private
+  semantic_kind: runtime-state
+  description: Process-lifetime API adapter bindings retained by FastAPI application state.
+  lifetime: API process lifetime.
+  mutability: owner-mutable
+  mutation_authority:
+  - backend_composition
+  consumers:
+  - backend_composition
+  references:
+  - postgresevidencestore
+  - cloudflarejwtverifier
+  - postgresaccessadapter
+  - cloudflareidentityadapter
+  fields:
+  - name: store
+    type: PostgresEvidenceStore
+    role: runtime-state
+    meaning: Research persistence binding selected by composition.
+  - name: verifier
+    type: CloudflareJwtVerifier
+    role: runtime-state
+    meaning: Access identity verifier selected by composition.
+  - name: access_store
+    type: PostgresAccessAdapter
+    role: runtime-state
+    meaning: Process-scoped Access persistence and transaction binding adapter.
+  - name: identity_adapter
+    type: CloudflareIdentityAdapter
+    role: runtime-state
+    meaning: Process-scoped full Cloudflare identity verification adapter.
+- id: collectorruntime
+  owner: backend_composition
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/bootstrap/application.py
+    symbol: CollectorRuntime
+    kind: class
+  visibility: private
+  semantic_kind: runtime-state
+  description: Process-lifetime collector binding retained by the bound worker handle.
+  lifetime: Collector process lifetime.
+  mutability: owner-mutable
+  mutation_authority:
+  - backend_composition
+  consumers:
+  - backend_composition
+  references:
+  - evidencecollector
+  fields:
+  - name: collector
+    type: EvidenceCollector
+    role: runtime-state
+    meaning: Stateful worker service bound to durable job and source adapters.
+- id: postgresevidencestore
+  owner: postgres_research_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/postgres.py, symbol: PostgresEvidenceStore, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: PostgreSQL implementation of atomic Evidence and collection storage ports.
+  lifetime: Process lifetime with operation-scoped connections and resolved secrets.
+  mutability: owner-mutable
+  mutation_authority: [postgres_research_adapter]
+  consumers: [backend_composition]
+  references: [databaseurlprovider]
+  fields: []
+- id: sourcefetchfailure
+  owner: restricted_source_fetch_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/source_fetch.py, symbol: SourceFetchFailure, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Stable policy-safe source retrieval failure.
+  lifetime: One collection attempt.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_collection]
+  references: []
+  fields: []
+- id: transportresponse
+  owner: restricted_source_fetch_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/source_fetch.py, symbol: TransportResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Adapter-private bounded HTTP response.
+  lifetime: One transport request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [restricted_source_fetch_adapter]
+  references: []
+  fields: []
+- id: sourcetransport
+  owner: restricted_source_fetch_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/source_fetch.py, symbol: SourceTransport, kind: protocol}
+  visibility: private
+  semantic_kind: port
+  description: Adapter-private pinned-address HTTPS transport seam.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [restricted_source_fetch_adapter]
+  references: [transportresponse]
+  fields: []
+- id: pinnedhttpsconnection
+  owner: restricted_source_fetch_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/source_fetch.py, symbol: _PinnedHttpsConnection, kind: class}
+  visibility: private
+  semantic_kind: private-helper
+  description: Adapter-private TLS connection pinned to an approved resolved address.
+  lifetime: One transport request.
+  mutability: owner-mutable
+  mutation_authority: [restricted_source_fetch_adapter]
+  consumers: [restricted_source_fetch_adapter]
+  references: []
+  fields: []
+- id: pinnedhttpstransport
+  owner: restricted_source_fetch_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/source_fetch.py, symbol: PinnedHttpsTransport, kind: class}
+  visibility: private
+  semantic_kind: adapter-binding
+  description: HTTPS implementation that connects only to a previously approved address.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [restricted_source_fetch_adapter]
+  references: [sourcetransport, transportresponse, pinnedhttpsconnection]
+  fields: []
+- id: restrictedhttpsourcefetcher
+  owner: restricted_source_fetch_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/source_fetch.py, symbol: RestrictedHttpSourceFetcher, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Restricted HTTPS implementation of the Evidence source fetch port.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [sourcetransport, sourcefetchfailure]
+  fields: []
+- id: databaseurlprovider
+  owner: postgres_research_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/platform/postgres.py, symbol: DatabaseUrlProvider, kind: protocol}
+  visibility: private
+  semantic_kind: port
+  description: Adapter-local callable that resolves one database URL per connection attempt.
+  lifetime: Process lifetime reference; resolved value is connection scoped.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [postgres_research_adapter]
+  references: []
+  fields: []
+- id: provideridentity
+  owner: identity_registry
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: ProviderIdentity, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Provider-discriminated identity key that never treats email as merge authority.
+  lifetime: Identity mapping lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [session_management, cloudflare_identity_adapter]
+  references: []
+  fields: [{name: provider_id, type: str, role: domain-identity, meaning: Cloudflare get-identity idp.id.}, {name: provider_type, type: str, role: domain-identity, meaning: Cloudflare get-identity idp.type.}, {name: subject, type: str, role: domain-identity, meaning: JWT subject interpreted only with provider discriminator.}]
+- id: verifiedprincipal
+  owner: identity_registry
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: VerifiedPrincipal, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Fully verified identity evidence safe for semantic mapping.
+  lifetime: One authenticated request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [identity_registry, session_management]
+  references: [provideridentity]
+  fields: [{name: identity, type: ProviderIdentity, role: domain-value, meaning: Provider-discriminated subject.}, {name: mfa_assured, type: bool, role: policy, meaning: Verified MFA result.}, {name: token_expires_at, type: Instant, role: contract-control, meaning: Upper bound for application session.}]
+- id: accessaccount
+  owner: identity_registry
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: AccessAccount, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Current versioned account and role state.
+  lifetime: Persisted account lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [session_management, account_administration, postgres_access_adapter]
+  references: []
+  fields: [{name: user_id, type: UserId, role: domain-identity, meaning: Stable internal user ID.}, {name: role, type: Role, role: policy, meaning: Server-owned active role.}, {name: status, type: AccountStatus, role: domain-value, meaning: Enabled or suspended state.}, {name: version, type: AccountVersion, role: contract-control, meaning: Optimistic concurrency version.}]
+- id: provideridentitymapping
+  owner: identity_registry
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/identity_registry/contracts.py, symbol: ProviderIdentityMapping, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Preapproved mapping from exactly one provider identity to one internal user.
+  lifetime: Persisted identity mapping lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [postgres_access_adapter]
+  references: [provideridentity]
+  fields: [{name: identity, type: ProviderIdentity, role: domain-identity, meaning: Unique provider discriminator and subject.}, {name: user_id, type: UserId, role: domain-identity, meaning: Preapproved internal user.}, {name: enabled, type: bool, role: policy, meaning: Whether mapping may authenticate.}, {name: version, type: int, role: contract-control, meaning: Mapping version.}]
+- id: accesssession
+  owner: session_management
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/session_management/contracts.py, symbol: AccessSession, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Revocable application session bound to verified provider identity and internal user.
+  lifetime: At most Access token expiry, eight hours normally, or thirty minutes for recovery.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [postgres_access_adapter]
+  references: []
+  fields: [{name: session_id, type: SessionId, role: domain-identity, meaning: Opaque session ID.}, {name: user_id, type: UserId, role: domain-identity, meaning: Bound internal user.}, {name: provider_identity, type: ProviderIdentity, role: domain-value, meaning: Provider identity used for this session.}, {name: expires_at, type: Instant, role: contract-control, meaning: Server-enforced upper bound.}, {name: recovery, type: bool, role: policy, meaning: Whether thirty-minute recovery rules apply.}, {name: revoked_at, type: Instant | None, role: domain-value, meaning: Revocation time when unusable.}, {name: identity_version, type: int, role: contract-control, meaning: Account identity version that invalidates stale sessions.}, {name: recovery_policy_version, type: str | None, role: contract-control, meaning: Exact observed recovery policy version required for recovery-session reuse.}]
+- id: sessionprofile
+  owner: session_management
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/session_management/contracts.py, symbol: SessionProfile, kind: union}
+  visibility: module-public
+  semantic_kind: query
+  description: Discriminated Owner, Learner, or Admin profile with capability-safe fields.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, react_access_adapter]
+  references: []
+  fields: [{name: user_id, type: UserId, role: domain-identity, meaning: Opaque internal user ID.}, {name: role, type: Role, role: contract-control, meaning: Selects the exact allowed profile variant.}, {name: capabilities, type: 'frozenset[str]', role: policy, meaning: Server-derived allowed UI actions.}, {name: session_expires_at, type: Instant, role: contract-control, meaning: Current server session expiry.}, {name: recovery, type: bool, role: policy, meaning: Enables the recovery warning; a task link appears only after Workflow returns a real opaque item ID.}]
+- id: accountsummary
+  owner: account_administration
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/account_administration/contracts.py, symbol: AccountSummary, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Admin-safe account projection excluding research and investment fields.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_access_adapter]
+  references: []
+  fields: [{name: user_id, type: UserId, role: domain-identity, meaning: Opaque account ID.}, {name: role, type: Role, role: policy, meaning: Current role.}, {name: status, type: AccountStatus, role: domain-value, meaning: Current lifecycle.}, {name: masked_identity, type: str, role: metadata, meaning: Non-authoritative masked provider label.}, {name: version, type: AccountVersion, role: contract-control, meaning: Target version for preview.}]
+- id: confirmationchallenge
+  owner: confirmation_challenge
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/confirmation_challenge/contracts.py, symbol: ConfirmationChallenge, kind: class}
+  visibility: module-public
+  semantic_kind: event-payload
+  description: Single-use challenge metadata with only a persisted token digest outside this semantic object.
+  lifetime: At most five minutes.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [confirmation_challenge, postgres_access_adapter, access_domain]
+  references: []
+  fields: [{name: challenge_id, type: ChallengeId, role: domain-identity, meaning: Server challenge identity.}, {name: actor_id, type: UserId, role: contract-control, meaning: Authorized actor binding.}, {name: action_type, type: ConsequentialActionType, role: contract-control, meaning: Consequential action category.}, {name: target_id, type: str, role: domain-identity, meaning: Exact target record identity.}, {name: target_version, type: int, role: contract-control, meaning: Exact target version.}, {name: payload_digest, type: str, role: contract-control, meaning: Server digest of exact payload.}, {name: impact_summary, type: 'Mapping[str, Any]', role: metadata, meaning: Immutable server-authored summary snapshot.}, {name: expires_at, type: Instant, role: contract-control, meaning: No later than five minutes after issue.}, {name: consumed_at, type: Instant | None, role: domain-value, meaning: Single-use consumption marker.}]
+- id: securitycontext
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/contracts.py, symbol: SecurityContext, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Server-derived transaction-local PostgreSQL RLS identity and scope.
+  lifetime: One database transaction.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [postgres_access_adapter]
+  references: [role]
+  fields: [{name: user_id, type: UserId, role: domain-identity, meaning: Internal authenticated user.}, {name: role, type: Role, role: policy, meaning: Server-owned role.}, {name: ownership_scope, type: str, role: policy, meaning: Server-derived personal/shared/operational scope.}]
+- id: sessionprofileview
+  owner: react_access_adapter
+  language: typescript
+  declaration: {path: frontend/src/access/contracts.ts, symbol: SessionProfile, kind: alias}
+  target: OwnerSessionResponse | LearnerSessionResponse | AdminSessionResponse
+  visibility: private
+  semantic_kind: wire-representation
+  description: Generated-client-derived discriminated UI session profile.
+  lifetime: Current page memory only.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_access_adapter]
+  references: []
+  fields: []
+- id: accessclient
+  owner: react_access_adapter
+  language: typescript
+  declaration: {path: frontend/src/access/client.ts, symbol: AccessClient, kind: interface}
+  visibility: private
+  semantic_kind: port
+  description: Browser-local transport facade implemented exclusively with generated OpenAPI operations and DTOs.
+  lifetime: Page process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_access_adapter]
+  references: []
+  fields: []
+- id: cloudflareidentityadapter
+  owner: cloudflare_identity_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareIdentityAdapter, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Verify JWT and token-bound full identity facts into a semantic principal.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [verifiedprincipal]
+  fields: []
+- id: cloudflaregetidentityclient
+  owner: cloudflare_identity_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareGetIdentityClient, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Bounded client for Cloudflare token-bound full identity lookup.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: []
+  fields: []
+- id: postgresaccessadapter
+  owner: postgres_access_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/postgres_access/adapter.py, symbol: PostgresAccessAdapter, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: PostgreSQL implementation of Access repositories and transaction-local security context.
+  lifetime: Process lifetime with operation-scoped connections.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: []
+  fields: []
+- id: accessapiport
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AccessApiPort, kind: protocol}
+  visibility: private
+  semantic_kind: port
+  description: HTTP-local orchestration seam for Access endpoints.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: accessapi
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AccessApi, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: HTTP-facing Access orchestration without persistence or token exposure.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: []
+  fields: []
+- id: ownersessionresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: OwnerSessionResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Owner session response with optional recovery task link.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: learnersessionresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: LearnerSessionResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Learner-safe session response.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: adminsessionresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AdminSessionResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Admin-safe session response.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: problemresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ProblemResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Stable non-disclosing HTTP problem response.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: accessproblem
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AccessProblem, kind: class}
+  visibility: private
+  semantic_kind: domain-value
+  description: Stable non-disclosing Access endpoint failure.
+  lifetime: Error propagation lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: accountcreatebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AccountCreateBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Confirmed account creation request body.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: accountresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AccountResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Admin-safe account response.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: confirmationchallengebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ConfirmationChallengeBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Consequential action preview request body.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: confirmationchallengeresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ConfirmationChallengeResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Five-minute volatile confirmation challenge response.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: impactsummaryresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ImpactSummaryResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Server-authored structured before and after impact summary for one consequential action.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: confirmedactionbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ConfirmedActionBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Single-use challenge confirmation request body.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: confirmedactionresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ConfirmedActionResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Accepted one-time confirmation response.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: identityregistry
+  owner: identity_registry
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/identity_registry/service.py, symbol: IdentityRegistry, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Resolve verified principals through preapproved identity mappings.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [accountrepositoryport]
+  fields: []
+- id: accountrepositoryport
+  owner: identity_registry
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/identity_registry/ports.py, symbol: AccountRepositoryPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Persistence demand for Access accounts and identity mappings.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [identity_registry, postgres_access_adapter]
+  references: [accessaccount, provideridentitymapping]
+  fields: []
+- id: sessionservice
+  owner: session_management
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/session_management/service.py, symbol: SessionService, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Issue validate and revoke bounded application sessions.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [sessionrepositoryport]
+  fields: []
+- id: sessionrepositoryport
+  owner: session_management
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/session_management/ports.py, symbol: SessionRepositoryPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Persistence demand for bounded application sessions.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [session_management, postgres_access_adapter]
+  references: [accesssession]
+  fields: []
+- id: confirmationservice
+  owner: confirmation_challenge
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/confirmation_challenge/service.py, symbol: ConfirmationService, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Issue and consume exact five-minute consequential action challenges.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [challengerepositoryport]
+  fields: []
+- id: challengerepositoryport
+  owner: confirmation_challenge
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/confirmation_challenge/ports.py, symbol: ChallengeRepositoryPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Persistence demand for single-use confirmation challenges.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [confirmation_challenge, postgres_access_adapter]
+  references: [confirmationchallenge]
+  fields: []
+- id: securitycontextport
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/ports.py, symbol: SecurityContextPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Transaction-local database security context demand.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [postgres_access_adapter]
+  references: [securitycontext]
+  fields: []
+- id: accountadministration
+  owner: account_administration
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/account_administration/service.py, symbol: AccountAdministration, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Account administration service boundary.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: []
+  fields: []
+- id: recoverypolicyconfiguration
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/recovery_policy.py, symbol: RecoveryPolicyConfiguration, kind: class}
+  visibility: module-public
+  semantic_kind: configuration
+  description: Fail-closed recovery admission policy bound to one exact Cloudflare provider identity and observed policy state.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [session_management, backend_composition]
+  references: [provideridentity]
+  fields: [{name: approved_identity, type: ProviderIdentity, role: policy, meaning: Exact approved provider ID type and subject triple.}, {name: policy_version, type: str, role: configuration, meaning: Audited live-policy observation version.}, {name: enabled, type: bool, role: policy, meaning: Whether recovery admission is currently observed enabled.}]
+- id: accountactionpreview
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/orchestration.py, symbol: AccountActionPreview, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Server-authoritative preview returned after current-state account policy validation.
+  lifetime: One preview response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: [{name: challenge_token, type: str, role: contract-control, meaning: One-time plaintext token delivered only to the volatile response boundary.}, {name: expires_at, type: Instant, role: contract-control, meaning: Five-minute upper-bound expiry.}, {name: target_version, type: int, role: contract-control, meaning: Validated target version.}, {name: impact_summary, type: 'dict[str, Any]', role: metadata, meaning: Server-authored before after and consequence projection.}]
+- id: confirmedaccountaction
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/orchestration.py, symbol: ConfirmedAccountAction, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Opaque committed account-action result safe for HTTP mapping.
+  lifetime: One confirmed command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: [{name: challenge_id, type: str, role: domain-identity, meaning: Consumed challenge identity.}, {name: accepted, type: bool, role: domain-value, meaning: Whether the atomic action committed.}]
+- id: accountactionunitofwork
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/orchestration.py, symbol: AccountActionUnitOfWork, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Access-parent demand port for current account projections and atomic confirmed mutation challenge consumption and audit.
+  lifetime: API process binding with transaction-scoped calls.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [access_domain, postgres_access_adapter]
+  references: [accountsummary]
+  fields: []
+- id: accountactionservice
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/orchestration.py, symbol: AccountActionService, kind: class}
+  visibility: module-public
+  semantic_kind: policy
+  description: Access-parent authorization summary and atomic consequential account-action orchestration.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, fastapi_entrypoint]
+  references: [accountactionunitofwork, accountactionpreview, confirmedaccountaction, confirmationservice]
+  fields: []
+- id: rejectredirects
+  owner: cloudflare_identity_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: _RejectRedirects, kind: class}
+  visibility: private
+  semantic_kind: adapter-binding
+  description: Adapter-private HTTP redirect rejection policy preventing Access token forwarding to another origin.
+  lifetime: Get-identity client process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [cloudflare_identity_adapter]
+  references: []
+  fields: []
+- id: cloudflarejwksdecoder
+  owner: cloudflare_identity_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py, symbol: CloudflareJwksDecoder, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Bounded canonical-origin no-redirect JWKS fetch and RS256 decoder used by the Access verifier.
+  lifetime: API process lifetime with request-scoped fetches.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, cloudflare_identity_adapter]
+  references: []
+  fields: []
+- id: accountactionview
+  owner: react_access_adapter
+  language: typescript
+  declaration: {path: frontend/src/access/client.ts, symbol: AccountAction, kind: alias}
+  target: '"create_account" | "change_role" | "change_status" | "add_identity" | "disable_identity" | "replace_identity"'
+  visibility: private
+  semantic_kind: policy
+  description: Browser-known consequential account action discriminator constrained by server preview and confirmation.
+  lifetime: One browser interaction.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_access_adapter]
+  references: []
+  fields: []
+- id: pendingaccountconfirmation
+  owner: react_access_adapter
+  language: typescript
+  declaration: {path: frontend/src/access/routes.tsx, symbol: Pending, kind: alias}
+  target: '{ challenge: ConfirmationChallenge; action: AccountAction; targetId: string; payload: Record<string, unknown> }'
+  visibility: private
+  semantic_kind: runtime-state
+  description: Volatile dialog-only confirmation state destroyed on close navigation error or success.
+  lifetime: Confirmation dialog component lifetime.
+  mutability: owner-mutable
+  mutation_authority: [react_access_adapter]
+  consumers: [react_access_adapter]
+  references: [accountactionview]
+  fields: []
+type_exclusions: []
+state_objects: []
+boundary_mappings:
+- id: cloudflare-wire-to-provider-identity
+  interaction: Map a cryptographically verified Cloudflare token and token-bound full identity response into a preapproved provider identity.
+  producer: access_domain
+  consumer: identity_registry
+  parent: access_domain
+  producer_contract: null
+  consumer_contract: provideridentity
+  mapping_owner: access_domain
+  state_objects: []
+  allowed_edges: [access_domain->identity_registry]
+  forbidden_edges: [identity_registry->access_domain, identity_registry->cloudflare_identity_adapter]
+- id: principal-to-session-profile
+  interaction: Map an enabled provider identity and internal account snapshot into a bounded role-safe application session profile.
+  producer: identity_registry
+  consumer: session_management
+  parent: access_domain
+  producer_contract: provideridentity
+  consumer_contract: sessionprofile
+  mapping_owner: access_domain
+  state_objects: []
+  allowed_edges: []
+  forbidden_edges: [identity_registry->session_management, session_management->identity_registry]
+- id: session-to-rls-context
+  interaction: Convert a validated application session into transaction-local PostgreSQL RLS context without exposing SQL handles.
+  producer: access_domain
+  consumer: session_management
+  parent: access_domain
+  producer_contract: securitycontext
+  consumer_contract: sessionprofile
+  mapping_owner: access_domain
+  state_objects: []
+  allowed_edges: [access_domain->session_management]
+  forbidden_edges: [session_management->access_domain, session_management->postgres_access_adapter]
+- id: account-intent-to-confirmed-change
+  interaction: Map an exact versioned account mutation intent into a single-use confirmation and resume the mutation only after atomic validation.
+  producer: account_administration
+  consumer: confirmation_challenge
+  parent: access_domain
+  producer_contract: accountsummary
+  consumer_contract: confirmationchallenge
+  mapping_owner: access_domain
+  state_objects: []
+  allowed_edges: []
+  forbidden_edges: [account_administration->confirmation_challenge, confirmation_challenge->account_administration]
+- id: access-response-to-react-view
+  interaction: Deliver server-authoritative role-discriminated Access projections to responsive React routes through generated transport contracts.
+  producer: thesis_trace_application
+  consumer: access_domain
+  parent: thesis_trace_application
+  producer_contract: null
+  consumer_contract: null
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->access_domain]
+  forbidden_edges: [access_domain->thesis_trace_application]
+flows:
+- id: production_database_migration
+  owner: backend_composition
+  description: Apply forward-only schema changes and least-privilege runtime grants before API or collector startup.
+  trigger: {kind: condition, ref: deployment_migration_started, description: Compose starts the one-shot migration process after PostgreSQL readiness.}
+  steps:
+  - {id: production_database_migration.apply, order: 1, module: postgres_migration_entrypoint, action: Connect with the migration-owner credential apply checksummed forward migrations then grant API and collector runtime privileges., receives: [], emits: [platform.migration_failed], state_changes: [Database schema version and role grants advance atomically or startup stops.], side_effects: [PostgreSQL DDL and grants under the one-shot migration role.]}
+  success:
+    result: Runtime services may start against the migrated schema using non-owner credentials.
+    events: []
+  errors:
+  - condition: Credential resolution migration checksum DDL or grant application fails.
+    event: platform.migration_failed
+    handling: Exit nonzero and keep dependent runtime services stopped.
+- id: access_session_bootstrap
+  owner: thesis_trace_application
+  description: Verify full Cloudflare identity, resolve a preapproved user, establish a bounded session, and return a role-safe profile.
+  trigger: {kind: command, ref: access.bootstrap_session, description: A protected request presents an Access JWT and get-identity evidence.}
+  steps:
+  - {id: access_session_bootstrap.verify, order: 1, module: access_domain, action: Verify signature issuer audience expiry MFA subject and idp.id/type without trusting email as identity., receives: [access.identity_provider], emits: [], state_changes: [], side_effects: [Cloudflare key and get-identity access through the adapter.]}
+  - {id: access_session_bootstrap.resolve, order: 2, module: access_domain, action: Resolve exactly one enabled preapproved ProviderIdentityMapping., receives: [access.resolve_identity], emits: [access.identity_resolved, access.identity_rejected], state_changes: [], side_effects: [Read account mapping through Access repository.]}
+  - {id: access_session_bootstrap.establish, order: 3, module: access_domain, action: Commit a normal or recovery-bounded application session and role-filtered profile., receives: [access.bootstrap_session], emits: [access.session_established, access.recovery_session_detected], state_changes: [AccessSession is created or refreshed within the verified token expiry.], side_effects: [Persist session and immutable recovery audit when applicable.]}
+  - {id: access_session_bootstrap.present, order: 4, module: thesis_trace_application, action: Return only the exact Owner Learner or Admin profile variant and route capabilities., receives: [access.session_established], emits: [], state_changes: [], side_effects: [Generated HTTPS response; browser stores no JWT or domain data persistently.]}
+  success:
+    result: A verified identity receives one bounded role-safe session profile.
+    events: [access.identity_resolved, access.session_established]
+  errors:
+  - condition: JWT, full identity, provider mapping, MFA, or session binding is invalid.
+    event: access.identity_rejected
+    handling: Return uniform access_denied and persist no usable session.
+- id: confirmed_account_change
+  owner: thesis_trace_application
+  description: Preview and atomically confirm one consequential identity, role, or account lifecycle change.
+  trigger: {kind: command, ref: access.preview_consequential_action, description: An authorized Admin submits an exact target version and payload for preview.}
+  steps:
+  - {id: confirmed_account_change.preview, order: 1, module: access_domain, action: Reauthorize actor and target then generate structured before-after impact., receives: [access.preview_consequential_action], emits: [access.confirmation_issued], state_changes: [ConfirmationChallenge becomes available for at most five minutes.], side_effects: [Persist challenge digest and bindings without logging token.]}
+  - {id: confirmed_account_change.present, order: 2, module: thesis_trace_application, action: Present explicit action summary and require a nonblank reason while retaining token only in volatile dialog state., receives: [access.confirmation_issued], emits: [], state_changes: [], side_effects: [Responsive modal or full-screen mobile dialog.]}
+  - {id: confirmed_account_change.confirm, order: 3, module: access_domain, action: Revalidate actor action version payload digest token expiry and reason., receives: [access.confirm_consequential_action], emits: [], state_changes: [], side_effects: [Reject mismatch expiry reuse and concurrent changes with a fresh-preview requirement.]}
+  - {id: confirmed_account_change.commit, order: 4, module: access_domain, action: Atomically consume challenge mutate account append audit and revoke affected sessions., receives: [access.confirm_consequential_action, access.manage_accounts], emits: [access.confirmation_consumed, access.account_changed, access.session_revoked], state_changes: [Challenge is consumed and account version advances.], side_effects: [One PostgreSQL transaction under server-derived RLS context.]}
+  success:
+    result: The exact account mutation, challenge consumption, reason, session revocation, and audit commit once.
+    events: [access.confirmation_issued, access.confirmation_consumed, access.account_changed]
+  errors:
+  - condition: Actor, action, version, payload, expiry, reason, or replay validation fails.
+    event: access.identity_rejected
+    handling: Roll back the transaction and require a new preview without disclosing target existence.
+- id: role_filtered_deep_link
+  owner: thesis_trace_application
+  description: Resolve responsive direct routes with server role filtering and indistinguishable unavailable-resource behavior.
+  trigger: {kind: condition, ref: authenticated_deep_link_requested, description: An authenticated browser opens or restores a profile, account, company tab, or record deep link.}
+  steps:
+  - {id: role_filtered_deep_link.session, order: 1, module: access_domain, action: Revalidate session and derive current role and capability set., receives: [access.bootstrap_session], emits: [], state_changes: [], side_effects: [Bind transaction-local RLS security context.]}
+  - {id: role_filtered_deep_link.project, order: 2, module: thesis_trace_application, action: Query only the exact role-safe projection and current record version., receives: [access.security_context], emits: [], state_changes: [], side_effects: [Owner-only fields are omitted from Learner and Admin payloads.]}
+  - {id: role_filtered_deep_link.present, order: 3, module: thesis_trace_application, action: Preserve route identity across reload back forward and responsive navigation or render uniform unavailable resource., receives: [], emits: [], state_changes: [], side_effects: [React route renders no stale cached protected content.]}
+  success:
+    result: The browser renders the authorized projection while retaining route identity across responsive navigation.
+    events: []
+  errors:
+  - condition: The session, role, record, or requested field is unavailable or unauthorized.
+    event: access.identity_rejected
+    handling: Clear protected client state and render the same unavailable-resource response for absent and forbidden records.
+- id: access_session_revocation
+  owner: thesis_trace_application
+  description: Revalidate and revoke one application session without extending the Cloudflare Access credential.
+  trigger: {kind: command, ref: access.revoke_session, description: An authenticated user logs out or an identity or recovery policy invalidates a session.}
+  steps:
+  - {id: access_session_revocation.revoke, order: 1, module: access_domain, action: Validate session ownership and atomically record revocation., receives: [access.revoke_session], emits: [access.session_revoked], state_changes: [The application session becomes unusable.], side_effects: [Persist revocation and immutable audit metadata.]}
+  - {id: access_session_revocation.present, order: 2, module: thesis_trace_application, action: Clear the opaque browser cookie and protected volatile state., receives: [access.session_revoked], emits: [], state_changes: [], side_effects: [Return the bounded logout response.]}
+  success:
+    result: The revoked session cannot authorize another application request.
+    events: [access.session_revoked]
+  errors:
+  - condition: The session is absent, already invalid, or belongs to another actor.
+    event: access.identity_rejected
+    handling: Return the uniform unavailable response without disclosing session existence.
+- id: owner_evidence_intake
+  owner: thesis_trace_application
+  description: Admit an Owner Evidence URL and expose durable lifecycle state.
+  trigger:
+    kind: command
+    ref: application.submit_evidence
+    description: An authenticated Owner submits a company and Evidence URL.
+  steps:
+  - id: owner_evidence_intake.authorize
+    order: 1
+    module: access_domain
+    action: Verify the semantic actor and Owner permission.
+    receives:
+    - application.submit_evidence
+    emits:
+    - access.owner_authorized
+    state_changes: []
+    side_effects: []
+  - id: owner_evidence_intake.map
+    order: 2
+    module: thesis_trace_application
+    action: Map the authorized request into a Research command.
+    receives:
+    - access.owner_authorized
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_evidence_intake.commit
+    order: 3
+    module: research_domain
+    action: Validate and atomically commit received evidence
+    audit: null
+    and collection job.: null
+    receives:
+    - research.submit_evidence
+    emits:
+    - research.evidence_received
+    state_changes:
+    - Evidence status becomes received at a new server version.
+    side_effects:
+    - PostgreSQL transaction writes evidence
+    - audit
+    - and job.
+  - id: owner_evidence_intake.collect
+    order: 4
+    module: research_domain
+    action: Lease the durable job and fetch the restricted source.
+    receives:
+    - research.evidence_received
+    emits:
+    - research.collection_succeeded
+    - research.collection_failed
+    state_changes:
+    - Evidence becomes processing then succeeded
+    - failed
+    - retrying
+    - or dead-letter.
+    side_effects:
+    - Bounded HTTPS fetch and PostgreSQL transaction.
+  - id: owner_evidence_intake.query
+    order: 5
+    module: thesis_trace_application
+    action: Return the current server-owned record and version to the UI.
+    receives:
+    - research.query_evidence
+    emits:
+    - application.evidence_submission_completed
+    state_changes: []
+    side_effects: []
+  success:
+    result: UI observes a succeeded immutable source snapshot by record and version.
+    events:
+    - research.evidence_received
+    - research.collection_succeeded
+    - application.evidence_submission_completed
+  errors:
+  - condition: Identity or admission fails before acceptance.
+    events: []
+    event: application.evidence_submission_completed
+    handling: Return a stable non-disclosing error without creating state.
+  - condition: Collection fails after acceptance.
+    failed: null
+    or dead-letter and expose safe status.: null
+    events:
+    - research.collection_failed
+    event: research.collection_failed
+    handling: Commit retrying
+adr_exceptions: []
+c_analyzer:
+  ast:
+    status: not-applicable
+    rationale: ThesisTrace has no governed C or C++ production source.
+  functional_boundary:
+    status: configured
+    rationale: Python and TypeScript boundaries are governed by module contracts and
+      their analyzers.
+    forbidden_includes: []
+    forbidden_symbols: []
+  forbidden_public_includes: []
+  forbidden_public_symbols: []
+  forbidden_source_symbols: []
+python_analyzer:
+  status: required
+  rationale: FastAPI and worker production sources are governed Python modules.
+workloads:
+- id: production_database_migration_workload
+  flow: production_database_migration
+  steps: [production_database_migration.apply]
+  timing_class: best-effort
+  activation: {kind: condition}
+  data: {volume: one versioned schema and least-privilege grant set per deployment}
+  budgets: []
+- id: access_session_bootstrap_workload
+  flow: access_session_bootstrap
+  steps: [access_session_bootstrap.verify, access_session_bootstrap.resolve, access_session_bootstrap.establish, access_session_bootstrap.present]
+  timing_class: best-effort
+  activation: {kind: command}
+  data: {volume: one verified Access request and one bounded full-identity response}
+  budgets: []
+- id: confirmed_account_change_workload
+  flow: confirmed_account_change
+  steps: [confirmed_account_change.preview, confirmed_account_change.present, confirmed_account_change.confirm, confirmed_account_change.commit]
+  timing_class: best-effort
+  activation: {kind: command}
+  data: {volume: one account target and one bounded confirmation payload}
+  budgets: []
+- id: role_filtered_deep_link_workload
+  flow: role_filtered_deep_link
+  steps: [role_filtered_deep_link.session, role_filtered_deep_link.project, role_filtered_deep_link.present]
+  timing_class: best-effort
+  activation: {kind: condition}
+  data: {volume: one authorized route projection}
+  budgets: []
+- id: access_session_revocation_workload
+  flow: access_session_revocation
+  steps: [access_session_revocation.revoke, access_session_revocation.present]
+  timing_class: best-effort
+  activation: {kind: command}
+  data: {volume: one opaque application session}
+  budgets: []
+- id: owner_evidence_intake_workload
+  flow: owner_evidence_intake
+  steps:
+  - owner_evidence_intake.authorize
+  - owner_evidence_intake.map
+  - owner_evidence_intake.commit
+  - owner_evidence_intake.collect
+  - owner_evidence_intake.query
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: one Evidence URL and one bounded source response
+  budgets:
+  - metric: freshness
+    operator: <=
+    threshold: 10
+    unit: minutes
+    method: rolling fixture SLO defined by REQ-051
+execution_profiles:
+- id: linux_server_functional
+  status: accepted
+  assurance_scope:
+  - functional-compatibility
+  target:
+    platform: Ubuntu Server 26.04 LTS VM
+    validation_platform: linux
+    cpu: 4 vCPU with Proxmox CPU type host
+    runtime: CPython and container runtime
+    compiler: Python and TypeScript toolchains
+    cache_topology:
+      visibility: guest-visible virtualized topology
+      assurance: no cache-specific performance claim
+    scheduler_capabilities:
+    - Linux general-purpose scheduling; no real-time guarantee
+  approval:
+    approved_by: Repository owner
+    approval_date: '2026-08-19'
+    approval_reference: Chat approval option 1 for SPEC-0001 live functional validation
+execution_units:
+- id: migration_job_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded forward-migration and PostgreSQL grant I/O
+  allocation: static
+- id: api_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded request and PostgreSQL I/O
+  allocation: static
+- id: collector_worker_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded queue
+  PostgreSQL: null
+  and HTTPS I/O: null
+  allocation: static
+- id: ai_worker_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded provider I/O
+  allocation: static
+- id: email_worker_process
+  profile: linux_server_functional
+  kind: process
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: bounded by deployment profile
+  blocking: bounded Gmail I/O
+  allocation: static
+execution_mappings:
+- id: production_database_migration_mapping
+  profile: linux_server_functional
+  workload: production_database_migration_workload
+  steps: [production_database_migration.apply]
+  units: [migration_job_process]
+  serialization: one migration process per deployment
+  reentrant: false
+  activation: Compose dependency gate
+  wcet: not established
+- id: intake_api_mapping
+  profile: linux_server_functional
+  workload: owner_evidence_intake_workload
+  steps:
+  - owner_evidence_intake.authorize
+  - owner_evidence_intake.map
+  - owner_evidence_intake.commit
+  - owner_evidence_intake.query
+  units:
+  - api_process
+  serialization: one transaction per Evidence stream
+  reentrant: false
+  activation: HTTP command or query
+  wcet: not established
+- id: collection_worker_mapping
+  profile: linux_server_functional
+  workload: owner_evidence_intake_workload
+  steps:
+  - owner_evidence_intake.collect
+  units:
+  - collector_worker_process
+  serialization: leased per Evidence stream
+  reentrant: false
+  activation: durable job availability
+  wcet: not established
+execution_channels:
+- id: collection_job_channel
+  profile: linux_server_functional
+  from_unit: api_process
+  to_unit: collector_worker_process
+  kind: queue
+  contract_refs:
+  - research.collection_jobs
+  - research.evidence_received
+  capacity: 1000
+  ordering: serialized per Evidence stream
+  copy_policy: persist semantic payload once and map on claim
+  timeout_ms: 300000
+  overload: backpressure
+data_access_profiles: []
+microarchitecture_profiles: []
+platform_variants:
+- id: linux_server_functional_variant
+  profile: linux_server_functional
+  units:
+  - migration_job_process
+  - api_process
+  - collector_worker_process
+  - ai_worker_process
+  - email_worker_process
+  data_access_profiles: []
+  microarchitecture_profiles: []
+  parameters:
+    deployment: Docker Compose on local VM
+  release: false
+realtime_scheduling_studies: []
+composition_roots:
+- id: thesis_trace_release
+  module: backend_composition
+  path: backend/src/thesis_trace/bootstrap/application.py
+  symbol: compose_application
+  purpose: Compose version-matched API and worker roles with concrete adapters.
+  source_set: backend-production
+  kind: release
+validation_profiles:
+- id: host_development_validation
+  applicability: not-applicable
+  rationale: Wave 0 design and host tests do not claim final target-runtime acceptance.

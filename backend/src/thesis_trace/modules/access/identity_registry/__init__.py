@@ -1,0 +1,1 @@
+"""Provider-discriminated identity registry."""
