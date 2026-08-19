@@ -90,15 +90,6 @@ jobs:
       - name: Validate Access, Tunnel, origin, secret scope, and redaction
         run: python scripts/validate_wave1_platform.py
 
-      - name: Validate development architecture
-        run: >-
-          python tools/architecture/architecture_cli.py gate
-          --phase development
-          --manifest architecture/manifest.yaml
-          --adoption architecture/adoption.yaml
-          --baseline architecture/baseline.yaml
-          --format text
-
       - uses: actions/setup-node@v4
         if: ${{ hashFiles('frontend/package-lock.json') != '' }}
         with:
@@ -110,6 +101,15 @@ jobs:
         if: ${{ hashFiles('frontend/package-lock.json') != '' }}
         working-directory: frontend
         run: npm ci
+
+      - name: Validate development architecture
+        run: >-
+          python tools/architecture/architecture_cli.py gate
+          --phase development
+          --manifest architecture/manifest.yaml
+          --adoption architecture/adoption.yaml
+          --baseline architecture/baseline.yaml
+          --format text
 
       - name: Verify generated client is current
         if: ${{ hashFiles('frontend/package-lock.json') != '' }}

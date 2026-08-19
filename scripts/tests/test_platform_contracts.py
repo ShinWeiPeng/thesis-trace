@@ -50,6 +50,12 @@ class AccessContractTests(unittest.TestCase):
         self.assertIn("verify_schema_compatibility(database_url_provider)", composition)
         self.assertNotIn("bootstrap_schema(", composition)
 
+    def test_architecture_gate_runs_after_its_python_and_typescript_dependencies(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        architecture_gate = workflow.index("name: Validate development architecture")
+        self.assertLess(workflow.index("name: Install architecture dependencies"), architecture_gate)
+        self.assertLess(workflow.index("name: Install frontend dependencies"), architecture_gate)
+
     def test_standalone_compose_uses_root_owned_file_secrets(self) -> None:
         validate_standalone_secret_override(ROOT)
 
