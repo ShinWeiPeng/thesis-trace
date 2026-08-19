@@ -56,6 +56,19 @@ class AccessContractTests(unittest.TestCase):
         self.assertLess(workflow.index("name: Install architecture dependencies"), architecture_gate)
         self.assertLess(workflow.index("name: Install frontend dependencies"), architecture_gate)
 
+    def test_browser_acceptance_uses_the_pinned_hosted_chrome_without_apt_install(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn("runs-on: ubuntu-24.04", workflow)
+        self.assertIn('PLAYWRIGHT_USE_SYSTEM_CHROME: "1"', workflow)
+        self.assertIn("run: google-chrome --version", workflow)
+        self.assertNotIn("playwright install --with-deps", workflow)
+
+    def test_real_acceptance_uses_only_its_postgres_worker_configuration(self) -> None:
+        browser_config = (ROOT / "frontend/playwright.config.ts").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn('testIgnore: "wave0-real.spec.ts"', browser_config)
+        self.assertIn("playwright test --config e2e/wave0.config.ts", workflow)
+
     def test_standalone_compose_uses_root_owned_file_secrets(self) -> None:
         validate_standalone_secret_override(ROOT)
 
