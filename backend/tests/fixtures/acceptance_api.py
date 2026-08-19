@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import os
 import uuid
 
-from thesis_trace.api import EvidenceApi, create_fastapi_app
+from thesis_trace.api import EvidenceApi, OwnerSessionResponse, create_fastapi_app
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
 from thesis_trace.modules.access.contracts import AuthenticatedActor, Role
 from thesis_trace.platform.postgres import PostgresEvidenceStore, bootstrap_schema
@@ -24,6 +25,18 @@ app = create_fastapi_app(
     EvidenceApi(flow=EvidenceIntakeFlow(store=store, id_generator=lambda: str(uuid.uuid4()))),
     fixture_owner,
 )
+
+
+@app.get("/api/session", response_model=OwnerSessionResponse)
+async def fixture_session() -> OwnerSessionResponse:
+    return OwnerSessionResponse(
+        kind="owner",
+        user_id="acceptance-owner",
+        capabilities=["research:read", "research:write"],
+        session_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        is_recovery_session=False,
+        display_name="Acceptance Owner",
+    )
 
 
 @app.get("/health/ready")
