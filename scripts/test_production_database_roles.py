@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import runpy
+import uuid
 
 
 def render_role_bootstrap(sql_text: str, database: str) -> str:
@@ -49,6 +51,27 @@ def main() -> None:
                 "SELECT has_schema_privilege(%s,'public','CREATE')", (role,)
             ).fetchone()[0]
             assert can_create is False, f"{role} unexpectedly has DDL authority"
+        migration_module = runpy.run_path(str(root / "infra/postgres/run-production-migrations.py"))
+        migration_module["apply_runtime_grants"](admin)
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_collector','research.canonical_sources','SELECT,INSERT')"
+        ).fetchone()[0]
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_collector','research.canonical_sources','UPDATE,DELETE')"
+        ).fetchone()[0]
+        source_id = uuid.uuid4()
+        admin.execute("BEGIN")
+        try:
+            admin.execute("SET LOCAL ROLE thesis_trace_collector")
+            admin.execute("SELECT count(*) FROM research.canonical_sources")
+            admin.execute(
+                """INSERT INTO research.canonical_sources(
+                source_id,normalization_policy_version,canonical_url)
+                VALUES (%s,'url-normalization-v1',%s)""",
+                (source_id, f"https://runtime-role-{source_id}.example/"),
+            )
+        finally:
+            admin.execute("ROLLBACK")
     print("Production migration/API/collector role separation passed")
 
 

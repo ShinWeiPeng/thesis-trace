@@ -1,9 +1,10 @@
 # ADR-0001: Adopt modular event architecture
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-08-18
-- Approver: pending
-- Approval reference: pending
+- Approver: project owner
+- Approval date: 2026-08-20
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`
 
 ## Context
 

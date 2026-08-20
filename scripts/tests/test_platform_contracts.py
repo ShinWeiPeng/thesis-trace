@@ -44,6 +44,7 @@ class AccessContractTests(unittest.TestCase):
         self.assertNotIn("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES", grants)
         self.assertNotIn("UPDATE,DELETE ON ACCESS.SECURITY_AUDIT_EVENTS", grants)
         self.assertNotIn("UPDATE,DELETE ON RESEARCH.AUDIT_EVENTS", grants)
+        self.assertIn("RESEARCH.CANONICAL_SOURCES", grants)
 
     def test_runtime_composition_uses_read_only_schema_compatibility_probe(self) -> None:
         composition = (ROOT / "backend/src/thesis_trace/bootstrap/application.py").read_text(encoding="utf-8")

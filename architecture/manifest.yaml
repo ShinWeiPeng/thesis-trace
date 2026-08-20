@@ -1768,6 +1768,10 @@ types:
     type: str
     role: domain-value
     meaning: FetchedSource retrieved_at value.
+  - name: normalization_policy_version
+    type: str
+    role: domain-value
+    meaning: Version of the URL normalization policy used to create canonical_url.
 - id: collectedsourcesnapshot
   owner: evidence_collection
   language: python
@@ -1801,6 +1805,10 @@ types:
     type: str
     role: domain-value
     meaning: CollectedSourceSnapshot retrieved_at value.
+  - name: normalization_policy_version
+    type: str
+    role: domain-value
+    meaning: Persisted version of the URL normalization policy bound to canonical_url.
 - id: sourcefetchport
   owner: evidence_collection
   language: python

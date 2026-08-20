@@ -1,10 +1,10 @@
 # ThesisTrace Algorithm Inventory
 
-All records are `proposed`. SPEC-0001 confirms the product behavior, but a non-AI owner must provide approval metadata before any record becomes `accepted`.
+SPEC-0001 confirms the product behavior, but each record remains `proposed` until a non-AI owner provides approval metadata. Individually approved records are marked `accepted` in their own metadata.
 
 | Record | Feature | Owner module | Screening result |
 | --- | --- | --- | --- |
-| [ALG-0001](ALG-0001-evidence-canonicalization.md) | Evidence admission, canonicalization, and deduplication | research | Required |
+| [ALG-0001](ALG-0001-evidence-canonicalization.md) | Evidence admission, canonicalization, and deduplication | evidence_collection | Required |
 | [ALG-0002](ALG-0002-e-stage-derivation.md) | E0-E6 derivation | research | Required |
 | [ALG-0003](ALG-0003-source-classification.md) | A/B/C source classification and independence | research | Required |
 | [ALG-0004](ALG-0004-clue-scoring.md) | C-clue scoring and routing | research | Required |

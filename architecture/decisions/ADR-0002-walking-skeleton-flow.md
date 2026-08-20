@@ -1,9 +1,10 @@
-# ADR-0001: Modular Event Architecture for the First Walking Skeleton
+# ADR-0002: Modular Event Architecture for the First Walking Skeleton
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-08-18
 - Decision owner: project owner
-- Approval: pending non-AI approval
+- Approval date: 2026-08-20
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`
 - Related specification: `SPEC-0001`, `DEC-079`, `DEC-096`, `DEC-097`, `DEC-098`
 - Related review: `architecture/design/walking-skeleton-flow-review.md`
 
@@ -61,7 +62,7 @@ Costs and constraints:
 
 ## Validation and acceptance
 
-This ADR remains `proposed`; Codex cannot approve it. Before product source edits, the project owner must approve the architecture package and the schema 2.2.0 design-phase architecture gate must pass.
+The project owner approved this ADR in the recorded approval reference. The schema 2.2.0 design-phase architecture gate must pass before product source edits.
 
 Implementation acceptance requires:
 

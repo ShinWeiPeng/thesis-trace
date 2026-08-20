@@ -101,11 +101,31 @@ MIGRATION_0004 = """
 ALTER TABLE access.sessions ADD COLUMN recovery_policy_version text;
 """
 
+MIGRATION_0005 = """
+ALTER TABLE research.source_snapshots ADD COLUMN normalization_policy_version text;
+UPDATE research.source_snapshots SET normalization_policy_version='url-normalization-legacy';
+ALTER TABLE research.source_snapshots ALTER COLUMN normalization_policy_version SET NOT NULL;
+CREATE TABLE research.canonical_sources (
+  source_id uuid PRIMARY KEY,
+  normalization_policy_version text NOT NULL,
+  canonical_url text NOT NULL,
+  UNIQUE(normalization_policy_version,canonical_url)
+);
+INSERT INTO research.canonical_sources(source_id,normalization_policy_version,canonical_url)
+SELECT snapshot_id,normalization_policy_version,canonical_url FROM research.source_snapshots;
+ALTER TABLE research.source_observations ADD COLUMN source_id uuid REFERENCES research.canonical_sources(source_id);
+UPDATE research.source_observations o SET source_id=s.snapshot_id
+FROM research.source_snapshots s WHERE s.snapshot_id=o.snapshot_id;
+ALTER TABLE research.source_observations ALTER COLUMN source_id SET NOT NULL;
+ALTER TABLE research.source_snapshots DROP CONSTRAINT source_snapshots_canonical_url_key;
+"""
+
 MIGRATIONS: tuple[tuple[int, str, str], ...] = (
     (1, "wave0_company_evidence", MIGRATION_0001),
     (2, "access_identity_session_confirmation", MIGRATION_0002),
     (3, "access_rls", MIGRATION_0003),
     (4, "recovery_session_policy_binding", MIGRATION_0004),
+    (5, "source_normalization_policy_version", MIGRATION_0005),
 )
 
 
@@ -326,7 +346,8 @@ class PostgresEvidenceStore:
             return False
         with self._connection() as connection:
             with connection.transaction():
-                connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (snapshot.canonical_url,))
+                canonical_key = f"{snapshot.normalization_policy_version}\x1f{snapshot.canonical_url}"
+                connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (canonical_key,))
                 connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (snapshot.content_hash,))
                 result = connection.execute(
                     "UPDATE research.collection_jobs SET state='succeeded',lease_token=NULL,lease_expires_at=NULL,updated_at=now() WHERE evidence_id=%s AND state='processing' AND lease_token::text=%s",
@@ -334,24 +355,39 @@ class PostgresEvidenceStore:
                 )
                 if result.rowcount != 1:
                     return False
-                existing = connection.execute(
-                    "SELECT snapshot_id FROM research.source_snapshots WHERE canonical_url=%s OR content_hash=%s ORDER BY snapshot_id LIMIT 1",
-                    (snapshot.canonical_url, snapshot.content_hash),
+                existing_source = connection.execute(
+                    """SELECT source_id FROM research.canonical_sources
+                    WHERE normalization_policy_version=%s AND canonical_url=%s""",
+                    (snapshot.normalization_policy_version, snapshot.canonical_url),
                 ).fetchone()
-                snapshot_id = existing[0] if existing else uuid.uuid4()
-                if existing is None:
+                existing_snapshot = connection.execute(
+                    "SELECT snapshot_id FROM research.source_snapshots WHERE content_hash=%s",
+                    (snapshot.content_hash,),
+                ).fetchone()
+                snapshot_id = existing_snapshot[0] if existing_snapshot else uuid.uuid4()
+                if existing_snapshot is None:
                     connection.execute(
-                        """INSERT INTO research.source_snapshots(snapshot_id,canonical_url,publisher,content_hash,retrieved_at,published_at,observed_at,excerpt,source_category,lineage)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (snapshot_id, snapshot.canonical_url, snapshot.publisher, snapshot.content_hash,
-                         snapshot.retrieved_at, snapshot.published_at, snapshot.observed_at, snapshot.excerpt,
+                        """INSERT INTO research.source_snapshots(snapshot_id,canonical_url,normalization_policy_version,publisher,content_hash,retrieved_at,published_at,observed_at,excerpt,source_category,lineage)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (snapshot_id, snapshot.canonical_url, snapshot.normalization_policy_version,
+                         snapshot.publisher, snapshot.content_hash, snapshot.retrieved_at,
+                         snapshot.published_at, snapshot.observed_at, snapshot.excerpt,
                          snapshot.source_category, snapshot.lineage),
                     )
+                if existing_source is None:
+                    source_id = uuid.uuid4()
+                    connection.execute(
+                        """INSERT INTO research.canonical_sources(source_id,normalization_policy_version,canonical_url)
+                        VALUES (%s,%s,%s)""",
+                        (source_id, snapshot.normalization_policy_version, snapshot.canonical_url),
+                    )
+                else:
+                    source_id = existing_source[0]
                 connection.execute(
-                    """INSERT INTO research.source_observations(evidence_id,snapshot_id,submitted_url)
-                    SELECT evidence_id,%s,submitted_url FROM research.evidence_intakes WHERE evidence_id=%s
+                    """INSERT INTO research.source_observations(evidence_id,source_id,snapshot_id,submitted_url)
+                    SELECT evidence_id,%s,%s,submitted_url FROM research.evidence_intakes WHERE evidence_id=%s
                     ON CONFLICT (evidence_id) DO NOTHING""",
-                    (snapshot_id, evidence_id),
+                    (source_id, snapshot_id, evidence_id),
                 )
                 connection.execute("UPDATE research.evidence_intakes SET status='succeeded',version=version+1,updated_at=now() WHERE evidence_id=%s", (evidence_id,))
         return True
@@ -390,7 +426,7 @@ class PostgresEvidenceStore:
 
     def delete_all_for_test(self) -> None:
         with self._connection() as connection:
-            connection.execute("TRUNCATE research.source_observations,research.source_snapshots,research.collection_jobs,research.audit_events,research.idempotency_receipts,research.evidence_intakes,research.companies CASCADE")
+            connection.execute("TRUNCATE research.source_observations,research.canonical_sources,research.source_snapshots,research.collection_jobs,research.audit_events,research.idempotency_receipts,research.evidence_intakes,research.companies CASCADE")
 
     def count_audit_events(self, evidence_id: str) -> int:
         with self._connection() as connection:
@@ -404,16 +440,22 @@ class PostgresEvidenceStore:
         with self._connection() as connection:
             return int(connection.execute("SELECT count(*) FROM research.source_snapshots").fetchone()[0])
 
+    def count_canonical_sources(self) -> int:
+        with self._connection() as connection:
+            return int(connection.execute("SELECT count(*) FROM research.canonical_sources").fetchone()[0])
+
     def count_source_observations(self) -> int:
         with self._connection() as connection:
             return int(connection.execute("SELECT count(*) FROM research.source_observations").fetchone()[0])
 
-    def get_source_provenance(self, evidence_id: str) -> tuple[str, str, str, str, str | None, str | None, str | None, str, str | None] | None:
+    def get_source_provenance(self, evidence_id: str) -> tuple[str, str, str, str, str, str | None, str | None, str | None, str, str | None] | None:
         with self._connection() as connection:
             row = connection.execute(
-                """SELECT s.canonical_url,s.publisher,s.content_hash,s.retrieved_at::text,
+                """SELECT c.canonical_url,c.normalization_policy_version,s.publisher,s.content_hash,s.retrieved_at::text,
                 s.published_at::text,s.observed_at::text,s.excerpt,s.source_category,o.submitted_url
-                FROM research.source_observations o JOIN research.source_snapshots s USING(snapshot_id)
+                FROM research.source_observations o
+                JOIN research.canonical_sources c USING(source_id)
+                JOIN research.source_snapshots s ON s.snapshot_id=o.snapshot_id
                 WHERE o.evidence_id=%s""", (evidence_id,)
             ).fetchone()
         return None if row is None else tuple(None if value is None else str(value) for value in row)

@@ -3,7 +3,11 @@ from __future__ import annotations
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
+from urllib.parse import urlsplit, urlunsplit
 
+import psycopg
+from psycopg import sql as psycopg_sql
 import pytest
 
 from thesis_trace.modules.research.evidence_intake.contracts import (
@@ -13,7 +17,13 @@ from thesis_trace.modules.research.evidence_intake.contracts import (
     EvidenceRecord,
     EvidenceStatus,
 )
-from thesis_trace.platform.postgres import PostgresEvidenceStore, PostgresUnavailable, bootstrap_schema, verify_schema_compatibility
+from thesis_trace.platform.postgres import (
+    MIGRATIONS,
+    PostgresEvidenceStore,
+    PostgresUnavailable,
+    bootstrap_schema,
+    verify_schema_compatibility,
+)
 from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot
 
 
@@ -58,7 +68,78 @@ def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: Postg
         (2, "access_identity_session_confirmation"),
         (3, "access_rls"),
         (4, "recovery_session_policy_binding"),
+        (5, "source_normalization_policy_version"),
     ]
+
+
+def test_migration_0005_preserves_pre_versioned_keys_as_legacy() -> None:
+    configured_url = os.environ["THESIS_TRACE_TEST_DATABASE_URL"]
+    database_name = f"thesis_trace_migration_{uuid.uuid4().hex}"
+    parsed_url = urlsplit(configured_url)
+    admin_url = urlunsplit(parsed_url._replace(path="/postgres"))
+    legacy_url = urlunsplit(parsed_url._replace(path=f"/{database_name}"))
+    with psycopg.connect(admin_url, autocommit=True) as connection:
+        connection.execute(psycopg_sql.SQL("CREATE DATABASE {}").format(psycopg_sql.Identifier(database_name)))
+    try:
+        snapshot_id = uuid.uuid4()
+        legacy_canonical_url = "https://PUBLIC.EXAMPLE:443#historical-fragment"
+        with psycopg.connect(legacy_url) as connection:
+            connection.execute("CREATE SCHEMA research")
+            connection.execute(
+                """CREATE TABLE research.schema_migrations (
+                version integer PRIMARY KEY, name text NOT NULL, checksum text NOT NULL,
+                applied_at timestamptz NOT NULL DEFAULT now())"""
+            )
+            for version, name, migration_sql in MIGRATIONS[:4]:
+                connection.execute(migration_sql)
+                connection.execute(
+                    "INSERT INTO research.schema_migrations(version,name,checksum) VALUES (%s,%s,%s)",
+                    (version, name, sha256(migration_sql.encode("utf-8")).hexdigest()),
+                )
+            connection.execute(
+                "INSERT INTO research.companies(company_id,ticker,name,version) VALUES ('2330','2330','台積電',1)"
+            )
+            connection.execute(
+                """INSERT INTO research.evidence_intakes(
+                evidence_id,version,company_id,company_version,submitted_url,status)
+                VALUES ('legacy-evidence',1,'2330',1,%s,'succeeded')""",
+                (legacy_canonical_url,),
+            )
+            connection.execute(
+                """INSERT INTO research.source_snapshots(
+                snapshot_id,canonical_url,publisher,content_hash,retrieved_at,source_category)
+                VALUES (%s,%s,'Legacy Publisher','legacy-content','2026-08-18T12:00:00Z','C')""",
+                (snapshot_id, legacy_canonical_url),
+            )
+            connection.execute(
+                """INSERT INTO research.source_observations(evidence_id,snapshot_id,submitted_url)
+                VALUES ('legacy-evidence',%s,%s)""",
+                (snapshot_id, legacy_canonical_url),
+            )
+
+        bootstrap_schema(lambda: legacy_url)
+        verify_schema_compatibility(lambda: legacy_url)
+
+        with psycopg.connect(legacy_url) as connection:
+            migrated = connection.execute(
+                """SELECT c.normalization_policy_version,c.canonical_url,
+                s.normalization_policy_version,o.source_id
+                FROM research.source_observations o
+                JOIN research.canonical_sources c USING(source_id)
+                JOIN research.source_snapshots s USING(snapshot_id)
+                WHERE o.evidence_id='legacy-evidence'"""
+            ).fetchone()
+        assert migrated == (
+            "url-normalization-legacy",
+            legacy_canonical_url,
+            "url-normalization-legacy",
+            snapshot_id,
+        )
+    finally:
+        with psycopg.connect(admin_url, autocommit=True) as connection:
+            connection.execute(
+                psycopg_sql.SQL("DROP DATABASE {} WITH (FORCE)").format(psycopg_sql.Identifier(database_name))
+            )
 
 
 def test_evidence_admission_requires_a_persisted_company_version(store: PostgresEvidenceStore) -> None:
@@ -129,13 +210,73 @@ def test_full_provenance_and_url_or_content_dedup(store: PostgresEvidenceStore) 
             canonical_url="https://example.com/canonical", publisher="MOPS", content_hash="same-hash",
             retrieved_at="2026-08-18T12:00:00Z", published_at="2026-08-18T10:00:00Z",
             observed_at="2026-08-18T11:00:00Z", excerpt="material fact", source_category="A", lineage=submitted_url,
+            normalization_policy_version="url-normalization-v1",
         )
         assert store.complete_collection(evidence_id, snapshot, lease.lease_token)
     assert store.count_source_snapshots() == 1
     assert store.count_source_observations() == 2
     provenance = store.get_source_provenance("dedup-1")
-    assert provenance[0:3] == ("https://example.com/canonical", "MOPS", "same-hash")
-    assert provenance[6:] == ("material fact", "A", "https://example.com/shared")
+    assert provenance[0:4] == (
+        "https://example.com/canonical", "url-normalization-v1", "MOPS", "same-hash",
+    )
+    assert provenance[7:] == ("material fact", "A", "https://example.com/shared")
+
+
+def test_url_dedup_key_keeps_normalization_versions_separate(store: PostgresEvidenceStore) -> None:
+    canonical_url = "https://example.com/disclosure"
+    for index, policy_version in enumerate(("url-normalization-v1", "url-normalization-v2"), start=1):
+        evidence_id = f"normalization-{index}"
+        store.commit_admission(
+            idempotency_key=evidence_id,
+            record=EvidenceRecord(evidence_id, 1, "2330", 1, canonical_url, EvidenceStatus.RECEIVED),
+            audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
+            job=CollectionRequest(evidence_id, 1, canonical_url, f"collect:{evidence_id}"),
+            accepted=EvidenceAccepted(evidence_id, 1),
+        )
+        lease = store.claim_collection_job()
+        snapshot = CollectedSourceSnapshot(
+            canonical_url=canonical_url,
+            publisher="MOPS",
+            content_hash="same-content-across-policies",
+            retrieved_at="2026-08-18T12:00:00Z",
+            normalization_policy_version=policy_version,
+        )
+        assert store.complete_collection(evidence_id, snapshot, lease.lease_token)
+
+    assert store.count_source_snapshots() == 1
+    assert store.count_canonical_sources() == 2
+    assert store.get_source_provenance("normalization-1")[1] == "url-normalization-v1"
+    assert store.get_source_provenance("normalization-2")[1] == "url-normalization-v2"
+
+
+def test_same_url_with_changed_content_records_each_immutable_snapshot(store: PostgresEvidenceStore) -> None:
+    canonical_url = "https://example.com/changing-disclosure"
+    for index, content_hash in enumerate(("first-content", "corrected-content"), start=1):
+        evidence_id = f"changed-content-{index}"
+        store.commit_admission(
+            idempotency_key=evidence_id,
+            record=EvidenceRecord(evidence_id, 1, "2330", 1, canonical_url, EvidenceStatus.RECEIVED),
+            audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
+            job=CollectionRequest(evidence_id, 1, canonical_url, f"collect:{evidence_id}"),
+            accepted=EvidenceAccepted(evidence_id, 1),
+        )
+        lease = store.claim_collection_job()
+        assert store.complete_collection(
+            evidence_id,
+            CollectedSourceSnapshot(
+                canonical_url=canonical_url,
+                publisher="MOPS",
+                content_hash=content_hash,
+                retrieved_at=f"2026-08-18T12:00:0{index}Z",
+                normalization_policy_version="url-normalization-v1",
+            ),
+            lease.lease_token,
+        )
+
+    assert store.count_canonical_sources() == 1
+    assert store.count_source_snapshots() == 2
+    assert store.get_source_provenance("changed-content-1")[3] == "first-content"
+    assert store.get_source_provenance("changed-content-2")[3] == "corrected-content"
 
 
 def test_concurrent_idempotent_admission_has_one_audit_and_job(store: PostgresEvidenceStore) -> None:
@@ -153,7 +294,7 @@ def test_concurrent_idempotent_admission_has_one_audit_and_job(store: PostgresEv
     assert sum(store.count_collection_jobs(f"concurrent-{index}") for index in (1, 2)) == 1
 
 
-def test_concurrent_content_completion_creates_one_source_of_record(store: PostgresEvidenceStore) -> None:
+def test_concurrent_distinct_urls_with_same_content_share_one_snapshot(store: PostgresEvidenceStore) -> None:
     leases = []
     for index in (1, 2):
         evidence_id = f"content-{index}"
@@ -163,12 +304,60 @@ def test_concurrent_content_completion_creates_one_source_of_record(store: Postg
             job=CollectionRequest(evidence_id, 1, f"https://mirror{index}.example/a", f"collect:{evidence_id}"), accepted=EvidenceAccepted(evidence_id, 1),
         )
         leases.append(store.claim_collection_job())
-    snapshot = CollectedSourceSnapshot(
-        canonical_url="https://canonical.example/a", publisher="MOPS", content_hash="concurrent-hash",
-        retrieved_at="2026-08-18T12:00:00Z", source_category="A",
-    )
+    snapshots = [
+        CollectedSourceSnapshot(
+            canonical_url=f"https://canonical{index}.example/a",
+            publisher="MOPS",
+            content_hash="concurrent-hash",
+            retrieved_at="2026-08-18T12:00:00Z",
+            source_category="A",
+        )
+        for index in (1, 2)
+    ]
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(lambda lease: store.complete_collection(lease.evidence_id, snapshot, lease.lease_token), leases))
+        results = list(pool.map(
+            lambda pair: store.complete_collection(pair[0].evidence_id, pair[1], pair[0].lease_token),
+            zip(leases, snapshots),
+        ))
     assert results == [True, True]
     assert store.count_source_snapshots() == 1
+    assert store.count_canonical_sources() == 2
     assert store.count_source_observations() == 2
+
+
+def test_concurrent_same_url_with_distinct_content_keeps_both_snapshots(store: PostgresEvidenceStore) -> None:
+    leases = []
+    for index in (1, 2):
+        evidence_id = f"changed-concurrently-{index}"
+        submitted_url = "https://canonical.example/changing"
+        store.commit_admission(
+            idempotency_key=evidence_id,
+            record=EvidenceRecord(evidence_id, 1, "2330", 1, submitted_url, EvidenceStatus.RECEIVED),
+            audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
+            job=CollectionRequest(evidence_id, 1, submitted_url, f"collect:{evidence_id}"),
+            accepted=EvidenceAccepted(evidence_id, 1),
+        )
+        leases.append(store.claim_collection_job())
+    snapshots = [
+        CollectedSourceSnapshot(
+            canonical_url="https://canonical.example/changing",
+            publisher="MOPS",
+            content_hash=f"concurrent-content-{index}",
+            retrieved_at=f"2026-08-18T12:00:0{index}Z",
+            source_category="A",
+        )
+        for index in (1, 2)
+    ]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(
+            lambda pair: store.complete_collection(pair[0].evidence_id, pair[1], pair[0].lease_token),
+            zip(leases, snapshots),
+        ))
+
+    assert results == [True, True]
+    assert store.count_canonical_sources() == 1
+    assert store.count_source_snapshots() == 2
+    assert {
+        store.get_source_provenance(f"changed-concurrently-{index}")[3]
+        for index in (1, 2)
+    } == {"concurrent-content-1", "concurrent-content-2"}

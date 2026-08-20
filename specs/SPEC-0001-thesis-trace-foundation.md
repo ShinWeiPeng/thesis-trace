@@ -1,7 +1,7 @@
 ---
 spec_version: "1"
 spec_id: SPEC-0001
-revision: 85
+revision: 87
 status: confirmed
 change_set: thesis-trace-foundation
 ---
@@ -178,6 +178,7 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-096 | 實作採 walking skeleton 加 risk-first vertical slices。第一個 skeleton 必須以同一條可執行路徑貫穿 responsive React UI、generated OpenAPI client、FastAPI command/query、PostgreSQL transaction、audit event、outbox job、獨立 worker 與 UI 狀態更新，並同時建立 project skeleton、architecture manifest、Compose、migration 與 CI。後續每一片均包含必要的資料模型、backend、API、UI、自動測試與文件，依序完成 Access 與角色邊界、Company/Evidence/provenance/去重/更正、E0–E6、anomaly/critic/fail-closed、Action Inbox/company workspace、Thesis/Outcome/Reflection、估值/Portfolio/Trade/Exposure、Recommendation/Owner decision，最後完成 email、backup、observability、release 與正式 VM validation。任何 slice 不得以只有 backend、只有 UI 或以 mock/SQLite 取代其主要驗收證據而宣告完成。 | 儘早證明跨層契約、PostgreSQL transaction/outbox、worker 與響應式 UI 能共同運作，再優先消除證據、Hard anomaly、權限與交易一致性等高風險；代價是每片都要維持全棧與文件同步，初期可見功能較窄。 |
 | DEC-097 | 第一個產品原始碼變更前必須完成 schema/standard 2.2.0 的最小但完整 authoring-first architecture package：單一 system manifest、L0–L3+ module/parent/dependency boundaries、source-set classification、release composition root、Type Catalog 與 Type Ownership Matrix、State Object Ownership Matrix、Boundary Design Table、commands/queries/ports/events 與 delivery/failure contracts、runtime executables/mappings/channels、所有關鍵 end-to-end Flows 的候選比較與 flow-cost review、每個產品功能的 algorithm screening、適用的 proposed ADR 與完整 Algorithm Design Records，以及由 manifest 產生且無 stale diff 的 System/Parent/ownership/flow views。開始 walking skeleton 前，design-phase architecture gate 必須 PASS；任何未決 owner、非法 dependency、缺失 mapping、未定 delivery/failure、未完成 algorithm record 或需要但缺少的人類核准均維持 BLOCKED。架構文件在每個 vertical slice 與程式、測試同步更新。 | 使正式架構成為實作前的可檢查契約，而不是事後描述；成本是第一個產品畫面前要先完成一輪完整建模與檢查，但能顯著降低跨模組、型別、狀態與背景工作的結構性返工。 |
 | DEC-098 | 第一個 user-visible walking skeleton 為 authenticated Owner 的 Company/Evidence intake：Owner 在 responsive Web 選擇或建立 Company 並提交 Evidence URL；API 在同一 PostgreSQL transaction 內驗證 admission、保存 `received` 狀態、audit event 與 durable outbox job，立即回傳可查詢的 record/version ID。Collector worker 以 at-least-once、leased claim 與 idempotency 執行受限制的來源取得，成功時保存 immutable content snapshot/hash、URL、publisher、published/observed/retrieved times、必要摘錄、source category、lineage/provenance 與 `succeeded` 狀態，失敗時保存可理解但不洩密的 `failed`／retrying／dead-letter 狀態；同 URL 或同內容不得產生重複 source-of-record。UI 以該 Server record/version 查詢並顯示 received、processing、succeeded 或 failed，不建立 client-only 真實狀態。此 slice 必須通過 Cloudflare identity/JWT 邊界、PostgreSQL transaction/outbox/dedup integration、collector adapter contract、API/OpenAPI 及 responsive Playwright flow；不執行 AI、E0–E6、Hard anomaly、Thesis、估值或 Recommendation。 | 第一片就證明產品核心的證據入口以及 UI、API、PostgreSQL、audit/outbox、獨立 worker、錯誤處理和響應式狀態更新能共同運作，同時把高風險 AI 與 anomaly policy 留在後續專屬 slices；代價是第一片即需安全的來源擷取 adapter 與完整 provenance/dedup 語義。 |
+| DEC-099 | URL canonicalization policy `url-normalization-v1` 採保守規則：只接受通過來源政策的 HTTPS URL；hostname 轉小寫、移除明確的預設 `:443` 與 fragment、空 path 轉為 `/`；非空 path 的字面內容與 percent encoding，以及 query 的內容、重複參數與順序均原樣保留。每個 canonical source、snapshot 與 URL dedup key 必須保存 normalization policy version，歷史 key 不得用新規則原地重新解讀；未來規則變更必須使用新版本及明確 migration／coexistence policy。 | 這只合併可安全證明等價的 URL 形式，避免 query 順序、重複參數、percent encoding 或來源特定 path 語義被積極正規化後錯誤合併；代價是部分實際別名仍可能分成不同 URL identity，需由 content hash 與 lineage 去重補足。 |
 
 ## Discussion Context
 
@@ -869,12 +870,21 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 - **User answer:** 1 — start with authenticated Company selection/creation and Evidence URL intake through the collector worker to a visible terminal status.
 - **Explicit rationale:** The user accepted the clarification that this selects only the first fully operable development path, not the system's final feature priority.
 - **Resulting impact:** Adds DEC-098 and refines DEC-096, REQ-001, REQ-002, REQ-008, REQ-011, REQ-012 and REQ-032 by fixing the first concrete end-to-end product journey while explicitly deferring AI, E-stage and Hard-anomaly decisions to later slices.
+
+### DISC-081: Select the versioned URL normalization policy
+
+- **Situation:** ALG-0001 implementation review found that non-empty path/query equivalence and historical normalization-version ownership were not explicit. These rules determine whether two submitted URLs share one source-of-record and whether historical provenance remains reproducible after policy changes.
+- **Question:** Should v1 preserve non-empty path/query spelling, apply RFC path normalization, or also normalize query ordering and tracking parameters?
+- **Options and tradeoffs:** Conservative normalization only merges clearly equivalent HTTPS authority, fragment and empty-root forms and minimizes false merges; RFC path normalization merges more aliases but can conflict with source-specific path handling; aggressive query normalization improves deduplication but risks merging order-sensitive, duplicate-parameter or source-specific resources.
+- **User answer:** 1 — use conservative normalization.
+- **Explicit rationale:** The user selected the recommended policy after asking what behavior the decision affects; no additional rationale was provided.
+- **Resulting impact:** Adds DEC-099 and refines REQ-002 and AC-002. `url-normalization-v1` preserves non-empty path/query representation, is persisted with canonical identity and snapshots, and requires a new version plus explicit migration/coexistence handling for future policy changes.
 ## Acceptance Criteria
 
 | ID | Requirements | Scenario | Validation Method | Evidence |
 | --- | --- | --- | --- | --- |
 | AC-001 | REQ-001 | 從全新 Ubuntu Server 依版本鎖定設定部署本地 application stack 與 Cloudflare ingress。 | Docker Compose config 驗證、容器健康檢查、Cloudflare Access/Tunnel contract test、origin 防火牆及 Internet/LAN port 掃描；只有 Access 保護 hostname 可達 Web/API，origin inbound、SSH、PostgreSQL、Docker API 與管理子網均不可達。 | Pending execution |
-| AC-002 | REQ-002 | 同一官方事件被重複取得，且非官方來源缺少必要 provenance。 | Adapter contract tests、來源去重整合測試與資料庫 constraint tests。 | Pending execution |
+| AC-002 | REQ-002 | 同一官方事件以 hostname 大小寫、明確 `:443`、fragment、空 path、不同非空 path spelling／percent encoding、query 順序或重複參數等 URL 形式重複取得，且非官方來源缺少必要 provenance；其後以新 normalization policy version 與既有 v1 資料並存。 | Adapter golden/property tests 驗證 `url-normalization-v1` 冪等、只合併明確等價形式並保留非空 path/query；來源去重整合測試與資料庫 constraint tests 驗證 URL key、content hash、lineage、policy version、歷史 key 不被重解讀及版本 coexistence／migration。 | Pending execution |
 | AC-003 | REQ-003 | 對固定來源快照執行 E0 至 E6 各階正例、缺少前置閘門負例、直接跳級、更正、撤銷、來源失效、兩季延續性及 21:00 停機後恢復。 | 決策表 unit/property tests 與 Fake Clock 整合測試；同一快照必須產生唯一階段，缺少任一必要閘門不得升級，AI 輸出不得直接改寫階段，重算、摘要、即時事件與補寄必須冪等。 | Pending execution |
 | AC-004 | REQ-004 | OpenAI 成功、OpenAI provider-wide 失敗、Claude 失敗、critic 失敗與 schema 無效。 | Provider contract suite 與 fail-closed orchestration tests；所有 schema、引用、曝險與 abstain 檢查必須 100% 通過。 | Pending execution |
 | AC-005 | REQ-005 REQ-006 | Owner 選擇 PE、PB、abstain 或未確認方法，選擇 6、12、24 個月或使用 12 個月預設；測試自身歷史與 peer group 候選倍數不同、peer group 4/5/12/13 家、重複或不合格同業、名單改版、未選來源、company_history、peer_group、abstain、無效分母、樣本不足、新季報、重大事件、90 天失效，以及費稅、股息、年化、曝險、預算衝突與分批獲利。 | Deterministic unit/property tests、Fake Clock 與固定黃金案例；少於 5 或超過 12 家、未逐一確認、重複、包含目標公司、方法不一致或資料無效時 peer_group 必須 abstain；Recommendation 必須保留不可變 peer snapshot。兩組計算、差異及 Owner 理由不得自動混合；歷史分布、樣本排除和來源必須可重現，target date 必須正確，AI 不得改寫方法、期間、peer 名單或來源選擇；測試 6/12/24 個月、零與負 holding_days、手續費率、最低手續費、賣出證交稅、股息、Cost Profile 版本切換、decimal rounding、完整與缺漏的持股／現金／官方價格、跨 Thesis 同證券合併、交易後 Portfolio NAV、官方主要產業、自訂零／單一／重疊風險主題、任一分類 30% 邊界、分類改版、缺少官方分類、原始 1.5x/1x/0.5x 向下限制、現有超限、減碼與 Hard invalidation，公式必須符合 REQ-005 且歷史 Recommendation 不得因新 Cost Profile 改變；未確認、abstain、不適用、資料不足、資料失效、Cost Profile 未設定或最低報酬未設定時必須輸出 0x 且不產生目標價或買進建議；任何買進結果不得超過 security、任一官方產業、任一自訂風險主題或 cash hard cap；重疊主題必須各自完整計入，缺少官方分類或現有超限不得產生正倍率，AI 不得啟用或修改自訂主題，歷史 Recommendation 不得因分類或風險政策新版本改變。 | Pending execution |
@@ -1096,6 +1106,7 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-097 | depends_on | DEC-096 |
 | DEC-098 | depends_on | REQ-001 |
 | DEC-098 | depends_on | REQ-002 |
+| DEC-099 | refines | REQ-002 |
 | DEC-098 | depends_on | REQ-008 |
 | DEC-098 | depends_on | REQ-011 |
 | DEC-098 | depends_on | REQ-012 |
@@ -1225,3 +1236,5 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | --- | --- | --- | --- |
 | 1 | 2026-08-02 | confirmed | Materialized the greenfield ThesisTrace discussion. Recorded platform, evidence ladder, E2-E6 digest policy, replaceable AI, valuation and risk rules, roles, mail, portfolio import, worker isolation, VPN decision, backup, disk-encryption risk, architecture governance and Git policy. Replaced the earlier E2 immediate-volume rule with a daily 21:00 E2-E6 digest and replaced conditional reuse of the legacy OpenVPN profile with WireGuard. |
 | 2 | 2026-08-10 | Reopened before clarification: Resolve semantic and acceptance gaps identified by the 2026-08-10 review before implementation. |
+| 86 | 2026-08-20 | Reopened before clarification: Clarify the versioned URL path and query normalization policy exposed by ALG-0001 implementation review. |
+| 87 | 2026-08-20 | working | Selected conservative `url-normalization-v1`, required persisted policy versions, preserved non-empty path/query representation, and added future migration/coexistence rules. |
