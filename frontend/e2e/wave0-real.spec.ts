@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("real Company Evidence path reaches succeeded through PostgreSQL and worker process", async ({ page }, testInfo) => {
+test("real Evidence and shadow anomaly path crosses PostgreSQL and independent workers", async ({ page }, testInfo) => {
   const ticker = testInfo.project.name === "mobile" ? "2454" : "2330";
   await page.goto("/");
   await page.getByRole("button", { name: "建立新公司" }).click();
@@ -18,4 +18,20 @@ test("real Company Evidence path reaches succeeded through PostgreSQL and worker
   const evidenceState = await evidence.json();
   expect(evidenceState).toMatchObject({ audit_events: 1, collection_jobs: 1 });
   expect(evidenceState.provenance).not.toBeNull();
+
+  await page.getByLabel("評估理由").fill("cross-process fail-closed assessment");
+  const assessmentResponse = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    response.url().endsWith(`/api/evidence/${evidenceId}/anomaly-assessments`),
+  );
+  await page.getByRole("button", { name: "開始 Shadow anomaly 評估" }).click();
+  const pendingAssessment = await (await assessmentResponse).json();
+  await expect(page.getByText("等待獨立 AI worker")).toBeVisible();
+  await expect.poll(async () => {
+    await page.getByRole("button", { name: "重新整理評估" }).click();
+    return page.locator(".anomaly-value").textContent();
+  }).toContain("Soft anomaly");
+  const anomaly = await page.request.get(`/acceptance/anomaly/${pendingAssessment.assessment_id}`);
+  expect(await anomaly.json()).toMatchObject({ audit_events: 2, analysis_jobs: 1 });
+  await expect(page.getByText("正式 Hard 通知仍停用。", { exact: false })).toBeVisible();
 });

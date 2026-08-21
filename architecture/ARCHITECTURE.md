@@ -23,6 +23,7 @@ flowchart TD
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
     n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
+    n_anomaly_assessment["anomaly_assessment (L2)<br/>管理來源分類、線索評分與 anomaly 閘門"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
     n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
@@ -37,6 +38,7 @@ flowchart TD
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
     n_research_domain -->|owns| n_evidence_stage
+    n_research_domain -->|owns| n_anomaly_assessment
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
@@ -54,7 +56,7 @@ flowchart TD
 
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **子功能:** `access_domain`, `research_domain`, `thesis_domain`, `portfolio_domain`, `recommendation_domain`, `workflow_domain`, `notification_domain`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage)
+- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment)
 - **保護理由:** Sibling domains communicate only through this parent; Domain state remains child-owned.; Reject unauthenticated or unauthorized commands → Reject unauthenticated or unauthorized commands; Propagate child admission failures. → Propagate child admission failures.
 
 ### `backend_composition`
@@ -68,13 +70,13 @@ flowchart TD
 
 - **目的:** Own authenticated actor identity and application authorization decisions.
 - **子功能:** `identity_registry`, `session_management`, `account_administration`, `confirmation_challenge`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage)
+- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment)
 - **保護理由:** Provider identity never collapses by email alone; JWT subject and provider discriminator resolve through a preapproved mapping.; Unknown provider, identity, session, role, or challenge fails closed without existence disclosure.; Authorization fails closed.; Reject absent → Reject absent; expired → expired; or unauthorized identities. → or unauthorized identities.
 
 ### `research_domain`
 
 - **目的:** Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts.
-- **子功能:** `evidence_intake`, `evidence_collection`, `evidence_stage`
+- **子功能:** `evidence_intake`, `evidence_collection`, `evidence_stage`, `anomaly_assessment`
 - **相關 Flows:** [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake)
 - **保護理由:** State commits before success events; Evidence streams are serialized; Source records are immutable.; Reject invalid URLs or stale company versions → Reject invalid URLs or stale company versions; Record safe retry and terminal failures. → Record safe retry and terminal failures.
 
@@ -98,6 +100,13 @@ flowchart TD
 - **子功能:** 無
 - **相關 Flows:** [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage)
 - **保護理由:** Canonical stage is derived only by ALG-0002 from confirmed facts.; Every committed version binds one immutable source snapshot, actor, Server time, reason and complete E1-E6 gate trace.; Learner and Admin, client-computed values and unconfirmed AI candidates have no mutation authority.
+
+### `anomaly_assessment`
+
+- **目的:** Own versioned source classification, clue scoring, deterministic anomaly decisions, traces, durable analysis work, and offline qualification evaluation.
+- **子功能:** 無
+- **相關 Flows:** [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment)
+- **保護理由:** AI, adapters, and clients cannot set source tier, clue score, anomaly class, qualification, notification, recommendation, or trade state.; Ambiguous source classification resolves downward and C-clue score never contributes to Hard quorum.; Formal Hard publication remains disabled until offline qualification, thirty consecutive shadow days, and explicit Owner activation all bind the exact version tuple.
 
 ### `thesis_domain`
 
@@ -184,6 +193,7 @@ flowchart TD
 - [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation) — Revalidate and revoke one application session without extending the Cloudflare Access credential.
 - [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake) — Admit an Owner Evidence URL and expose durable lifecycle state.
 - [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage) — Confirm Owner-authored dimension facts and synchronously expose the atomically committed deterministic E0-E6 stage.
+- [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment) — Admit version-bound anomaly work, process it in the isolated AI worker, and expose only a committed fail-closed Research result.
 
 ## 完整技術參考
 
@@ -198,6 +208,7 @@ flowchart TD
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
     n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
+    n_anomaly_assessment["anomaly_assessment (L2)<br/>管理來源分類、線索評分與 anomaly 閘門"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
     n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
@@ -208,6 +219,8 @@ flowchart TD
     n_restricted_source_fetch_adapter["restricted_source_fetch_adapter (L3+)<br/>依限制政策擷取外部 HTTPS 來源"]
     n_runtime_configuration_adapter["runtime_configuration_adapter (L3+)<br/>解析必要設定與檔案引用祕密"]
     n_collector_worker_adapter["collector_worker_adapter (L3+)<br/>啟動並探測收集器程序"]
+    n_ai_worker_adapter["ai_worker_adapter (L3+)<br/>執行隔離的 anomaly AI 工作"]
+    n_openai_recommendation_adapter["openai_recommendation_adapter (L3+)<br/>以嚴格結構化輸出提供候選與獨立 critic"]
     n_identity_registry["identity_registry (L2)<br/>管理外部身分與內部帳號映射"]
     n_session_management["session_management (L2)<br/>管理受限工作階段與角色設定檔"]
     n_account_administration["account_administration (L2)<br/>管理帳號生命週期與角色"]
@@ -229,11 +242,14 @@ flowchart TD
     n_backend_composition -.->|depends| n_research_domain
     n_backend_composition -.->|depends| n_evidence_collection
     n_backend_composition -.->|depends| n_evidence_stage
+    n_backend_composition -.->|depends| n_anomaly_assessment
     n_backend_composition -.->|depends| n_postgres_research_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
     n_backend_composition -.->|depends| n_postgres_access_adapter
     n_backend_composition -.->|depends| n_cloudflare_identity_adapter
+    n_backend_composition -.->|depends| n_ai_worker_adapter
+    n_backend_composition -.->|depends| n_openai_recommendation_adapter
     n_thesis_trace_application -->|owns| n_access_domain
     n_access_domain -.->|depends| n_identity_registry
     n_access_domain -.->|depends| n_session_management
@@ -243,9 +259,11 @@ flowchart TD
     n_research_domain -.->|depends| n_evidence_intake
     n_research_domain -.->|depends| n_evidence_collection
     n_research_domain -.->|depends| n_evidence_stage
+    n_research_domain -.->|depends| n_anomaly_assessment
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
     n_research_domain -->|owns| n_evidence_stage
+    n_research_domain -->|owns| n_anomaly_assessment
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
@@ -255,7 +273,10 @@ flowchart TD
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
     n_postgres_research_adapter -.->|depends| n_evidence_stage
+    n_postgres_research_adapter -.->|depends| n_anomaly_assessment
     n_restricted_source_fetch_adapter -.->|depends| n_evidence_collection
+    n_ai_worker_adapter -.->|depends| n_thesis_trace_application
+    n_openai_recommendation_adapter -.->|depends| n_thesis_trace_application
     n_access_domain -->|owns| n_identity_registry
     n_access_domain -->|owns| n_session_management
     n_access_domain -->|owns| n_account_administration
@@ -322,6 +343,8 @@ flowchart TD
 - `postgresunavailable` — `postgres_research_adapter` / `domain-value` / `module-public`
 - `apiruntime` — `backend_composition` / `runtime-state` / `private`
 - `collectorruntime` — `backend_composition` / `runtime-state` / `private`
+- `anomalyprocessor` — `backend_composition` / `port` / `private`
+- `aiworkerruntime` — `backend_composition` / `runtime-state` / `private`
 - `postgresevidencestore` — `postgres_research_adapter` / `adapter-binding` / `module-public`
 - `sourcefetchfailure` — `restricted_source_fetch_adapter` / `domain-value` / `module-public`
 - `transportresponse` — `restricted_source_fetch_adapter` / `wire-representation` / `private`
@@ -385,6 +408,52 @@ flowchart TD
 - `evidencestagerecord` — `evidence_stage` / `domain-value` / `module-public`
 - `evidencestagestoreport` — `evidence_stage` / `port` / `module-public`
 - `evidencestageservice` — `evidence_stage` / `policy` / `module-public`
+- `sourcetier` — `anomaly_assessment` / `policy` / `module-public`
+- `anomalyclass` — `anomaly_assessment` / `policy` / `module-public`
+- `assessmentstatus` — `anomaly_assessment` / `domain-value` / `module-public`
+- `decisiongate` — `anomaly_assessment` / `domain-value` / `module-public`
+- `sourcecharacteristicsnapshot` — `anomaly_assessment` / `domain-value` / `module-public`
+- `cluefeaturevector` — `anomaly_assessment` / `domain-value` / `module-public`
+- `clueroute` — `anomaly_assessment` / `policy` / `module-public`
+- `anomalydecisiontrace` — `anomaly_assessment` / `domain-value` / `module-public`
+- `requestassessmentcommand` — `anomaly_assessment` / `command` / `module-public`
+- `evaluateassessmentcommand` — `anomaly_assessment` / `command` / `module-public`
+- `anomalyanalysisjob` — `anomaly_assessment` / `command` / `module-public`
+- `anomalyanalysisversions` — `anomaly_assessment` / `configuration` / `module-public`
+- `anomalyassessmentrecord` — `anomaly_assessment` / `domain-value` / `module-public`
+- `anomalyassessmentstoreport` — `anomaly_assessment` / `port` / `module-public`
+- `anomalyassessmentservice` — `anomaly_assessment` / `policy` / `module-public`
+- `anomalysourcebody` — `fastapi_entrypoint` / `wire-representation` / `module-public`
+- `anomalyassessmentrequestbody` — `fastapi_entrypoint` / `wire-representation` / `module-public`
+- `anomalygateresponse` — `fastapi_entrypoint` / `wire-representation` / `module-public`
+- `anomalytraceresponse` — `fastapi_entrypoint` / `wire-representation` / `module-public`
+- `anomalyassessmentresponse` — `fastapi_entrypoint` / `wire-representation` / `module-public`
+- `analysissource` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `recommendationproviderrequest` — `thesis_trace_application` / `command` / `module-public`
+- `recommendationcriticrequest` — `thesis_trace_application` / `command` / `module-public`
+- `validatedanomalycandidate` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationproviderport` — `thesis_trace_application` / `port` / `module-public`
+- `recommendationcriticport` — `thesis_trace_application` / `port` / `module-public`
+- `anomalysourceinput` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `requestanomalyassessment` — `thesis_trace_application` / `command` / `module-public`
+- `anomalygateresult` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `anomalytraceresult` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `anomalyassessmentresult` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `anomalyassessmentflow` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `anomalyjobprocessor` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `researchanomalysource` — `research_domain` / `composition-mapping` / `module-public`
+- `researchanomalyrequest` — `research_domain` / `command` / `module-public`
+- `researchanomalyjob` — `research_domain` / `command` / `module-public`
+- `researchanomalygate` — `research_domain` / `composition-mapping` / `module-public`
+- `researchanomalytrace` — `research_domain` / `composition-mapping` / `module-public`
+- `researchanomalyresult` — `research_domain` / `composition-mapping` / `module-public`
+- `researchanomalyfacade` — `research_domain` / `composition-mapping` / `module-public`
+- `researchvalidatedanomalycandidate` — `research_domain` / `composition-mapping` / `module-public`
+- `openairecommendationadapter` — `openai_recommendation_adapter` / `adapter-binding` / `module-public`
+- `qualificationcasecategory` — `anomaly_assessment` / `policy` / `module-public`
+- `qualificationversiontuple` — `anomaly_assessment` / `configuration` / `module-public`
+- `qualificationcase` — `anomaly_assessment` / `domain-value` / `module-public`
+- `offlinequalificationresult` — `anomaly_assessment` / `domain-value` / `module-public`
 
 ## State Ownership
 
@@ -398,6 +467,8 @@ flowchart TD
 - `access-response-to-react-view` / `thesis_trace_application` / `thesis_trace_application` to `access_domain`
 - `authenticated-owner-to-stage-command` / `thesis_trace_application` / `access_domain` to `research_domain`
 - `source-snapshot-to-confirmed-stage` / `research_domain` / `evidence_collection` to `evidence_stage`
+- `source-snapshot-to-anomaly-assessment` / `research_domain` / `evidence_collection` to `anomaly_assessment`
+- `thesis-invalidation-to-anomaly-assessment` / `thesis_trace_application` / `thesis_domain` to `research_domain`
 
 ## Adoption Readiness
 

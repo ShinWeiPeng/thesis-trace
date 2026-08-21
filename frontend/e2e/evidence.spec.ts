@@ -39,6 +39,36 @@ test("Owner confirms facts and sees the server-derived stage", async ({ page }) 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
+test("Owner sees pending then fail-closed shadow anomaly on desktop and mobile", async ({ page }) => {
+  let submittedBody: Record<string, unknown> | undefined;
+  const pending = { assessment_id: "assessment-1", evidence_id: "evidence-1", evidence_version: 2, source_snapshot_ids: ["snapshot-1"], version: 1, status: "pending", requested_at: "2026-08-21T10:00:00Z", trace: null, failure_code: null };
+  await page.route("**/api/evidence/evidence-1/anomaly-assessments", async (route) => {
+    submittedBody = await route.request().postDataJSON();
+    await route.fulfill({ status: 202, json: pending });
+  });
+  await page.route("**/api/anomaly-assessments/assessment-1", (route) => route.fulfill({ status: 200, json: {
+    ...pending, version: 2, status: "succeeded", trace: {
+      anomaly_class: "soft", source_tiers: ["A"], clue_score: null, clue_route: null,
+      gates: [{ gate: "predeclared_invalidation", passed: false, code: "fail_closed" }],
+      policy_version: "anomaly-policy-v1",
+    },
+  } }));
+  await page.goto("/");
+  await page.getByLabel("Evidence URL").fill("https://example.com/evidence");
+  await page.getByRole("button", { name: "提交 Evidence" }).click();
+  await page.getByRole("button", { name: "重新整理狀態" }).click();
+  await page.getByLabel("評估理由").fill("review immutable disclosure");
+  await page.getByRole("button", { name: "開始 Shadow anomaly 評估" }).click();
+
+  await expect(page.getByText("等待獨立 AI worker")).toBeVisible();
+  expect(submittedBody).not.toHaveProperty("anomaly_class");
+  expect(submittedBody).not.toHaveProperty("hard");
+  await page.getByRole("button", { name: "重新整理評估" }).click();
+  await expect(page.locator(".anomaly-badge", { hasText: "Soft anomaly" })).toBeVisible();
+  await expect(page.getByText("正式 Hard 通知仍停用。", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
 test("Learner sees the server stage without confirmation controls", async ({ page }) => {
   await page.route("**/api/session", (route) => route.fulfill({ json: { kind: "learner", user_id: "learner", display_name: "Learner", session_expires_at: "2030-01-01T00:00:00Z", is_recovery_session: false, capabilities: ["research"] } }));
   await page.route("**/api/evidence/evidence-1/stage", (route) => route.fulfill({ json: {

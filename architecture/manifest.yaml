@@ -107,6 +107,8 @@ modules:
   public_headers:
   - backend/src/thesis_trace/application/contracts.py
   - backend/src/thesis_trace/application/flows/evidence_stage.py
+  - backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  - backend/src/thesis_trace/application/ai_ports.py
   description:
     purpose: Coordinate authenticated cross-domain product flows without owning domain
       state.
@@ -116,8 +118,13 @@ modules:
     - application.submit_evidence
     - application.confirm_evidence_stage
     - application.query_evidence_stage
+    - application.request_anomaly_assessment
+    - application.query_anomaly_assessment
+    - application.process_anomaly_job
     output_ports:
     - application.events
+    - application.recommendation_provider
+    - application.recommendation_critic
     emitted_events:
     - application.evidence_submission_completed
     owned_state: []
@@ -164,6 +171,45 @@ modules:
   - path: backend/src/thesis_trace/application/flows/evidence_stage.py
     symbol: EvidenceStageResult
     kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: AnomalyAssessmentFlow
+    kind: orchestrator
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: AnomalyJobProcessor
+    kind: orchestrator
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: RequestAnomalyAssessment
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: AnomalySourceInput
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: AnomalyAssessmentResult
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: AnomalyGateResult
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: AnomalyTraceResult
+    kind: contract
+  - path: backend/src/thesis_trace/application/ai_ports.py
+    symbol: RecommendationProviderPort
+    kind: port
+  - path: backend/src/thesis_trace/application/ai_ports.py
+    symbol: RecommendationCriticPort
+    kind: port
+  - path: backend/src/thesis_trace/application/ai_ports.py
+    symbol: RecommendationProviderRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/ai_ports.py
+    symbol: RecommendationCriticRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/ai_ports.py
+    symbol: AnalysisSource
+    kind: contract
+  - path: backend/src/thesis_trace/application/ai_ports.py
+    symbol: ValidatedAnomalyCandidate
+    kind: contract
 - id: backend_composition
   level: L0
   role: composition
@@ -178,11 +224,14 @@ modules:
   - research_domain
   - evidence_collection
   - evidence_stage
+  - anomaly_assessment
   - postgres_research_adapter
   - restricted_source_fetch_adapter
   - runtime_configuration_adapter
   - postgres_access_adapter
   - cloudflare_identity_adapter
+  - ai_worker_adapter
+  - openai_recommendation_adapter
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/bootstrap/application.py
@@ -295,6 +344,7 @@ modules:
   - evidence_intake
   - evidence_collection
   - evidence_stage
+  - anomaly_assessment
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/modules/research/__init__.py
@@ -355,6 +405,30 @@ modules:
     kind: contract
   - path: backend/src/thesis_trace/modules/research/__init__.py
     symbol: ResearchStageResult
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalyFacade
+    kind: orchestrator
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalySource
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalyRequest
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchValidatedAnomalyCandidate
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalyJob
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalyGate
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalyTrace
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchAnomalyResult
     kind: contract
   - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
     symbol: EvidenceRecord
@@ -507,6 +581,96 @@ modules:
   - path: backend/src/thesis_trace/modules/research/evidence_stage/ports.py
     symbol: EvidenceStageStorePort
     kind: port
+- id: anomaly_assessment
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/modules/research/anomaly_assessment
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+  - backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py
+  - backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py
+  description:
+    purpose: Own versioned source classification, clue scoring, deterministic anomaly decisions, traces, durable analysis work, and offline qualification evaluation.
+    diagram_summaries:
+      zh-TW: 管理來源分類、線索評分與 anomaly 閘門
+    input_ports:
+    - research.request_anomaly_assessment
+    - research.query_anomaly_assessment
+    output_ports:
+    - research.anomaly_assessment_store
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Append pending assessments, leased jobs, immutable results, and audit through a demand-owned port.
+    errors: []
+    invariants:
+    - AI, adapters, and clients cannot set source tier, clue score, anomaly class, qualification, notification, recommendation, or trade state.
+    - Ambiguous source classification resolves downward and C-clue score never contributes to Hard quorum.
+    - Formal Hard publication remains disabled until offline qualification, thirty consecutive shadow days, and explicit Owner activation all bind the exact version tuple.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/service.py
+    symbol: AnomalyAssessmentService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AnomalyAssessmentRecord
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: SourceTier
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: ClueRoute
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AnomalyClass
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AssessmentStatus
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: SourceCharacteristicSnapshot
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: ClueFeatureVector
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: DecisionGate
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AnomalyDecisionTrace
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: RequestAssessmentCommand
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: EvaluateAssessmentCommand
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AnomalyAnalysisJob
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+    symbol: AnomalyAnalysisVersions
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py
+    symbol: AnomalyAssessmentStorePort
+    kind: port
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py
+    symbol: QualificationCaseCategory
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py
+    symbol: QualificationVersionTuple
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py
+    symbol: QualificationCase
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py
+    symbol: OfflineQualificationResult
+    kind: contract
 - id: thesis_domain
   level: L1
   role: domain
@@ -710,6 +874,8 @@ modules:
   implements_ports:
   - application.confirm_evidence_stage
   - application.query_evidence_stage
+  - application.request_anomaly_assessment
+  - application.query_anomaly_assessment
   public_headers:
   - backend/src/thesis_trace/api.py
   description:
@@ -749,10 +915,12 @@ modules:
   - evidence_intake
   - evidence_collection
   - evidence_stage
+  - anomaly_assessment
   implements_ports:
   - research.unit_of_work
   - research.collection_jobs
   - research.evidence_stage_store
+  - research.anomaly_assessment_store
   public_headers:
   - backend/src/thesis_trace/platform/postgres.py
   description:
@@ -894,6 +1062,77 @@ modules:
   - path: backend/src/thesis_trace/entrypoints/collector_worker.py
     symbol: main
     kind: process-entrypoint
+- id: ai_worker_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/entrypoints/ai_worker.py
+  parent: null
+  depends_on:
+  - thesis_trace_application
+  implements_ports:
+  - application.process_anomaly_job
+  public_headers:
+  - backend/src/thesis_trace/entrypoints/ai_worker.py
+  description:
+    purpose: Run isolated version-bound anomaly analysis jobs through public application contracts.
+    diagram_summaries:
+      zh-TW: 執行隔離的 anomaly AI 工作
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Lease anomaly work and invoke provider and critic through the composed application flow.
+    errors: []
+    invariants:
+    - The worker never reads or writes private Research tables.
+    - Provider latency or failure never blocks API, collector, or email processes.
+  entrypoints:
+  - path: backend/src/thesis_trace/entrypoints/ai_worker.py
+    symbol: main
+    kind: process-entrypoint
+  public_symbols:
+  - path: backend/src/thesis_trace/entrypoints/ai_worker.py
+    symbol: main
+    kind: process-entrypoint
+- id: openai_recommendation_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/adapters/openai_recommendation
+  parent: null
+  depends_on:
+  - thesis_trace_application
+  implements_ports:
+  - application.recommendation_provider
+  - application.recommendation_critic
+  public_headers:
+  - backend/src/thesis_trace/adapters/openai_recommendation/adapter.py
+  description:
+    purpose: Invoke OpenAI Responses structured outputs through provider-neutral application ports without granting policy authority.
+    diagram_summaries:
+      zh-TW: 以嚴格結構化輸出提供候選與獨立 critic
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Perform bounded HTTPS requests to the configured OpenAI Responses endpoint.
+    errors: []
+    invariants:
+    - API keys and provider response bodies never cross the adapter boundary or enter logs.
+    - Structured provider and critic bytes remain untrusted until application validation.
+  entrypoints:
+  - path: backend/src/thesis_trace/adapters/openai_recommendation/adapter.py
+    symbol: OpenAIRecommendationAdapter
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/adapters/openai_recommendation/adapter.py
+    symbol: OpenAIRecommendationAdapter
+    kind: adapter
 - id: identity_registry
   level: L2
   role: component
@@ -1149,6 +1388,91 @@ ports:
   - EvidenceStageFlow
   - QueryEvidenceStageRequest
   - EvidenceStageResult
+- id: application.request_anomaly_assessment
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Admit an authenticated Owner request for a version-bound anomaly assessment.
+    data: Actor, Evidence and immutable snapshot identities, expected Evidence version, reason, and idempotency key; source characteristics and all policy values remain Server-owned.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor is not Owner.}
+    - {code: resource_unavailable, condition: Evidence or snapshots are absent, unauthorized, unrelated, incomplete, or stale.}
+    - {code: version_conflict, condition: Expected input or assessment version is stale.}
+    - {code: invalid_request, condition: Snapshot identity, reason, or idempotency is invalid, including any forbidden client-authored source facts.}
+  symbols:
+  - RequestAnomalyAssessment
+  - AnomalyAssessmentResult
+- id: application.query_anomaly_assessment
+  owner: thesis_trace_application
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Query one role-safe Server-authoritative anomaly assessment projection and trace.
+    data: Authenticated actor and assessment identity.
+    timing: sync
+    immediate_rejections:
+    - {code: resource_unavailable, condition: Actor or assessment is absent or unauthorized.}
+  symbols:
+  - AnomalyAssessmentResult
+- id: application.process_anomaly_job
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - ai_worker_adapter
+  description:
+    purpose: Process one leased anomaly job through provider, strict validator, critic, Research policy, and atomic result commit.
+    data: Opaque lease, assessment/input versions, correlation metadata, and exact build/model/prompt/schema/critic/policy tuple.
+    timing: async
+    immediate_rejections:
+    - {code: lease_unavailable, condition: Work is absent, not due, or leased by another worker.}
+    - {code: superseded, condition: Any bound input version is stale.}
+    - {code: fail_closed, condition: Provider, schema, citation, critic, or policy validation cannot produce a complete valid candidate.}
+  symbols:
+  - AnomalyJobProcessor
+- id: application.recommendation_provider
+  owner: thesis_trace_application
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/application/ai_ports.py
+  implemented_by:
+  - openai_recommendation_adapter
+  description:
+    purpose: Request one provider-neutral source-bound structured analysis candidate from an immutable snapshot.
+    data: Exact snapshot/version tuple and bounded schema/model/prompt identifiers; output remains untrusted bytes until validation.
+    timing: async
+    immediate_rejections:
+    - {code: provider_unavailable, condition: Credential, request, timeout, or provider is unavailable.}
+    - {code: invalid_output, condition: Output cannot satisfy the exact schema boundary.}
+  symbols:
+  - RecommendationProviderPort
+  - RecommendationProviderRequest
+- id: application.recommendation_critic
+  owner: thesis_trace_application
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/application/ai_ports.py
+  implemented_by:
+  - openai_recommendation_adapter
+  description:
+    purpose: Independently verify availability, citation support, subject, time, invalidation, B independence, and newer-A conflict for one candidate.
+    data: Immutable source snapshot and candidate; output is an exact structured PASS or non-PASS result.
+    timing: async
+    immediate_rejections:
+    - {code: critic_unavailable, condition: Critic request or response is unavailable.}
+    - {code: critic_invalid, condition: Critic schema is malformed, partial, or unknown.}
+  symbols:
+  - RecommendationCriticPort
+  - RecommendationCriticRequest
 - id: application.events
   owner: thesis_trace_application
   direction: output
@@ -1509,6 +1833,59 @@ ports:
     immediate_rejections: []
   symbols:
   - EvidenceStageRecord
+- id: research.request_anomaly_assessment
+  owner: anomaly_assessment
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+  implemented_by: []
+  description:
+    purpose: Atomically create a version-bound pending assessment, audit fact, and durable AI job.
+    data: Authorized Owner, immutable source snapshot identities/versions, bounded source-characteristic facts, reason, and idempotency key.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor is not an authenticated Owner.}
+    - {code: resource_unavailable, condition: Evidence or snapshot provenance cannot be validated.}
+    - {code: version_conflict, condition: Any expected version is stale.}
+    - {code: invalid_request, condition: Required source-characteristic facts or reason are invalid.}
+  symbols:
+  - RequestAssessmentCommand
+  - AnomalyAssessmentRecord
+- id: research.query_anomaly_assessment
+  owner: anomaly_assessment
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return the latest committed role-safe anomaly assessment state and deterministic trace.
+    data: Authorized actor and assessment identity.
+    timing: sync
+    immediate_rejections:
+    - {code: resource_unavailable, condition: Actor or assessment is absent or unauthorized.}
+  symbols:
+  - AnomalyAssessmentRecord
+- id: research.anomaly_assessment_store
+  owner: anomaly_assessment
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py
+  implemented_by:
+  - postgres_research_adapter
+  description:
+    purpose: Atomically request, lease, load immutable sources, commit, supersede, and query anomaly work under immutable version bindings.
+    data: Semantic assessment, job, decision trace, source snapshot, and audit values without SQL, provider, or wire representations.
+    timing: async
+    immediate_rejections:
+    - {code: resource_unavailable, condition: Source snapshots or security context cannot be validated.}
+    - {code: version_conflict, condition: Assessment, input, or job version is stale.}
+    - {code: lease_unavailable, condition: Lease is absent, expired, or owned by another worker.}
+    - {code: unavailable, condition: Transaction cannot commit.}
+  symbols:
+  - AnomalyAssessmentStorePort
+  - AnomalyAnalysisJob
+  - AnomalyAnalysisVersions
+  - AnomalyAssessmentRecord
 - id: research.clock
   owner: research_domain
   direction: output
@@ -2165,7 +2542,7 @@ types:
   mutation_authority: []
   consumers:
   - fastapi_entrypoint
-  references: [evidencestageflow, confirmevidencestagerequest, queryevidencestagerequest, evidencestageresult]
+  references: [evidencestageflow, confirmevidencestagerequest, queryevidencestagerequest, evidencestageresult, anomalyassessmentflow, anomalysourceinput, requestanomalyassessment, anomalyassessmentresult]
   fields: []
 - id: submitevidencerequest
   owner: thesis_trace_application
@@ -2938,6 +3315,33 @@ types:
     type: EvidenceCollector
     role: runtime-state
     meaning: Stateful worker service bound to durable job and source adapters.
+- id: anomalyprocessor
+  owner: backend_composition
+  language: python
+  declaration: {path: backend/src/thesis_trace/bootstrap/application.py, symbol: AnomalyProcessor, kind: protocol}
+  visibility: private
+  semantic_kind: port
+  description: Composition-local structural contract retained by the isolated AI worker runtime.
+  lifetime: AI worker composition lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: []
+  fields: []
+- id: aiworkerruntime
+  owner: backend_composition
+  language: python
+  declaration: {path: backend/src/thesis_trace/bootstrap/application.py, symbol: AiWorkerRuntime, kind: class}
+  visibility: private
+  semantic_kind: runtime-state
+  description: Process-lifetime isolated anomaly processor binding.
+  lifetime: AI worker process lifetime.
+  mutability: owner-mutable
+  mutation_authority: [backend_composition]
+  consumers: [backend_composition]
+  references: [anomalyprocessor]
+  fields:
+  - {name: processor, type: AnomalyProcessor, role: runtime-state, meaning: Composition-local fail-closed process command.}
 - id: postgresevidencestore
   owner: postgres_research_adapter
   language: python
@@ -2949,7 +3353,7 @@ types:
   mutability: owner-mutable
   mutation_authority: [postgres_research_adapter]
   consumers: [backend_composition]
-  references: [databaseurlprovider, companyrecord, evidenceaccepted, evidencerecord, evidenceauditfact, collectionrequest, evidencestatus, leasedcollectionjob, collectedsourcesnapshot, confirmdimensionfactscommand, dimensionfacts, evidencestage, evidencestagerecord, gateresult, sourceconfirmation, stageevaluation]
+  references: [databaseurlprovider, companyrecord, evidenceaccepted, evidencerecord, evidenceauditfact, collectionrequest, evidencestatus, leasedcollectionjob, collectedsourcesnapshot, confirmdimensionfactscommand, dimensionfacts, evidencestage, evidencestagerecord, gateresult, sourceconfirmation, stageevaluation, anomalyanalysisjob, anomalyanalysisversions, anomalyassessmentrecord, anomalyclass, anomalydecisiontrace, assessmentstatus, clueroute, decisiongate, evaluateassessmentcommand, requestassessmentcommand, sourcecharacteristicsnapshot, sourcetier]
   fields: []
 - id: sourcefetchfailure
   owner: restricted_source_fetch_adapter
@@ -3793,6 +4197,628 @@ types:
   consumers: [backend_composition, research_domain]
   references: [evidencestagestoreport, confirmdimensionfactscommand, dimensionfacts, evidencestage, evidencestagerecord, gateresult, sourceconfirmation, stageactorcontext, stageevaluation]
   fields: []
+- id: sourcetier
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: SourceTier, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Immutable A, B, or C raw-source classification whose ambiguity resolves downward.
+  lifetime: Assessment and persisted result lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: []
+  values: [A, B, C]
+  fields: []
+- id: anomalyclass
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: AnomalyClass, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Shadow-only deterministic outcome that cannot express production Hard.
+  lifetime: Assessment result lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter, research_domain]
+  references: []
+  values: [soft, would_be_hard]
+  fields: []
+- id: assessmentstatus
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: AssessmentStatus, kind: enum}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Durable assessment processing state.
+  lifetime: Assessment stream lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: []
+  values: [pending, succeeded, failed, superseded]
+  fields: []
+- id: decisiongate
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: DecisionGate, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: One ordered fail-closed anomaly policy gate.
+  lifetime: Immutable trace lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: []
+  fields:
+  - {name: gate, type: str, role: policy, meaning: Stable gate identity.}
+  - {name: passed, type: bool, role: policy, meaning: Whether the gate passed.}
+  - {name: code, type: str, role: metadata, meaning: Stable explanatory code.}
+- id: sourcecharacteristicsnapshot
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: SourceCharacteristicSnapshot, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Versioned publisher, formal-record, editorial, authorship, primary-evidence, and lineage facts used by ALG-0003.
+  lifetime: Immutable assessment input lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: []
+  fields:
+  - {name: source_snapshot_id, type: str, role: domain-identity, meaning: Bound immutable source snapshot.}
+  - {name: publisher_identity, type: str, role: metadata, meaning: Versioned publisher identity.}
+  - {name: authoritative_first_party, type: bool, role: policy, meaning: Authoritative first-party characteristic.}
+  - {name: formal_record, type: bool, role: policy, meaning: Formal-record characteristic.}
+  - {name: editorial_responsibility, type: bool, role: policy, meaning: Editorial-responsibility characteristic.}
+  - {name: attributed_author, type: bool, role: policy, meaning: Attributed-author characteristic.}
+  - {name: verifiable_primary_evidence, type: bool, role: policy, meaning: Verifiable primary-evidence characteristic.}
+  - {name: underlying_evidence_id, type: 'str | None', role: metadata, meaning: Lineage component identity when provable.}
+- id: cluefeaturevector
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: ClueFeatureVector, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Five critic-validated integer features used by ALG-0004.
+  lifetime: Immutable assessment result lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: []
+  fields:
+  - {name: timeliness, type: int, role: policy, meaning: Integer 0 through 2.}
+  - {name: traceability, type: int, role: policy, meaning: Integer 0 through 2.}
+  - {name: specificity, type: int, role: policy, meaning: Integer 0 through 2.}
+  - {name: corroboration, type: int, role: policy, meaning: Integer 0 through 2.}
+  - {name: invalidation_relevance, type: int, role: policy, meaning: Integer 0 through 2.}
+- id: clueroute
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: ClueRoute, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Save-only, watch/daily, or immediate-human-review route without source promotion.
+  lifetime: Assessment result lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: []
+  values: [save_only, watch_daily, human_review]
+  fields: []
+- id: anomalydecisiontrace
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: AnomalyDecisionTrace, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Complete ordered trace of classification, score, invalidation, quorum, critic, conflict, and qualification gates.
+  lifetime: Immutable assessment result lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter, research_domain]
+  references: [anomalyclass, sourcetier, clueroute, decisiongate]
+  fields: []
+- id: requestassessmentcommand
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: RequestAssessmentCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Owner-admitted command that creates pending state, audit, and durable version-bound work.
+  lifetime: One synchronous admission.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, research_domain]
+  references: [sourcecharacteristicsnapshot]
+  fields: []
+- id: evaluateassessmentcommand
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: EvaluateAssessmentCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Version-bound validated candidate and critic facts presented to pure Research policy by the current lease holder.
+  lifetime: One worker attempt.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, research_domain]
+  references: [cluefeaturevector, sourcecharacteristicsnapshot]
+  fields: []
+- id: anomalyanalysisjob
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: AnomalyAnalysisJob, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Durable identifiers, versions, correlation, lease, attempt, and build/policy/model/prompt/schema tuple for one worker task.
+  lifetime: Durable job lifetime.
+  mutability: owner-mutable
+  mutation_authority: [anomaly_assessment]
+  consumers: [anomaly_assessment, postgres_research_adapter, thesis_trace_application]
+  references: []
+  fields: []
+- id: anomalyanalysisversions
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: AnomalyAnalysisVersions, kind: class}
+  visibility: module-public
+  semantic_kind: configuration
+  description: Immutable build and provider/critic model, prompt, and schema versions bound when an anomaly job is created.
+  lifetime: Process configuration copied into each durable job.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter, thesis_trace_application]
+  references: []
+  fields: []
+- id: anomalyassessmentrecord
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py, symbol: AnomalyAssessmentRecord, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Versioned pending, succeeded, failed, or superseded assessment with immutable result and exact version tuple.
+  lifetime: Durable assessment stream lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter, research_domain]
+  references: [assessmentstatus, anomalydecisiontrace]
+  fields: []
+- id: anomalyassessmentstoreport
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py, symbol: AnomalyAssessmentStorePort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Semantic atomic assessment request, lease, source-load, result, supersession, audit, and query demand.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment, postgres_research_adapter]
+  references: [requestassessmentcommand, evaluateassessmentcommand, anomalyanalysisjob, anomalyanalysisversions, anomalyassessmentrecord, anomalydecisiontrace, sourcecharacteristicsnapshot]
+  fields: []
+- id: anomalyassessmentservice
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/service.py, symbol: AnomalyAssessmentService, kind: class}
+  visibility: module-public
+  semantic_kind: policy
+  description: Apply ALG-0003, ALG-0004, and ALG-0005 without clock, database, network, environment, or mutable global reads.
+  lifetime: Process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, research_domain]
+  references: [anomalyassessmentstoreport, anomalyanalysisversions, sourcecharacteristicsnapshot, requestassessmentcommand, evaluateassessmentcommand, anomalyassessmentrecord, anomalyanalysisjob]
+  fields: []
+- id: anomalysourcebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AnomalySourceBody, kind: class}
+  visibility: module-public
+  semantic_kind: wire-representation
+  description: Strict HTTP representation of one immutable snapshot identity; all source characteristics, category, and lineage remain Server-owned.
+  lifetime: One HTTP request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: anomalyassessmentrequestbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AnomalyAssessmentRequestBody, kind: class}
+  visibility: module-public
+  semantic_kind: wire-representation
+  description: Strict Owner anomaly request wire body.
+  lifetime: One HTTP request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: [anomalysourcebody]
+  fields: []
+- id: anomalygateresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AnomalyGateResponse, kind: class}
+  visibility: module-public
+  semantic_kind: wire-representation
+  description: Wire projection of one Server policy gate.
+  lifetime: One HTTP response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint, react_access_adapter]
+  references: []
+  fields: []
+- id: anomalytraceresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AnomalyTraceResponse, kind: class}
+  visibility: module-public
+  semantic_kind: wire-representation
+  description: Role-safe deterministic anomaly trace wire projection.
+  lifetime: One HTTP response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint, react_access_adapter]
+  references: [anomalygateresponse]
+  fields: []
+- id: anomalyassessmentresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: AnomalyAssessmentResponse, kind: class}
+  visibility: module-public
+  semantic_kind: wire-representation
+  description: Pending or committed Server anomaly projection.
+  lifetime: One HTTP response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint, react_access_adapter]
+  references: [anomalytraceresponse]
+  fields: []
+- id: analysissource
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/ai_ports.py, symbol: AnalysisSource, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Provider-neutral immutable source projection.
+  lifetime: One provider and critic call.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, openai_recommendation_adapter]
+  references: []
+  fields: []
+- id: recommendationproviderrequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/ai_ports.py, symbol: RecommendationProviderRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Exact version-bound provider request.
+  lifetime: One external request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, openai_recommendation_adapter]
+  references: [analysissource]
+  fields: []
+- id: recommendationcriticrequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/ai_ports.py, symbol: RecommendationCriticRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Exact independent critic request over immutable sources and candidate bytes.
+  lifetime: One external request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, openai_recommendation_adapter]
+  references: [analysissource]
+  fields: []
+- id: validatedanomalycandidate
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/ai_ports.py, symbol: ValidatedAnomalyCandidate, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Exact schema-valid source-bound candidate without policy authority.
+  lifetime: One worker attempt.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, research_domain]
+  references: []
+  fields: []
+- id: recommendationproviderport
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/ai_ports.py, symbol: RecommendationProviderPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Provider-neutral candidate-analysis demand.
+  lifetime: AI worker process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, openai_recommendation_adapter]
+  references: [recommendationproviderrequest]
+  fields: []
+- id: recommendationcriticport
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/ai_ports.py, symbol: RecommendationCriticPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Provider-neutral independent critic demand.
+  lifetime: AI worker process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, openai_recommendation_adapter]
+  references: [recommendationcriticrequest]
+  fields: []
+- id: anomalysourceinput
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: AnomalySourceInput, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 source input mapped from the wire into Research primitives.
+  lifetime: One admission.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: []
+- id: requestanomalyassessment
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: RequestAnomalyAssessment, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: L0 authenticated assessment admission request.
+  lifetime: One admission.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [anomalysourceinput]
+  fields: []
+- id: anomalygateresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: AnomalyGateResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 gate projection.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: []
+- id: anomalytraceresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: AnomalyTraceResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 deterministic trace projection.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [anomalygateresult]
+  fields: []
+- id: anomalyassessmentresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: AnomalyAssessmentResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 role-safe assessment projection.
+  lifetime: One request or query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [anomalytraceresult]
+  fields: []
+- id: anomalyassessmentflow
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: AnomalyAssessmentFlow, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Map authenticated actors and Research anomaly projections.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, fastapi_entrypoint]
+  references: [authenticatedactor, role, anomalysourceinput, anomalygateresult, anomalytraceresult, researchactorcontext, researchanomalyfacade, researchanomalysource, researchanomalyrequest, researchanomalyresult, requestanomalyassessment, anomalyassessmentresult]
+  fields: []
+- id: anomalyjobprocessor
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: AnomalyJobProcessor, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Lease one anomaly job and fail closed across provider critic validation and Research commit.
+  lifetime: AI worker process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, ai_worker_adapter]
+  references: [researchanomalyfacade, researchanomalyjob, researchanomalysource, researchvalidatedanomalycandidate, recommendationproviderport, recommendationcriticport, recommendationproviderrequest, recommendationcriticrequest, analysissource, validatedanomalycandidate]
+  fields: []
+- id: researchanomalysource
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalySource, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent primitive source mapping.
+  lifetime: One assessment.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields: []
+- id: researchanomalyrequest
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalyRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Research-parent anomaly admission request.
+  lifetime: One assessment admission.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: [researchanomalysource]
+  fields: []
+- id: researchanomalyjob
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalyJob, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Research-parent projection of a leased anomaly job.
+  lifetime: One worker attempt.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields: []
+- id: researchanomalygate
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalyGate, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent gate projection.
+  lifetime: One query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields: []
+- id: researchanomalytrace
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalyTrace, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent deterministic trace projection.
+  lifetime: One query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: [researchanomalygate]
+  fields: []
+- id: researchanomalyresult
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalyResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent role-safe assessment projection.
+  lifetime: One request or query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: [researchanomalytrace]
+  fields: []
+- id: researchanomalyfacade
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchAnomalyFacade, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Own Research-parent mappings into anomaly child commands jobs and results.
+  lifetime: API or AI worker process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, thesis_trace_application]
+  references: [anomalyassessmentservice, requestassessmentcommand, evaluateassessmentcommand, anomalyanalysisjob, anomalyassessmentrecord, sourcecharacteristicsnapshot, cluefeaturevector, researchactorcontext, researchanomalysource, researchanomalyrequest, researchanomalyjob, researchanomalygate, researchanomalytrace, researchanomalyresult, researchvalidatedanomalycandidate]
+  fields: []
+- id: researchvalidatedanomalycandidate
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchValidatedAnomalyCandidate, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent primitive copy of an exact schema-valid candidate and structured critic PASS without provider representations.
+  lifetime: One worker evaluation.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: candidate_schema_version, type: str, role: contract-control, meaning: Exact validated candidate schema.}
+  - {name: critic_schema_version, type: str, role: contract-control, meaning: Exact structured critic schema.}
+  - {name: critic_passed, type: bool, role: policy, meaning: True only when every required critic check is present and PASS.}
+- id: openairecommendationadapter
+  owner: openai_recommendation_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/openai_recommendation/adapter.py, symbol: OpenAIRecommendationAdapter, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Bounded Responses structured-output implementation of provider and critic ports.
+  lifetime: AI worker process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [recommendationproviderport, recommendationcriticport, recommendationproviderrequest, recommendationcriticrequest, analysissource]
+  fields: []
+- id: qualificationcasecategory
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py, symbol: QualificationCaseCategory, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Fixed ALG-0030 dataset stratum identity.
+  lifetime: Versioned dataset lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment]
+  references: []
+  values: [single_a_positive, independent_b_positive, insufficient_negative, lineage_conflict_negative, critic_failure_negative, market_novel_negative]
+  fields: []
+- id: qualificationversiontuple
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py, symbol: QualificationVersionTuple, kind: class}
+  visibility: module-public
+  semantic_kind: configuration
+  description: Exact build, policy, provider and critic model, prompt, and schema tuple bound to the versioned qualification dataset.
+  lifetime: Versioned dataset and one qualification run.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment]
+  references: []
+  fields: []
+- id: qualificationcase
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py, symbol: QualificationCase, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: One immutable labeled deterministic anomaly qualification case.
+  lifetime: Versioned dataset lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment]
+  references: [qualificationversiontuple, qualificationcasecategory, sourcecharacteristicsnapshot, cluefeaturevector, anomalyclass, sourcetier, clueroute]
+  fields: []
+- id: offlinequalificationresult
+  owner: anomaly_assessment
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py, symbol: OfflineQualificationResult, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Zero-tolerance ALG-0030 result and bounded failure identities.
+  lifetime: One version-bound offline qualification run.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [anomaly_assessment]
+  references: [qualificationversiontuple]
+  fields: []
 type_exclusions: []
 state_objects: []
 boundary_mappings:
@@ -3873,6 +4899,28 @@ boundary_mappings:
   state_objects: []
   allowed_edges: [research_domain->evidence_collection, research_domain->evidence_stage]
   forbidden_edges: [evidence_collection->evidence_stage, evidence_stage->evidence_collection]
+- id: source-snapshot-to-anomaly-assessment
+  interaction: Resolve immutable snapshot identities into Server-owned publisher characteristics, source category, and lineage components and bind them to one anomaly assessment.
+  producer: evidence_collection
+  consumer: anomaly_assessment
+  parent: research_domain
+  producer_contract: collectedsourcesnapshot
+  consumer_contract: sourcecharacteristicsnapshot
+  mapping_owner: research_domain
+  state_objects: []
+  allowed_edges: [research_domain->evidence_collection, research_domain->anomaly_assessment]
+  forbidden_edges: [evidence_collection->anomaly_assessment, anomaly_assessment->evidence_collection]
+- id: thesis-invalidation-to-anomaly-assessment
+  interaction: Map a future Server-owned immutable predeclared Thesis invalidation projection into Research assessment primitives without accepting client or AI authority.
+  producer: thesis_domain
+  consumer: research_domain
+  parent: thesis_trace_application
+  producer_contract: null
+  consumer_contract: null
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->thesis_domain, thesis_trace_application->research_domain]
+  forbidden_edges: [thesis_domain->research_domain, research_domain->thesis_domain, anomaly_assessment->thesis_domain]
 flows:
 - id: production_database_migration
   owner: backend_composition
@@ -4090,6 +5138,73 @@ flows:
     result: Owner and Learner queries observe one Server-authoritative stage version with source, actor, reason, policy and complete gate trace.
     events: []
   errors: []
+- id: owner_anomaly_assessment
+  owner: thesis_trace_application
+  description: Admit version-bound anomaly work, process it in the isolated AI worker, and expose only a committed fail-closed Research result.
+  trigger:
+    kind: command
+    ref: application.request_anomaly_assessment
+    description: An authenticated Owner requests assessment of immutable Evidence snapshots.
+  steps:
+  - id: owner_anomaly_assessment.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate the semantic actor and require Owner anomaly-request authority.
+    receives: [application.request_anomaly_assessment]
+    emits: [access.owner_authorized]
+    state_changes: []
+    side_effects: []
+  - id: owner_anomaly_assessment.admit
+    order: 2
+    module: anomaly_assessment
+    action: Validate immutable source identities and versions then atomically append pending assessment, audit, and anomaly-analysis-v1 job.
+    receives: [research.request_anomaly_assessment, research.anomaly_assessment_store]
+    emits: []
+    state_changes:
+    - One pending assessment version and one durable version-bound AI job commit together.
+    side_effects:
+    - One PostgreSQL transaction under Server-derived RLS context.
+  - id: owner_anomaly_assessment.analyze
+    order: 3
+    module: thesis_trace_application
+    action: Lease work, reload the exact immutable snapshots, invoke the provider, validate exact schema and citations, and require structured critic PASS.
+    receives: [application.process_anomaly_job, application.recommendation_provider, application.recommendation_critic, research.anomaly_assessment_store]
+    emits: []
+    state_changes:
+    - The durable job lease and attempt advance.
+    side_effects:
+    - Bounded provider and critic I/O in the isolated AI-worker process.
+  - id: owner_anomaly_assessment.evaluate
+    order: 4
+    module: anomaly_assessment
+    action: Run ALG-0003, ALG-0004, and ALG-0005 over immutable validated inputs and produce a complete fail-closed trace.
+    receives: [research.request_anomaly_assessment]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_anomaly_assessment.commit
+    order: 5
+    module: anomaly_assessment
+    action: Recheck every input version and current lease then atomically append succeeded, failed, or superseded result, audit, and terminal job state.
+    receives: [research.anomaly_assessment_store]
+    emits: []
+    state_changes:
+    - One immutable result version commits; a qualifying candidate remains would-be-Hard until qualification and activation.
+    side_effects:
+    - One PostgreSQL transaction; no notification, recommendation, or trade side effect.
+  - id: owner_anomaly_assessment.present
+    order: 6
+    module: thesis_trace_application
+    action: Return the latest role-safe committed Server assessment and deterministic trace to the responsive UI.
+    receives: [application.query_anomaly_assessment, research.query_anomaly_assessment]
+    emits: []
+    state_changes: []
+    side_effects:
+    - Generated HTTPS response; browser keeps only volatile view state.
+  success:
+    result: Owner and Learner observe pending or immutable Soft/would-be-Hard status with exact source and version trace while formal Hard remains disabled.
+    events: []
+  errors: []
 adr_exceptions:
 - rule_id: DEP001
   scope: backend_composition->thesis_trace_application
@@ -4181,6 +5296,21 @@ workloads:
     kind: command
   data:
     volume: one Evidence stream, one immutable source snapshot and six bounded sequential gates per confirmation
+  budgets: []
+- id: owner_anomaly_assessment_workload
+  flow: owner_anomaly_assessment
+  steps:
+  - owner_anomaly_assessment.authorize
+  - owner_anomaly_assessment.admit
+  - owner_anomaly_assessment.analyze
+  - owner_anomaly_assessment.evaluate
+  - owner_anomaly_assessment.commit
+  - owner_anomaly_assessment.present
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: one bounded immutable Evidence snapshot set, one provider candidate, one critic verdict, and one deterministic trace per assessment
   budgets: []
 execution_profiles:
 - id: linux_server_functional
@@ -4305,6 +5435,32 @@ execution_mappings:
   reentrant: false
   activation: authenticated HTTP command or query
   wcet: not established
+- id: anomaly_assessment_api_mapping
+  profile: linux_server_functional
+  workload: owner_anomaly_assessment_workload
+  steps:
+  - owner_anomaly_assessment.authorize
+  - owner_anomaly_assessment.admit
+  - owner_anomaly_assessment.present
+  units:
+  - api_process
+  serialization: one admission transaction per assessment idempotency key and one role-safe query per request
+  reentrant: false
+  activation: authenticated HTTP command or query
+  wcet: not established
+- id: anomaly_assessment_worker_mapping
+  profile: linux_server_functional
+  workload: owner_anomaly_assessment_workload
+  steps:
+  - owner_anomaly_assessment.analyze
+  - owner_anomaly_assessment.evaluate
+  - owner_anomaly_assessment.commit
+  units:
+  - ai_worker_process
+  serialization: leased per assessment concurrency key with stale input revalidation before result commit
+  reentrant: false
+  activation: durable anomaly-analysis-v1 job availability
+  wcet: not established
 execution_channels:
 - id: collection_job_channel
   profile: linux_server_functional
@@ -4319,6 +5475,19 @@ execution_channels:
   copy_policy: persist semantic payload once and map on claim
   timeout_ms: 300000
   overload: backpressure
+- id: anomaly_analysis_job_channel
+  profile: linux_server_functional
+  from_unit: api_process
+  to_unit: ai_worker_process
+  kind: queue
+  contract_refs:
+  - research.anomaly_assessment_store
+  - application.process_anomaly_job
+  capacity: 1000
+  ordering: serialized per assessment concurrency key; unrelated subjects may run in parallel
+  copy_policy: persist identifiers and exact input/version tuple once; load immutable snapshots on claim
+  timeout_ms: 300000
+  overload: fail-safe
 data_access_profiles: []
 microarchitecture_profiles: []
 platform_variants:

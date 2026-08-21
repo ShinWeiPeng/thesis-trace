@@ -11,6 +11,7 @@ flowchart TD
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
     n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
+    n_anomaly_assessment["anomaly_assessment (L2)<br/>管理來源分類、線索評分與 anomaly 閘門"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
     n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
@@ -21,6 +22,8 @@ flowchart TD
     n_restricted_source_fetch_adapter["restricted_source_fetch_adapter (L3+)<br/>依限制政策擷取外部 HTTPS 來源"]
     n_runtime_configuration_adapter["runtime_configuration_adapter (L3+)<br/>解析必要設定與檔案引用祕密"]
     n_collector_worker_adapter["collector_worker_adapter (L3+)<br/>啟動並探測收集器程序"]
+    n_ai_worker_adapter["ai_worker_adapter (L3+)<br/>執行隔離的 anomaly AI 工作"]
+    n_openai_recommendation_adapter["openai_recommendation_adapter (L3+)<br/>以嚴格結構化輸出提供候選與獨立 critic"]
     n_identity_registry["identity_registry (L2)<br/>管理外部身分與內部帳號映射"]
     n_session_management["session_management (L2)<br/>管理受限工作階段與角色設定檔"]
     n_account_administration["account_administration (L2)<br/>管理帳號生命週期與角色"]
@@ -42,11 +45,14 @@ flowchart TD
     n_backend_composition -.->|depends| n_research_domain
     n_backend_composition -.->|depends| n_evidence_collection
     n_backend_composition -.->|depends| n_evidence_stage
+    n_backend_composition -.->|depends| n_anomaly_assessment
     n_backend_composition -.->|depends| n_postgres_research_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
     n_backend_composition -.->|depends| n_postgres_access_adapter
     n_backend_composition -.->|depends| n_cloudflare_identity_adapter
+    n_backend_composition -.->|depends| n_ai_worker_adapter
+    n_backend_composition -.->|depends| n_openai_recommendation_adapter
     n_thesis_trace_application -->|owns| n_access_domain
     n_access_domain -.->|depends| n_identity_registry
     n_access_domain -.->|depends| n_session_management
@@ -56,9 +62,11 @@ flowchart TD
     n_research_domain -.->|depends| n_evidence_intake
     n_research_domain -.->|depends| n_evidence_collection
     n_research_domain -.->|depends| n_evidence_stage
+    n_research_domain -.->|depends| n_anomaly_assessment
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
     n_research_domain -->|owns| n_evidence_stage
+    n_research_domain -->|owns| n_anomaly_assessment
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
@@ -68,7 +76,10 @@ flowchart TD
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
     n_postgres_research_adapter -.->|depends| n_evidence_stage
+    n_postgres_research_adapter -.->|depends| n_anomaly_assessment
     n_restricted_source_fetch_adapter -.->|depends| n_evidence_collection
+    n_ai_worker_adapter -.->|depends| n_thesis_trace_application
+    n_openai_recommendation_adapter -.->|depends| n_thesis_trace_application
     n_access_domain -->|owns| n_identity_registry
     n_access_domain -->|owns| n_session_management
     n_access_domain -->|owns| n_account_administration
@@ -93,6 +104,7 @@ flowchart TD
 | `evidence_intake` | L2 | component | `research_domain` | implemented | Admit Evidence URLs and atomically create received state, audit fact, and collection job. |
 | `evidence_collection` | L2 | component | `research_domain` | implemented | Collect restricted sources and commit immutable snapshots or safe failures. |
 | `evidence_stage` | L2 | component | `research_domain` | implemented | Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation. |
+| `anomaly_assessment` | L2 | component | `research_domain` | implemented | Own versioned source classification, clue scoring, deterministic anomaly decisions, traces, durable analysis work, and offline qualification evaluation. |
 | `thesis_domain` | L1 | domain | `thesis_trace_application` | planned | Own Thesis lifecycle |
 | `portfolio_domain` | L1 | domain | `thesis_trace_application` | planned | Own holdings |
 | `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own immutable recommendations |
@@ -103,6 +115,8 @@ flowchart TD
 | `restricted_source_fetch_adapter` | L3+ | adapter | `-` | implemented | Fetch approved HTTPS sources through bounded DNS and transport policy. |
 | `runtime_configuration_adapter` | L3+ | adapter | `-` | implemented | Resolve mandatory runtime configuration and file-referenced secrets fail closed. |
 | `collector_worker_adapter` | L3+ | adapter | `-` | implemented | Start and probe the collector using only factories owned by the release composition root. |
+| `ai_worker_adapter` | L3+ | adapter | `-` | implemented | Run isolated version-bound anomaly analysis jobs through public application contracts. |
+| `openai_recommendation_adapter` | L3+ | adapter | `-` | implemented | Invoke OpenAI Responses structured outputs through provider-neutral application ports without granting policy authority. |
 | `identity_registry` | L2 | component | `access_domain` | implemented | Own preapproved provider-subject mappings to stable internal users without merging identities by email. |
 | `session_management` | L2 | component | `access_domain` | implemented | Own bounded application sessions and role-filtered session profiles derived from verified Access identity. |
 | `account_administration` | L2 | component | `access_domain` | implemented | Own Admin-visible account lifecycle commands while excluding all research and portfolio fields. |
@@ -117,15 +131,15 @@ flowchart TD
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **父模組:** `-`
 - **實作狀態:** `implemented`
-- **輸入 Ports:** `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`
-- **輸出 Ports:** `application.events`
+- **輸入 Ports:** `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`, `application.request_anomaly_assessment`, `application.query_anomaly_assessment`, `application.process_anomaly_job`
+- **輸出 Ports:** `application.events`, `application.recommendation_provider`, `application.recommendation_critic`
 - **輸出 Events:** `application.evidence_submission_completed`
 - **擁有狀態:** 無
 - **副作用:** Coordinate child commands and map child events. (`-`)
 - **異常:** `thesis_trace_application-error-1`: Reject unauthenticated or unauthorized commands → `application.evidence_submission_completed` → Reject unauthenticated or unauthorized commands; `thesis_trace_application-error-2`: Propagate child admission failures. → `application.evidence_submission_completed` → Propagate child admission failures.
 - **不變條件:** Sibling domains communicate only through this parent; Domain state remains child-owned.
 - **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)
-- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)
+- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`AnomalyAssessmentFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`AnomalyJobProcessor`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`RequestAnomalyAssessment`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalySourceInput`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyAssessmentResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyGateResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyTraceResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`RecommendationProviderPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationCriticPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationProviderRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`RecommendationCriticRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`AnalysisSource`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`ValidatedAnomalyCandidate`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)
 
 ### `backend_composition`
 
@@ -170,7 +184,7 @@ flowchart TD
 - **異常:** `research_domain-error-1`: Reject invalid URLs or stale company versions → `research.evidence_received` → Reject invalid URLs or stale company versions; `research_domain-error-2`: Record safe retry and terminal failures. → `research.evidence_received` → Record safe retry and terminal failures.
 - **不變條件:** State commits before success events; Evidence streams are serialized; Source records are immutable.
 - **程式入口:** [`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
-- **公開 Symbols:** [`ResearchActorContext`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchStageConfirmationRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageQuery`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacts`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
+- **公開 Symbols:** [`ResearchActorContext`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchStageConfirmationRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageQuery`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacts`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchAnomalySource`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchValidatedAnomalyCandidate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyJob`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyTrace`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
 
 ### `evidence_intake`
 
@@ -216,6 +230,21 @@ flowchart TD
 - **不變條件:** Canonical stage is derived only by ALG-0002 from confirmed facts.; Every committed version binds one immutable source snapshot, actor, Server time, reason and complete E1-E6 gate trace.; Learner and Admin, client-computed values and unconfirmed AI candidates have no mutation authority.
 - **程式入口:** [`EvidenceStageService`](../../backend/src/thesis_trace/modules/research/evidence_stage/service.py) (service)
 - **公開 Symbols:** [`StageActorContext`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`ConfirmDimensionFactsCommand`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`EvidenceStageRecord`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`EvidenceStageStorePort`](../../backend/src/thesis_trace/modules/research/evidence_stage/ports.py) (port)
+
+### `anomaly_assessment`
+
+- **目的:** Own versioned source classification, clue scoring, deterministic anomaly decisions, traces, durable analysis work, and offline qualification evaluation.
+- **父模組:** `research_domain`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `research.request_anomaly_assessment`, `research.query_anomaly_assessment`
+- **輸出 Ports:** `research.anomaly_assessment_store`
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Append pending assessments, leased jobs, immutable results, and audit through a demand-owned port. (`-`)
+- **異常:** 無
+- **不變條件:** AI, adapters, and clients cannot set source tier, clue score, anomaly class, qualification, notification, recommendation, or trade state.; Ambiguous source classification resolves downward and C-clue score never contributes to Hard quorum.; Formal Hard publication remains disabled until offline qualification, thirty consecutive shadow days, and explicit Owner activation all bind the exact version tuple.
+- **程式入口:** [`AnomalyAssessmentService`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/service.py) (service)
+- **公開 Symbols:** [`AnomalyAssessmentRecord`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`SourceTier`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`ClueRoute`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyClass`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AssessmentStatus`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`SourceCharacteristicSnapshot`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`ClueFeatureVector`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`DecisionGate`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyDecisionTrace`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`RequestAssessmentCommand`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`EvaluateAssessmentCommand`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyAnalysisJob`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyAnalysisVersions`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyAssessmentStorePort`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py) (port)<br>[`QualificationCaseCategory`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)<br>[`QualificationVersionTuple`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)<br>[`QualificationCase`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)<br>[`OfflineQualificationResult`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)
 
 ### `thesis_domain`
 
@@ -367,6 +396,36 @@ flowchart TD
 - **程式入口:** [`main`](../../backend/src/thesis_trace/entrypoints/collector_worker.py) (process-entrypoint)
 - **公開 Symbols:** [`main`](../../backend/src/thesis_trace/entrypoints/collector_worker.py) (process-entrypoint)
 
+### `ai_worker_adapter`
+
+- **目的:** Run isolated version-bound anomaly analysis jobs through public application contracts.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Lease anomaly work and invoke provider and critic through the composed application flow. (`-`)
+- **異常:** 無
+- **不變條件:** The worker never reads or writes private Research tables.; Provider latency or failure never blocks API, collector, or email processes.
+- **程式入口:** [`main`](../../backend/src/thesis_trace/entrypoints/ai_worker.py) (process-entrypoint)
+- **公開 Symbols:** [`main`](../../backend/src/thesis_trace/entrypoints/ai_worker.py) (process-entrypoint)
+
+### `openai_recommendation_adapter`
+
+- **目的:** Invoke OpenAI Responses structured outputs through provider-neutral application ports without granting policy authority.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Perform bounded HTTPS requests to the configured OpenAI Responses endpoint. (`-`)
+- **異常:** 無
+- **不變條件:** API keys and provider response bodies never cross the adapter boundary or enter logs.; Structured provider and critic bytes remain untrusted until application validation.
+- **程式入口:** [`OpenAIRecommendationAdapter`](../../backend/src/thesis_trace/adapters/openai_recommendation/adapter.py) (adapter)
+- **公開 Symbols:** [`OpenAIRecommendationAdapter`](../../backend/src/thesis_trace/adapters/openai_recommendation/adapter.py) (adapter)
+
 ### `identity_registry`
 
 - **目的:** Own preapproved provider-subject mappings to stable internal users without merging identities by email.
@@ -495,6 +554,11 @@ flowchart TD
 | `application.submit_evidence` | `thesis_trace_application` | input | command | async | Submit an authenticated Evidence URL intent.: Actor | `SubmitEvidenceRequest` |
 | `application.confirm_evidence_stage` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner intent to confirm dimension facts for one Evidence snapshot.: Actor, Evidence and snapshot identity, expected version, facts, reason and idempotency key. | `EvidenceStageFlow`, `ConfirmEvidenceStageRequest`, `EvidenceStageResult` |
 | `application.query_evidence_stage` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative Evidence stage projection.: Authenticated actor and Evidence identity. | `EvidenceStageFlow`, `QueryEvidenceStageRequest`, `EvidenceStageResult` |
+| `application.request_anomaly_assessment` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner request for a version-bound anomaly assessment.: Actor, Evidence and immutable snapshot identities, expected Evidence version, reason, and idempotency key; source characteristics and all policy values remain Server-owned. | `RequestAnomalyAssessment`, `AnomalyAssessmentResult` |
+| `application.query_anomaly_assessment` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative anomaly assessment projection and trace.: Authenticated actor and assessment identity. | `AnomalyAssessmentResult` |
+| `application.process_anomaly_job` | `thesis_trace_application` | input | command | async | Process one leased anomaly job through provider, strict validator, critic, Research policy, and atomic result commit.: Opaque lease, assessment/input versions, correlation metadata, and exact build/model/prompt/schema/critic/policy tuple. | `AnomalyJobProcessor` |
+| `application.recommendation_provider` | `thesis_trace_application` | output | dependency | async | Request one provider-neutral source-bound structured analysis candidate from an immutable snapshot.: Exact snapshot/version tuple and bounded schema/model/prompt identifiers; output remains untrusted bytes until validation. | `RecommendationProviderPort`, `RecommendationProviderRequest` |
+| `application.recommendation_critic` | `thesis_trace_application` | output | dependency | async | Independently verify availability, citation support, subject, time, invalidation, B independence, and newer-A conflict for one candidate.: Immutable source snapshot and candidate; output is an exact structured PASS or non-PASS result. | `RecommendationCriticPort`, `RecommendationCriticRequest` |
 | `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible evidence submission results.: Record identity | `SubmitEvidenceRequest` |
 | `access.authorize_owner` | `access_domain` | input | query | sync | Decide whether the actor may submit Owner evidence.: Immutable authenticated actor snapshot. | `AuthenticatedActor` |
 | `access.events` | `access_domain` | output | event | sync | Publish authorization facts after validation.: Actor ID and authorization purpose. | `AuthenticatedActor` |
@@ -519,6 +583,9 @@ flowchart TD
 | `research.query_evidence_stage` | `evidence_stage` | input | query | sync | Return the current Server-authoritative E-stage projection for an authorized Evidence stream.: Authenticated Owner or Learner, Evidence identity and current stage version. | `EvidenceStageRecord` |
 | `research.evidence_stage_store` | `evidence_stage` | output | dependency | sync | Atomically validate snapshot membership and expected version then append confirmed facts, derived stage, trace and audit.: Semantic stage record and idempotency key without SQL or wire representations. | `EvidenceStageStorePort` |
 | `research.evidence_stage_events` | `evidence_stage` | output | event | sync | Reserved for a later notification slice that will publish committed confirmed-fact and deterministic stage versions through a durable outbox.: Evidence identity, stage version, source snapshot, canonical stage and stable event identity. | `EvidenceStageRecord` |
+| `research.request_anomaly_assessment` | `anomaly_assessment` | input | command | sync | Atomically create a version-bound pending assessment, audit fact, and durable AI job.: Authorized Owner, immutable source snapshot identities/versions, bounded source-characteristic facts, reason, and idempotency key. | `RequestAssessmentCommand`, `AnomalyAssessmentRecord` |
+| `research.query_anomaly_assessment` | `anomaly_assessment` | input | query | sync | Return the latest committed role-safe anomaly assessment state and deterministic trace.: Authorized actor and assessment identity. | `AnomalyAssessmentRecord` |
+| `research.anomaly_assessment_store` | `anomaly_assessment` | output | dependency | async | Atomically request, lease, load immutable sources, commit, supersede, and query anomaly work under immutable version bindings.: Semantic assessment, job, decision trace, source snapshot, and audit values without SQL, provider, or wire representations. | `AnomalyAssessmentStorePort`, `AnomalyAnalysisJob`, `AnomalyAnalysisVersions`, `AnomalyAssessmentRecord` |
 | `research.clock` | `research_domain` | output | dependency | sync | Supply observed and retrieved times.: Time value with provenance. | `EvidenceRecord` |
 | `research.ids` | `research_domain` | output | dependency | sync | Generate persistent semantic identifiers.: Opaque unique identifier. | `EvidenceRecord` |
 | `research.events` | `research_domain` | output | event | async | Publish committed evidence lifecycle transitions.: Persistent event envelope and semantic payload. | `EvidenceRecord` |
@@ -564,7 +631,7 @@ flowchart TD
 | `researchstagegate` | `research_domain` | `ResearchStageGate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | 無 |
 | `researchstageresult` | `research_domain` | `ResearchStageResult` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | `researchstagefacts`, `researchstagegate` |
 | `researchstagefacade` | `research_domain` | `ResearchStageFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `thesis_trace_application`, `backend_composition` | `researchactorcontext`, `researchstageconfirmationrequest`, `researchstagequery`, `researchstagefacts`, `researchstagegate`, `researchstageresult`, `stageactorcontext`, `confirmdimensionfactscommand`, `dimensionfacts`, `sourceconfirmation`, `evidencestagerecord`, `evidencestageservice` |
-| `evidenceapi` | `fastapi_entrypoint` | `EvidenceApi` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `evidencestageflow`, `confirmevidencestagerequest`, `queryevidencestagerequest`, `evidencestageresult` |
+| `evidenceapi` | `fastapi_entrypoint` | `EvidenceApi` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `evidencestageflow`, `confirmevidencestagerequest`, `queryevidencestagerequest`, `evidencestageresult`, `anomalyassessmentflow`, `anomalysourceinput`, `requestanomalyassessment`, `anomalyassessmentresult` |
 | `submitevidencerequest` | `thesis_trace_application` | `SubmitEvidenceRequest` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application` | `authenticatedactor` |
 | `evidenceintakeflow` | `thesis_trace_application` | `EvidenceIntakeFlow` (class, `backend/src/thesis_trace/application/flows/evidence_intake.py`) | private | private-helper | `thesis_trace_application` | 無 |
 | `role` | `access_domain` | `Role` (enum, `backend/src/thesis_trace/modules/access/contracts.py`) | module-public | policy | `access_domain` | 無 |
@@ -598,7 +665,9 @@ flowchart TD
 | `postgresunavailable` | `postgres_research_adapter` | `PostgresUnavailable` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | domain-value | `backend_composition` | 無 |
 | `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter` |
 | `collectorruntime` | `backend_composition` | `CollectorRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `evidencecollector` |
-| `postgresevidencestore` | `postgres_research_adapter` | `PostgresEvidenceStore` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | adapter-binding | `backend_composition` | `databaseurlprovider`, `companyrecord`, `evidenceaccepted`, `evidencerecord`, `evidenceauditfact`, `collectionrequest`, `evidencestatus`, `leasedcollectionjob`, `collectedsourcesnapshot`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageevaluation` |
+| `anomalyprocessor` | `backend_composition` | `AnomalyProcessor` (protocol, `backend/src/thesis_trace/bootstrap/application.py`) | private | port | `backend_composition` | 無 |
+| `aiworkerruntime` | `backend_composition` | `AiWorkerRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `anomalyprocessor` |
+| `postgresevidencestore` | `postgres_research_adapter` | `PostgresEvidenceStore` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | adapter-binding | `backend_composition` | `databaseurlprovider`, `companyrecord`, `evidenceaccepted`, `evidencerecord`, `evidenceauditfact`, `collectionrequest`, `evidencestatus`, `leasedcollectionjob`, `collectedsourcesnapshot`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageevaluation`, `anomalyanalysisjob`, `anomalyanalysisversions`, `anomalyassessmentrecord`, `anomalyclass`, `anomalydecisiontrace`, `assessmentstatus`, `clueroute`, `decisiongate`, `evaluateassessmentcommand`, `requestassessmentcommand`, `sourcecharacteristicsnapshot`, `sourcetier` |
 | `sourcefetchfailure` | `restricted_source_fetch_adapter` | `SourceFetchFailure` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | module-public | domain-value | `evidence_collection` | 無 |
 | `transportresponse` | `restricted_source_fetch_adapter` | `TransportResponse` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | private | wire-representation | `restricted_source_fetch_adapter` | 無 |
 | `sourcetransport` | `restricted_source_fetch_adapter` | `SourceTransport` (protocol, `backend/src/thesis_trace/platform/source_fetch.py`) | private | port | `restricted_source_fetch_adapter` | `transportresponse` |
@@ -661,6 +730,52 @@ flowchart TD
 | `evidencestagerecord` | `evidence_stage` | `EvidenceStageRecord` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `dimensionfacts`, `stageevaluation` |
 | `evidencestagestoreport` | `evidence_stage` | `EvidenceStageStorePort` (protocol, `backend/src/thesis_trace/modules/research/evidence_stage/ports.py`) | module-public | port | `evidence_stage`, `postgres_research_adapter` | `confirmdimensionfactscommand`, `evidencestagerecord`, `stageevaluation` |
 | `evidencestageservice` | `evidence_stage` | `EvidenceStageService` (class, `backend/src/thesis_trace/modules/research/evidence_stage/service.py`) | module-public | policy | `backend_composition`, `research_domain` | `evidencestagestoreport`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageactorcontext`, `stageevaluation` |
+| `sourcetier` | `anomaly_assessment` | `SourceTier` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | policy | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `anomalyclass` | `anomaly_assessment` | `AnomalyClass` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | policy | `anomaly_assessment`, `postgres_research_adapter`, `research_domain` | 無 |
+| `assessmentstatus` | `anomaly_assessment` | `AssessmentStatus` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `decisiongate` | `anomaly_assessment` | `DecisionGate` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `sourcecharacteristicsnapshot` | `anomaly_assessment` | `SourceCharacteristicSnapshot` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `cluefeaturevector` | `anomaly_assessment` | `ClueFeatureVector` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `clueroute` | `anomaly_assessment` | `ClueRoute` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | policy | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `anomalydecisiontrace` | `anomaly_assessment` | `AnomalyDecisionTrace` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter`, `research_domain` | `anomalyclass`, `sourcetier`, `clueroute`, `decisiongate` |
+| `requestassessmentcommand` | `anomaly_assessment` | `RequestAssessmentCommand` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | command | `anomaly_assessment`, `research_domain` | `sourcecharacteristicsnapshot` |
+| `evaluateassessmentcommand` | `anomaly_assessment` | `EvaluateAssessmentCommand` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | command | `anomaly_assessment`, `research_domain` | `cluefeaturevector`, `sourcecharacteristicsnapshot` |
+| `anomalyanalysisjob` | `anomaly_assessment` | `AnomalyAnalysisJob` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | command | `anomaly_assessment`, `postgres_research_adapter`, `thesis_trace_application` | 無 |
+| `anomalyanalysisversions` | `anomaly_assessment` | `AnomalyAnalysisVersions` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | configuration | `anomaly_assessment`, `postgres_research_adapter`, `thesis_trace_application` | 無 |
+| `anomalyassessmentrecord` | `anomaly_assessment` | `AnomalyAssessmentRecord` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter`, `research_domain` | `assessmentstatus`, `anomalydecisiontrace` |
+| `anomalyassessmentstoreport` | `anomaly_assessment` | `AnomalyAssessmentStorePort` (protocol, `backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py`) | module-public | port | `anomaly_assessment`, `postgres_research_adapter` | `requestassessmentcommand`, `evaluateassessmentcommand`, `anomalyanalysisjob`, `anomalyanalysisversions`, `anomalyassessmentrecord`, `anomalydecisiontrace`, `sourcecharacteristicsnapshot` |
+| `anomalyassessmentservice` | `anomaly_assessment` | `AnomalyAssessmentService` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/service.py`) | module-public | policy | `backend_composition`, `research_domain` | `anomalyassessmentstoreport`, `anomalyanalysisversions`, `sourcecharacteristicsnapshot`, `requestassessmentcommand`, `evaluateassessmentcommand`, `anomalyassessmentrecord`, `anomalyanalysisjob` |
+| `anomalysourcebody` | `fastapi_entrypoint` | `AnomalySourceBody` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint` | 無 |
+| `anomalyassessmentrequestbody` | `fastapi_entrypoint` | `AnomalyAssessmentRequestBody` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint` | `anomalysourcebody` |
+| `anomalygateresponse` | `fastapi_entrypoint` | `AnomalyGateResponse` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint`, `react_access_adapter` | 無 |
+| `anomalytraceresponse` | `fastapi_entrypoint` | `AnomalyTraceResponse` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint`, `react_access_adapter` | `anomalygateresponse` |
+| `anomalyassessmentresponse` | `fastapi_entrypoint` | `AnomalyAssessmentResponse` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint`, `react_access_adapter` | `anomalytraceresponse` |
+| `analysissource` | `thesis_trace_application` | `AnalysisSource` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | composition-mapping | `thesis_trace_application`, `openai_recommendation_adapter` | 無 |
+| `recommendationproviderrequest` | `thesis_trace_application` | `RecommendationProviderRequest` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | command | `thesis_trace_application`, `openai_recommendation_adapter` | `analysissource` |
+| `recommendationcriticrequest` | `thesis_trace_application` | `RecommendationCriticRequest` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | command | `thesis_trace_application`, `openai_recommendation_adapter` | `analysissource` |
+| `validatedanomalycandidate` | `thesis_trace_application` | `ValidatedAnomalyCandidate` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | domain-value | `thesis_trace_application`, `research_domain` | 無 |
+| `recommendationproviderport` | `thesis_trace_application` | `RecommendationProviderPort` (protocol, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | port | `thesis_trace_application`, `openai_recommendation_adapter` | `recommendationproviderrequest` |
+| `recommendationcriticport` | `thesis_trace_application` | `RecommendationCriticPort` (protocol, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | port | `thesis_trace_application`, `openai_recommendation_adapter` | `recommendationcriticrequest` |
+| `anomalysourceinput` | `thesis_trace_application` | `AnomalySourceInput` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `requestanomalyassessment` | `thesis_trace_application` | `RequestAnomalyAssessment` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | `anomalysourceinput` |
+| `anomalygateresult` | `thesis_trace_application` | `AnomalyGateResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `anomalytraceresult` | `thesis_trace_application` | `AnomalyTraceResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | `anomalygateresult` |
+| `anomalyassessmentresult` | `thesis_trace_application` | `AnomalyAssessmentResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | `anomalytraceresult` |
+| `anomalyassessmentflow` | `thesis_trace_application` | `AnomalyAssessmentFlow` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | `authenticatedactor`, `role`, `anomalysourceinput`, `anomalygateresult`, `anomalytraceresult`, `researchactorcontext`, `researchanomalyfacade`, `researchanomalysource`, `researchanomalyrequest`, `researchanomalyresult`, `requestanomalyassessment`, `anomalyassessmentresult` |
+| `anomalyjobprocessor` | `thesis_trace_application` | `AnomalyJobProcessor` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `backend_composition`, `ai_worker_adapter` | `researchanomalyfacade`, `researchanomalyjob`, `researchanomalysource`, `researchvalidatedanomalycandidate`, `recommendationproviderport`, `recommendationcriticport`, `recommendationproviderrequest`, `recommendationcriticrequest`, `analysissource`, `validatedanomalycandidate` |
+| `researchanomalysource` | `research_domain` | `ResearchAnomalySource` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `researchanomalyrequest` | `research_domain` | `ResearchAnomalyRequest` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | command | `research_domain`, `thesis_trace_application` | `researchanomalysource` |
+| `researchanomalyjob` | `research_domain` | `ResearchAnomalyJob` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | command | `research_domain`, `thesis_trace_application` | 無 |
+| `researchanomalygate` | `research_domain` | `ResearchAnomalyGate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `researchanomalytrace` | `research_domain` | `ResearchAnomalyTrace` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | `researchanomalygate` |
+| `researchanomalyresult` | `research_domain` | `ResearchAnomalyResult` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | `researchanomalytrace` |
+| `researchanomalyfacade` | `research_domain` | `ResearchAnomalyFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `backend_composition`, `thesis_trace_application` | `anomalyassessmentservice`, `requestassessmentcommand`, `evaluateassessmentcommand`, `anomalyanalysisjob`, `anomalyassessmentrecord`, `sourcecharacteristicsnapshot`, `cluefeaturevector`, `researchactorcontext`, `researchanomalysource`, `researchanomalyrequest`, `researchanomalyjob`, `researchanomalygate`, `researchanomalytrace`, `researchanomalyresult`, `researchvalidatedanomalycandidate` |
+| `researchvalidatedanomalycandidate` | `research_domain` | `ResearchValidatedAnomalyCandidate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `openairecommendationadapter` | `openai_recommendation_adapter` | `OpenAIRecommendationAdapter` (class, `backend/src/thesis_trace/adapters/openai_recommendation/adapter.py`) | module-public | adapter-binding | `backend_composition` | `recommendationproviderport`, `recommendationcriticport`, `recommendationproviderrequest`, `recommendationcriticrequest`, `analysissource` |
+| `qualificationcasecategory` | `anomaly_assessment` | `QualificationCaseCategory` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | policy | `anomaly_assessment` | 無 |
+| `qualificationversiontuple` | `anomaly_assessment` | `QualificationVersionTuple` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | configuration | `anomaly_assessment` | 無 |
+| `qualificationcase` | `anomaly_assessment` | `QualificationCase` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | domain-value | `anomaly_assessment` | `qualificationversiontuple`, `qualificationcasecategory`, `sourcecharacteristicsnapshot`, `cluefeaturevector`, `anomalyclass`, `sourcetier`, `clueroute` |
+| `offlinequalificationresult` | `anomaly_assessment` | `OfflineQualificationResult` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | domain-value | `anomaly_assessment` | `qualificationversiontuple` |
 
 ## State Ownership
 
@@ -678,3 +793,5 @@ flowchart TD
 | `access-response-to-react-view`: Deliver server-authoritative role-discriminated Access projections to responsive React routes through generated transport contracts. | `thesis_trace_application` | `access_domain` | `thesis_trace_application` | `-` | `-` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain` | `access_domain->thesis_trace_application` |
 | `authenticated-owner-to-stage-command`: Map a revalidated Owner actor and HTTP intent into a semantic confirmed-dimension command without granting Access-to-Research dependency. | `access_domain` | `research_domain` | `thesis_trace_application` | `authenticatedactor` | `researchactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->research_domain` | `access_domain->research_domain`, `research_domain->access_domain`, `evidence_stage->access_domain`, `evidence_stage->fastapi_entrypoint` |
 | `source-snapshot-to-confirmed-stage`: Validate an immutable collected source snapshot as the provenance target of one confirmed fact and stage version. | `evidence_collection` | `evidence_stage` | `research_domain` | `collectedsourcesnapshot` | `evidencestagerecord` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->evidence_stage` | `evidence_collection->evidence_stage`, `evidence_stage->evidence_collection` |
+| `source-snapshot-to-anomaly-assessment`: Resolve immutable snapshot identities into Server-owned publisher characteristics, source category, and lineage components and bind them to one anomaly assessment. | `evidence_collection` | `anomaly_assessment` | `research_domain` | `collectedsourcesnapshot` | `sourcecharacteristicsnapshot` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->anomaly_assessment` | `evidence_collection->anomaly_assessment`, `anomaly_assessment->evidence_collection` |
+| `thesis-invalidation-to-anomaly-assessment`: Map a future Server-owned immutable predeclared Thesis invalidation projection into Research assessment primitives without accepting client or AI authority. | `thesis_domain` | `research_domain` | `thesis_trace_application` | `-` | `-` | `thesis_trace_application` | 無 | `thesis_trace_application->thesis_domain`, `thesis_trace_application->research_domain` | `thesis_domain->research_domain`, `research_domain->thesis_domain`, `anomaly_assessment->thesis_domain` |

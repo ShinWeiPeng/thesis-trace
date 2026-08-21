@@ -6,11 +6,11 @@ SPEC-0001 confirms the product behavior, but each record remains `proposed` unti
 | --- | --- | --- | --- |
 | [ALG-0001](ALG-0001-evidence-canonicalization.md) | Evidence admission, canonicalization, and deduplication | evidence_collection | Required |
 | [ALG-0002](ALG-0002-e-stage-derivation.md) | E0-E6 derivation | evidence_stage | Required |
-| [ALG-0003](ALG-0003-source-classification.md) | A/B/C source classification and independence | research | Required |
-| [ALG-0004](ALG-0004-clue-scoring.md) | C-clue scoring and routing | research | Required |
-| [ALG-0005](ALG-0005-anomaly-policy.md) | Hard/Soft anomaly policy | research | Required |
+| [ALG-0003](ALG-0003-source-classification.md) | A/B/C source classification and independence | anomaly_assessment | Required |
+| [ALG-0004](ALG-0004-clue-scoring.md) | C-clue scoring and routing | anomaly_assessment | Required |
+| [ALG-0005](ALG-0005-anomaly-policy.md) | Hard/Soft anomaly policy | anomaly_assessment | Required |
 | [ALG-0006](ALG-0006-provider-failover.md) | AI provider retry and failover | recommendation | Required |
-| [ALG-0007](ALG-0007-ai-output-validation.md) | AI output validation | recommendation | Required |
+| [ALG-0007](ALG-0007-ai-output-validation.md) | AI output validation | thesis_trace_application | Required |
 | [ALG-0008](ALG-0008-valuation-benchmarks.md) | Valuation benchmark calculation | portfolio | Required |
 | [ALG-0009](ALG-0009-valuation-validity.md) | Valuation validity and abstention | portfolio | Required |
 | [ALG-0010](ALG-0010-return-calculation.md) | Target price and return calculation | portfolio | Required |
@@ -33,7 +33,7 @@ SPEC-0001 confirms the product behavior, but each record remains `proposed` unti
 | [ALG-0027](ALG-0027-authorization.md) | Authorization and non-disclosing denial | access | Required |
 | [ALG-0028](ALG-0028-policy-lifecycle.md) | Policy activation and re-evaluation | application | Required |
 | [ALG-0029](ALG-0029-email-delivery.md) | Email retry and idempotency | notification | Required |
-| [ALG-0030](ALG-0030-anomaly-qualification.md) | Anomaly qualification gate | research | Required |
+| [ALG-0030](ALG-0030-anomaly-qualification.md) | Anomaly qualification gate | anomaly_assessment | Required |
 | [ALG-0031](ALG-0031-claude-qualification.md) | Claude qualification gate | recommendation | Required |
 
 ## Screened as not applicable

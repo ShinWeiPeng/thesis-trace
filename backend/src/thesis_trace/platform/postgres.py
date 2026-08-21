@@ -29,6 +29,20 @@ from thesis_trace.modules.research.evidence_stage.contracts import (
     StageEvaluation,
     confirmation_matches,
 )
+from thesis_trace.modules.research.anomaly_assessment.contracts import (
+    AnomalyAnalysisJob,
+    AnomalyAnalysisVersions,
+    AnomalyAssessmentRecord,
+    AnomalyClass,
+    AnomalyDecisionTrace,
+    AssessmentStatus,
+    ClueRoute,
+    DecisionGate,
+    EvaluateAssessmentCommand,
+    RequestAssessmentCommand,
+    SourceCharacteristicSnapshot,
+    SourceTier,
+)
 
 
 class DatabaseUrlProvider(Protocol):
@@ -159,6 +173,61 @@ CREATE POLICY evidence_stage_owner_insert ON research.evidence_stage_versions FO
   WITH CHECK (current_setting('app.role',true)='owner');
 """
 
+MIGRATION_0007 = """
+CREATE TABLE research.anomaly_assessments (
+  assessment_id uuid PRIMARY KEY,
+  version integer NOT NULL CHECK(version >= 1),
+  evidence_id text NOT NULL REFERENCES research.evidence_intakes(evidence_id),
+  evidence_version integer NOT NULL CHECK(evidence_version >= 1),
+  actor_id text NOT NULL,
+  source_snapshot_ids uuid[] NOT NULL CHECK(cardinality(source_snapshot_ids) > 0),
+  source_characteristics jsonb NOT NULL,
+  status text NOT NULL CHECK(status IN ('pending','succeeded','failed','superseded')),
+  reason text NOT NULL CHECK(length(btrim(reason)) > 0),
+  requested_at timestamptz NOT NULL,
+  trace jsonb,
+  failure_code text,
+  idempotency_key text NOT NULL UNIQUE
+);
+CREATE TABLE research.anomaly_analysis_jobs (
+  job_id uuid PRIMARY KEY,
+  assessment_id uuid NOT NULL UNIQUE REFERENCES research.anomaly_assessments(assessment_id),
+  assessment_version integer NOT NULL,
+  evidence_id text NOT NULL REFERENCES research.evidence_intakes(evidence_id),
+  evidence_version integer NOT NULL,
+  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','processing','retrying','succeeded','failed','dead_letter','superseded')),
+  attempt integer NOT NULL DEFAULT 0,
+  available_at timestamptz NOT NULL DEFAULT now(),
+  lease_token uuid,
+  lease_expires_at timestamptz,
+  build_version text NOT NULL,
+  policy_version text NOT NULL,
+  candidate_schema_version text NOT NULL,
+  candidate_prompt_version text NOT NULL,
+  provider_model_version text NOT NULL,
+  critic_schema_version text NOT NULL,
+  critic_prompt_version text NOT NULL,
+  critic_model_version text NOT NULL,
+  failure_code text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE research.anomaly_assessments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE research.anomaly_assessments FORCE ROW LEVEL SECURITY;
+CREATE POLICY anomaly_assessment_read ON research.anomaly_assessments FOR SELECT
+  USING (current_setting('app.role',true) IN ('owner','learner'));
+CREATE POLICY anomaly_assessment_owner_insert ON research.anomaly_assessments FOR INSERT
+  WITH CHECK (current_setting('app.role',true)='owner');
+CREATE POLICY anomaly_assessment_owner_update ON research.anomaly_assessments FOR UPDATE
+  USING (current_setting('app.role',true) IN ('owner','ai_worker'))
+  WITH CHECK (current_setting('app.role',true) IN ('owner','ai_worker'));
+CREATE POLICY anomaly_assessment_ai_worker_read ON research.anomaly_assessments FOR SELECT
+  USING (current_setting('app.role',true)='ai_worker');
+CREATE POLICY anomaly_evidence_ai_worker_read ON research.evidence_intakes FOR SELECT
+  USING (current_setting('app.role',true)='ai_worker');
+CREATE INDEX anomaly_job_due_idx ON research.anomaly_analysis_jobs(state,available_at);
+"""
+
 MIGRATIONS: tuple[tuple[int, str, str], ...] = (
     (1, "wave0_company_evidence", MIGRATION_0001),
     (2, "access_identity_session_confirmation", MIGRATION_0002),
@@ -166,6 +235,7 @@ MIGRATIONS: tuple[tuple[int, str, str], ...] = (
     (4, "recovery_session_policy_binding", MIGRATION_0004),
     (5, "source_normalization_policy_version", MIGRATION_0005),
     (6, "owner_confirmed_evidence_stage", MIGRATION_0006),
+    (7, "shadow_first_anomaly_assessment", MIGRATION_0007),
 )
 
 
@@ -267,8 +337,8 @@ class PostgresEvidenceStore:
                 connection.execute("SELECT set_config('app.user_id',%s,true)", (context.user_id,))
                 connection.execute("SELECT set_config('app.role',%s,true)", (context.role.value,))
                 connection.execute("SELECT set_config('app.request_id',%s,true)", (context.ownership_scope,))
-            elif self._runtime_role == "collector":
-                connection.execute("SELECT set_config('app.role','collector',true)")
+            elif self._runtime_role in {"collector", "ai_worker"}:
+                connection.execute("SELECT set_config('app.role',%s,true)", (self._runtime_role,))
             yield connection
 
     def create_company(self, ticker: str, name: str) -> CompanyRecord:
@@ -395,6 +465,88 @@ class PostgresEvidenceStore:
         identifiable_profit_or_cash_flow,consecutive_financial_quarters,stage,gate_trace,policy_version
         FROM research.evidence_stage_versions"""
 
+    @staticmethod
+    def _source_values(source: SourceCharacteristicSnapshot) -> dict[str, Any]:
+        return {
+            "source_snapshot_id": source.source_snapshot_id,
+            "publisher_identity": source.publisher_identity,
+            "authoritative_first_party": source.authoritative_first_party,
+            "formal_record": source.formal_record,
+            "editorial_responsibility": source.editorial_responsibility,
+            "attributed_author": source.attributed_author,
+            "verifiable_primary_evidence": source.verifiable_primary_evidence,
+            "underlying_evidence_id": source.underlying_evidence_id,
+            "canonical_url": source.canonical_url,
+            "excerpt": source.excerpt,
+            "retrieved_at": source.retrieved_at,
+            "published_at": source.published_at,
+            "observed_at": source.observed_at,
+        }
+
+    @staticmethod
+    def _source_characteristics_match(
+        stored: object, requested: tuple[SourceCharacteristicSnapshot, ...]
+    ) -> bool:
+        if not isinstance(stored, list) or len(stored) != len(requested):
+            return False
+        for value, source in zip(stored, requested, strict=True):
+            if not isinstance(value, dict):
+                return False
+            if value.get("source_snapshot_id") != source.source_snapshot_id:
+                return False
+        return True
+
+    @staticmethod
+    def _trace_values(trace: AnomalyDecisionTrace) -> dict[str, Any]:
+        return {
+            "anomaly_class": trace.anomaly_class.value,
+            "source_tiers": [tier.value for tier in trace.source_tiers],
+            "clue_score": trace.clue_score,
+            "clue_route": None if trace.clue_route is None else trace.clue_route.value,
+            "gates": [
+                {"gate": gate.gate, "passed": gate.passed, "code": gate.code}
+                for gate in trace.gates
+            ],
+            "policy_version": trace.policy_version,
+        }
+
+    @staticmethod
+    def _anomaly_record(row: Any) -> AnomalyAssessmentRecord:
+        trace_data = row[9]
+        trace = None
+        if trace_data is not None:
+            trace = AnomalyDecisionTrace(
+                anomaly_class=AnomalyClass(trace_data["anomaly_class"]),
+                source_tiers=tuple(SourceTier(value) for value in trace_data["source_tiers"]),
+                clue_score=trace_data["clue_score"],
+                clue_route=None if trace_data["clue_route"] is None else ClueRoute(trace_data["clue_route"]),
+                gates=tuple(
+                    DecisionGate(str(item["gate"]), bool(item["passed"]), str(item["code"]))
+                    for item in trace_data["gates"]
+                ),
+                policy_version=str(trace_data["policy_version"]),
+            )
+        requested_at = row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8])
+        return AnomalyAssessmentRecord(
+            assessment_id=str(row[0]),
+            version=int(row[1]),
+            evidence_id=str(row[2]),
+            evidence_version=int(row[3]),
+            actor_id=str(row[4]),
+            source_snapshot_ids=tuple(str(value) for value in row[5]),
+            status=AssessmentStatus(row[6]),
+            reason=str(row[7]),
+            requested_at=requested_at,
+            trace=trace,
+            failure_code=None if row[10] is None else str(row[10]),
+        )
+
+    @staticmethod
+    def _anomaly_select() -> str:
+        return """SELECT assessment_id,version,evidence_id,evidence_version,actor_id,
+        source_snapshot_ids,status,reason,requested_at,trace,failure_code
+        FROM research.anomaly_assessments"""
+
     def commit_confirmation(
         self,
         *,
@@ -469,6 +621,260 @@ class PostgresEvidenceStore:
                 (evidence_id,),
             ).fetchone()
         return None if row is None else self._stage_record(row)
+
+    def request_assessment(
+        self,
+        *,
+        command: RequestAssessmentCommand,
+        requested_at: str,
+        policy_version: str,
+        versions: AnomalyAnalysisVersions,
+    ) -> AnomalyAssessmentRecord:
+        with self._connection() as connection:
+            with connection.transaction():
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"anomaly-request:{command.idempotency_key}",),
+                )
+                replay_row = connection.execute(
+                    f"{self._anomaly_select()} WHERE idempotency_key=%s",
+                    (command.idempotency_key,),
+                ).fetchone()
+                if replay_row is not None:
+                    replay = self._anomaly_record(replay_row)
+                    replay_sources = connection.execute(
+                        "SELECT source_characteristics FROM research.anomaly_assessments "
+                        "WHERE idempotency_key=%s",
+                        (command.idempotency_key,),
+                    ).fetchone()[0]
+                    if (
+                        replay.evidence_id != command.evidence_id
+                        or replay.evidence_version != command.expected_evidence_version
+                        or replay.actor_id != command.actor_id
+                        or replay.source_snapshot_ids != tuple(source.source_snapshot_id for source in command.sources)
+                        or not self._source_characteristics_match(replay_sources, command.sources)
+                        or replay.reason != command.reason
+                    ):
+                        raise ValueError("idempotency_conflict")
+                    return replay
+                source_ids = tuple(source.source_snapshot_id for source in command.sources)
+                target = connection.execute(
+                    "SELECT version,status,company_id FROM research.evidence_intakes "
+                    "WHERE evidence_id=%s FOR UPDATE",
+                    (command.evidence_id,),
+                ).fetchone()
+                if (
+                    target is None
+                    or str(target[1]) != "succeeded"
+                    or int(target[0]) != command.expected_evidence_version
+                ):
+                    raise ValueError("version_conflict") if target is not None else LookupError("resource_unavailable")
+                linked_rows = connection.execute(
+                    """SELECT DISTINCT ON (s.snapshot_id) s.snapshot_id::text,s.canonical_url,s.publisher,
+                    s.retrieved_at::text,s.published_at::text,s.observed_at::text,s.excerpt,
+                    s.source_category,s.lineage
+                    FROM research.source_observations o
+                    JOIN research.source_snapshots s USING(snapshot_id)
+                    JOIN research.evidence_intakes e ON e.evidence_id=o.evidence_id
+                    WHERE e.company_id=%s AND e.status='succeeded'
+                    AND s.snapshot_id=ANY(%s::uuid[])
+                    ORDER BY s.snapshot_id,o.observed_at DESC""",
+                    (str(target[2]), list(source_ids)),
+                ).fetchall()
+                if len(linked_rows) != len(source_ids):
+                    raise LookupError("resource_unavailable")
+                linked_by_id = {str(item[0]): item for item in linked_rows}
+                stored_sources = []
+                for source in command.sources:
+                    linked = linked_by_id[source.source_snapshot_id]
+                    category = str(linked[7]).strip().upper()
+                    stored_sources.append(
+                        SourceCharacteristicSnapshot(
+                            source_snapshot_id=source.source_snapshot_id,
+                            publisher_identity=str(linked[2]),
+                            authoritative_first_party=category == "A",
+                            formal_record=category == "A",
+                            editorial_responsibility=category == "B",
+                            attributed_author=category == "B",
+                            verifiable_primary_evidence=category == "B",
+                            underlying_evidence_id=(
+                                None if linked[8] is None or not str(linked[8]).strip()
+                                else str(linked[8])
+                            ),
+                            canonical_url=str(linked[1]),
+                            excerpt=None if linked[6] is None else str(linked[6]),
+                            retrieved_at=str(linked[3]),
+                            published_at=None if linked[4] is None else str(linked[4]),
+                            observed_at=None if linked[5] is None else str(linked[5]),
+                        )
+                    )
+                assessment_id = uuid.uuid4()
+                row = connection.execute(
+                    f"""INSERT INTO research.anomaly_assessments(
+                    assessment_id,version,evidence_id,evidence_version,actor_id,source_snapshot_ids,
+                    source_characteristics,status,reason,requested_at,idempotency_key)
+                    VALUES (%s,1,%s,%s,%s,%s::uuid[],%s::jsonb,'pending',%s,%s::timestamptz,%s)
+                    RETURNING {self._anomaly_select().split('FROM ')[0].removeprefix('SELECT ')}""",
+                    (
+                        assessment_id,
+                        command.evidence_id,
+                        command.expected_evidence_version,
+                        command.actor_id,
+                        list(source_ids),
+                        json.dumps([self._source_values(source) for source in stored_sources], separators=(",", ":")),
+                        command.reason,
+                        requested_at,
+                        command.idempotency_key,
+                    ),
+                ).fetchone()
+                connection.execute(
+                    """INSERT INTO research.anomaly_analysis_jobs(
+                    job_id,assessment_id,assessment_version,evidence_id,evidence_version,
+                    build_version,policy_version,candidate_schema_version,candidate_prompt_version,
+                    provider_model_version,critic_schema_version,critic_prompt_version,
+                    critic_model_version)
+                    VALUES (%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (
+                        uuid.uuid4(), assessment_id, command.evidence_id,
+                        command.expected_evidence_version, versions.build_version, policy_version,
+                        versions.candidate_schema_version, versions.candidate_prompt_version,
+                        versions.provider_model_version, versions.critic_schema_version,
+                        versions.critic_prompt_version, versions.critic_model_version,
+                    ),
+                )
+                connection.execute(
+                    """INSERT INTO research.audit_events(event_id,actor_id,action,subject_id,subject_version,occurred_at)
+                    VALUES (%s,%s,'anomaly.assessment.requested',%s,1,%s::timestamptz)""",
+                    (uuid.uuid4(), command.actor_id, str(assessment_id), requested_at),
+                )
+        return self._anomaly_record(row)
+
+    def claim_anomaly_job(self) -> AnomalyAnalysisJob | None:
+        lease_token = uuid.uuid4()
+        with self._connection() as connection:
+            row = connection.execute(
+                """WITH candidate AS (
+                  SELECT job_id FROM research.anomaly_analysis_jobs
+                  WHERE available_at <= now() AND (
+                    state IN ('pending','retrying') OR
+                    (state='processing' AND lease_expires_at <= now())
+                  ) ORDER BY created_at,job_id FOR UPDATE SKIP LOCKED LIMIT 1
+                ) UPDATE research.anomaly_analysis_jobs j
+                  SET state='processing',attempt=j.attempt+1,lease_token=%s,
+                      lease_expires_at=now()+(%s * interval '1 second'),updated_at=now()
+                  FROM candidate WHERE j.job_id=candidate.job_id
+                  RETURNING j.job_id,j.assessment_id,j.assessment_version,j.evidence_id,
+                    j.evidence_version,j.attempt,j.build_version,j.policy_version,
+                    j.candidate_schema_version,j.candidate_prompt_version,j.provider_model_version,
+                    j.critic_schema_version,j.critic_prompt_version,j.critic_model_version""",
+                (lease_token, self._lease_seconds),
+            ).fetchone()
+        if row is None:
+            return None
+        return AnomalyAnalysisJob(
+            job_id=str(row[0]), assessment_id=str(row[1]), assessment_version=int(row[2]),
+            evidence_id=str(row[3]), evidence_version=int(row[4]), lease_token=str(lease_token),
+            attempt=int(row[5]), build_version=str(row[6]), policy_version=str(row[7]),
+            candidate_schema_version=str(row[8]), candidate_prompt_version=str(row[9]),
+            provider_model_version=str(row[10]), critic_schema_version=str(row[11]),
+            critic_prompt_version=str(row[12]), critic_model_version=str(row[13]),
+        )
+
+    def load_anomaly_sources(
+        self, assessment_id: str
+    ) -> tuple[SourceCharacteristicSnapshot, ...]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT source_characteristics FROM research.anomaly_assessments "
+                "WHERE assessment_id=%s::uuid",
+                (assessment_id,),
+            ).fetchone()
+        if row is None:
+            return ()
+        return tuple(
+            SourceCharacteristicSnapshot(
+                source_snapshot_id=str(item["source_snapshot_id"]),
+                publisher_identity=str(item["publisher_identity"]),
+                authoritative_first_party=bool(item["authoritative_first_party"]),
+                formal_record=bool(item["formal_record"]),
+                editorial_responsibility=bool(item["editorial_responsibility"]),
+                attributed_author=bool(item["attributed_author"]),
+                verifiable_primary_evidence=bool(item["verifiable_primary_evidence"]),
+                underlying_evidence_id=(
+                    None
+                    if item.get("underlying_evidence_id") is None
+                    else str(item["underlying_evidence_id"])
+                ),
+                canonical_url=None if item.get("canonical_url") is None else str(item["canonical_url"]),
+                excerpt=None if item.get("excerpt") is None else str(item["excerpt"]),
+                retrieved_at=None if item.get("retrieved_at") is None else str(item["retrieved_at"]),
+                published_at=None if item.get("published_at") is None else str(item["published_at"]),
+                observed_at=None if item.get("observed_at") is None else str(item["observed_at"]),
+            )
+            for item in row[0]
+        )
+
+    def commit_anomaly_result(
+        self,
+        *,
+        command: EvaluateAssessmentCommand,
+        trace: AnomalyDecisionTrace,
+    ) -> AnomalyAssessmentRecord:
+        with self._connection() as connection:
+            with connection.transaction():
+                row = connection.execute(
+                    f"{self._anomaly_select()} WHERE assessment_id=%s::uuid FOR UPDATE",
+                    (command.assessment_id,),
+                ).fetchone()
+                if row is None:
+                    raise LookupError("resource_unavailable")
+                current = self._anomaly_record(row)
+                if current.version != command.expected_assessment_version:
+                    raise ValueError("version_conflict")
+                job = connection.execute(
+                    """SELECT evidence_version FROM research.anomaly_analysis_jobs
+                    WHERE assessment_id=%s::uuid AND state='processing' AND lease_token::text=%s FOR UPDATE""",
+                    (command.assessment_id, command.lease_token),
+                ).fetchone()
+                if job is None:
+                    raise ValueError("lease_unavailable")
+                source_ids = tuple(source.source_snapshot_id for source in command.sources)
+                if source_ids != current.source_snapshot_ids:
+                    raise ValueError("source_version_conflict")
+                evidence_version = connection.execute(
+                    "SELECT version FROM research.evidence_intakes WHERE evidence_id=%s",
+                    (current.evidence_id,),
+                ).fetchone()[0]
+                stale = int(evidence_version) != current.evidence_version or int(job[0]) != current.evidence_version
+                status = AssessmentStatus.SUPERSEDED if stale else AssessmentStatus.SUCCEEDED
+                failure_code = "stale_input" if stale else None
+                updated = connection.execute(
+                    f"""UPDATE research.anomaly_assessments
+                    SET version=version+1,status=%s,trace=%s::jsonb,failure_code=%s
+                    WHERE assessment_id=%s::uuid
+                    RETURNING {self._anomaly_select().split('FROM ')[0].removeprefix('SELECT ')}""",
+                    (status.value, json.dumps(self._trace_values(trace), separators=(",", ":")), failure_code, command.assessment_id),
+                ).fetchone()
+                connection.execute(
+                    """UPDATE research.anomaly_analysis_jobs
+                    SET state=%s,lease_token=NULL,lease_expires_at=NULL,updated_at=now()
+                    WHERE assessment_id=%s::uuid""",
+                    ("superseded" if stale else "succeeded", command.assessment_id),
+                )
+                connection.execute(
+                    """INSERT INTO research.audit_events(event_id,actor_id,action,subject_id,subject_version)
+                    VALUES (%s,'ai-worker','anomaly.assessment.completed',%s,%s)""",
+                    (uuid.uuid4(), command.assessment_id, current.version + 1),
+                )
+        return self._anomaly_record(updated)
+
+    def get_anomaly_assessment(self, assessment_id: str) -> AnomalyAssessmentRecord | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                f"{self._anomaly_select()} WHERE assessment_id=%s::uuid",
+                (assessment_id,),
+            ).fetchone()
+        return None if row is None else self._anomaly_record(row)
 
     def claim_collection_job(self) -> LeasedCollectionJob | None:
         lease_token = uuid.uuid4()
@@ -585,7 +991,13 @@ class PostgresEvidenceStore:
 
     def delete_all_for_test(self) -> None:
         with self._connection() as connection:
-            connection.execute("TRUNCATE research.evidence_stage_versions,research.source_observations,research.canonical_sources,research.source_snapshots,research.collection_jobs,research.audit_events,research.idempotency_receipts,research.evidence_intakes,research.companies CASCADE")
+            connection.execute(
+                "TRUNCATE research.anomaly_analysis_jobs,research.anomaly_assessments,"
+                "research.evidence_stage_versions,research.source_observations,"
+                "research.canonical_sources,research.source_snapshots,research.collection_jobs,"
+                "research.audit_events,research.idempotency_receipts,research.evidence_intakes,"
+                "research.companies CASCADE"
+            )
 
     def count_audit_events(self, evidence_id: str) -> int:
         with self._connection() as connection:
@@ -594,6 +1006,15 @@ class PostgresEvidenceStore:
     def count_collection_jobs(self, evidence_id: str) -> int:
         with self._connection() as connection:
             return int(connection.execute("SELECT count(*) FROM research.collection_jobs WHERE evidence_id=%s", (evidence_id,)).fetchone()[0])
+
+    def count_anomaly_jobs(self, assessment_id: str) -> int:
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    "SELECT count(*) FROM research.anomaly_analysis_jobs WHERE assessment_id=%s::uuid",
+                    (assessment_id,),
+                ).fetchone()[0]
+            )
 
     def count_source_snapshots(self) -> int:
         with self._connection() as connection:

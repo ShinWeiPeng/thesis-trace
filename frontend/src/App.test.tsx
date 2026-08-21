@@ -5,12 +5,12 @@ import App from "./App";
 import type { EvidenceClient } from "./api/evidenceClient";
 const company = { company_id: "2330", ticker: "2330", name: "台積電", version: 1 };
 it("selects a server company and shows its server receipt", async () => {
-  const user = userEvent.setup(); const client: EvidenceClient = { listCompanies: vi.fn().mockResolvedValue([company]), createCompany: vi.fn(), submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 1, status: "received", company, submittedUrl: "https://example.com/a" }), getEvidenceIntake: vi.fn(), getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn() };
+  const user = userEvent.setup(); const client: EvidenceClient = { listCompanies: vi.fn().mockResolvedValue([company]), createCompany: vi.fn(), submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 1, status: "received", company, submittedUrl: "https://example.com/a" }), getEvidenceIntake: vi.fn(), getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn(), requestAnomalyAssessment: vi.fn(), getAnomalyAssessment: vi.fn() };
   render(<App client={client} />); await screen.findByRole("option", { name: "2330 · 台積電" }); await user.type(screen.getByLabelText("Evidence URL"), "https://example.com/a"); await user.click(screen.getByRole("button", { name: "提交 Evidence" }));
   expect(await screen.findByRole("status")).toHaveTextContent("已接收"); expect(client.submitEvidenceUrl).toHaveBeenCalledWith({ company, submittedUrl: "https://example.com/a" });
 });
 it("creates a company before evidence submission", async () => {
-  const user = userEvent.setup(); const created = { ...company, company_id: "2454", ticker: "2454", name: "聯發科" }; const client: EvidenceClient = { listCompanies: vi.fn().mockResolvedValue([]), createCompany: vi.fn().mockResolvedValue(created), submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-2", version: 1, status: "received", company: created, submittedUrl: "https://example.com/b" }), getEvidenceIntake: vi.fn(), getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn() };
+  const user = userEvent.setup(); const created = { ...company, company_id: "2454", ticker: "2454", name: "聯發科" }; const client: EvidenceClient = { listCompanies: vi.fn().mockResolvedValue([]), createCompany: vi.fn().mockResolvedValue(created), submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-2", version: 1, status: "received", company: created, submittedUrl: "https://example.com/b" }), getEvidenceIntake: vi.fn(), getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn(), requestAnomalyAssessment: vi.fn(), getAnomalyAssessment: vi.fn() };
   render(<App client={client} />); await user.click(await screen.findByRole("button", { name: "建立新公司" })); await user.type(screen.getByLabelText("股票代號"), "2454"); await user.type(screen.getByLabelText("公司名稱"), "聯發科"); await user.type(screen.getByLabelText("Evidence URL"), "https://example.com/b"); await user.click(screen.getByRole("button", { name: "建立公司並提交 Evidence" }));
   expect(client.createCompany).toHaveBeenCalledWith({ ticker: "2454", name: "聯發科" });
 });
@@ -35,6 +35,7 @@ it("lets an Owner confirm facts and displays only the server-derived E-stage", a
     submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 1, status: "received", company, submittedUrl: "https://example.com/a" }),
     getEvidenceIntake: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 2, status: "succeeded", source_snapshot_id: "snapshot-1" }),
     getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn().mockResolvedValue(stage),
+    requestAnomalyAssessment: vi.fn(), getAnomalyAssessment: vi.fn(),
   };
 
   render(<App client={client} />);
@@ -54,4 +55,39 @@ it("lets an Owner confirm facts and displays only the server-derived E-stage", a
   }));
   expect(await screen.findByLabelText("伺服器推導階段")).toHaveTextContent("E3");
   expect(screen.getByText("由伺服器依 e-stage-v1 推導")).toBeInTheDocument();
+});
+
+it("creates a pending shadow assessment and renders a server would-be-Hard trace without formal Hard", async () => {
+  const user = userEvent.setup();
+  const pending = { assessment_id: "a-1", evidence_id: "e-1", evidence_version: 2, failure_code: null, requested_at: "2026-08-21T10:00:00Z", source_snapshot_ids: ["snapshot-1"], status: "pending" as const, trace: null, version: 1 };
+  const completed = { ...pending, status: "succeeded" as const, version: 2, trace: { anomaly_class: "would_be_hard" as const, clue_route: null, clue_score: null, policy_version: "anomaly-policy-v1", source_tiers: ["A" as const], gates: [{ gate: "predeclared_invalidation", passed: true, code: "passed" }] } };
+  const superseded = { ...completed, status: "superseded" as const, failure_code: "stale_input", version: 3 };
+  const client: EvidenceClient = {
+    listCompanies: vi.fn().mockResolvedValue([company]), createCompany: vi.fn(),
+    submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 1, status: "received", company, submittedUrl: "https://example.com/a" }),
+    getEvidenceIntake: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 2, status: "succeeded", source_snapshot_id: "snapshot-1" }),
+    getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn(),
+    requestAnomalyAssessment: vi.fn().mockResolvedValue(pending),
+    getAnomalyAssessment: vi.fn().mockResolvedValueOnce(completed).mockResolvedValueOnce(superseded),
+  };
+  render(<App client={client} />);
+  await screen.findByRole("option", { name: "2330 · 台積電" });
+  await user.type(screen.getByLabelText("Evidence URL"), "https://example.com/a");
+  await user.click(screen.getByRole("button", { name: "提交 Evidence" }));
+  await user.click(screen.getByRole("button", { name: "重新整理狀態" }));
+  await user.type(await screen.findByLabelText("評估理由"), "review disclosure");
+  await user.click(screen.getByRole("button", { name: "開始 Shadow anomaly 評估" }));
+
+  expect(await screen.findByText("等待獨立 AI worker")).toBeInTheDocument();
+  expect(client.requestAnomalyAssessment).toHaveBeenCalledWith("e-1", expect.objectContaining({
+    expected_evidence_version: 2,
+    reason: "review disclosure",
+    sources: [{ source_snapshot_id: "snapshot-1" }],
+  }));
+  await user.click(screen.getByRole("button", { name: "重新整理評估" }));
+  expect(await screen.findAllByText("Shadow Hard 候選")).toHaveLength(2);
+  expect(screen.getByText(/正式 Hard 通知仍停用/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "重新整理評估" }));
+  expect(await screen.findAllByText("已由新版取代")).toHaveLength(2);
+  expect(screen.queryByText("Shadow Hard 候選")).not.toBeInTheDocument();
 });

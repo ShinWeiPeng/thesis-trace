@@ -37,6 +37,9 @@ jobs:
       - name: Test backend, including PostgreSQL integration
         run: python -m pytest -q backend/tests
 
+      - name: Run zero-tolerance anomaly qualification
+        run: python scripts/run_anomaly_qualification.py
+
       - name: Test Wave 1 PostgreSQL RLS and append-only audit contract
         run: python scripts/test_wave1_rls.py
 
@@ -107,6 +110,15 @@ jobs:
         run: >-
           python tools/architecture/architecture_cli.py gate
           --phase development
+          --manifest architecture/manifest.yaml
+          --adoption architecture/adoption.yaml
+          --baseline architecture/baseline.yaml
+          --format text
+
+      - name: Validate release architecture
+        run: >-
+          python tools/architecture/architecture_cli.py gate
+          --phase release
           --manifest architecture/manifest.yaml
           --adoption architecture/adoption.yaml
           --baseline architecture/baseline.yaml

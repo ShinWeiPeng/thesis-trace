@@ -1,12 +1,12 @@
 # ALG-0005: Hard and Soft anomaly policy
 ## Metadata
-- Status: proposed
-- Owner module: research
+- Status: accepted
+- Owner module: anomaly_assessment
 - Product feature: Anomaly determination
 - Flow IDs: anomaly-evaluation-flow
-- Related ADRs: none
-- Source paths: planned research policy
-- Test and benchmark paths: planned anomaly qualification tests
+- Related ADRs: ADR-0005
+- Source paths: `backend/src/thesis_trace/modules/research/anomaly_assessment/policy.py`
+- Test and benchmark paths: `backend/tests/test_anomaly_policy.py`, `backend/tests/fixtures/anomaly-qualification-v1.json`
 - Supersedes: none
 ## Problem and observable success
 Permit Hard only for predeclared invalidations with strong independent evidence and a passing critic.
@@ -31,4 +31,6 @@ Versioned 100-case suite, property tests for evidence-order invariance, fault in
 ## Risks and monitoring
 False Hard is the dominant risk; any occurrence resets shadow qualification.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-21
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

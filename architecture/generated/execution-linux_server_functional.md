@@ -26,12 +26,15 @@
 | `intake_api_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.authorize`, `owner_evidence_intake.map`, `owner_evidence_intake.commit`, `owner_evidence_intake.query` | `api_process` | one transaction per Evidence stream | False | not established |
 | `collection_worker_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.collect` | `collector_worker_process` | leased per Evidence stream | False | not established |
 | `evidence_stage_api_mapping` | `owner_confirmed_evidence_stage_workload` | `owner_confirmed_evidence_stage.authorize`, `owner_confirmed_evidence_stage.map`, `owner_confirmed_evidence_stage.evaluate`, `owner_confirmed_evidence_stage.commit`, `owner_confirmed_evidence_stage.present` | `api_process` | one optimistic append transaction per Evidence stage stream | False | not established |
+| `anomaly_assessment_api_mapping` | `owner_anomaly_assessment_workload` | `owner_anomaly_assessment.authorize`, `owner_anomaly_assessment.admit`, `owner_anomaly_assessment.present` | `api_process` | one admission transaction per assessment idempotency key and one role-safe query per request | False | not established |
+| `anomaly_assessment_worker_mapping` | `owner_anomaly_assessment_workload` | `owner_anomaly_assessment.analyze`, `owner_anomaly_assessment.evaluate`, `owner_anomaly_assessment.commit` | `ai_worker_process` | leased per assessment concurrency key with stale input revalidation before result commit | False | not established |
 
 ## Execution Channels
 
 | ID | From | To | Contracts | Capacity | Ordering | Copy | Timeout | Overload |
 |---|---|---|---|---|---|---|---|---|
 | `collection_job_channel` | `api_process` | `collector_worker_process` | `research.collection_jobs`, `research.evidence_received` | 1000 | serialized per Evidence stream | persist semantic payload once and map on claim | 300000 | `backpressure` |
+| `anomaly_analysis_job_channel` | `api_process` | `ai_worker_process` | `research.anomaly_assessment_store`, `application.process_anomaly_job` | 1000 | serialized per assessment concurrency key; unrelated subjects may run in parallel | persist identifiers and exact input/version tuple once; load immutable snapshots on claim | 300000 | `fail-safe` |
 
 ## Data Access Profiles
 

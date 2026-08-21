@@ -1,0 +1,4002 @@
+{
+  "dataset_version": "anomaly-qualification-v1",
+  "version_tuple": {
+    "build_version": "qualification-runner-v1",
+    "policy_version": "anomaly-policy-v1",
+    "candidate_schema_version": "anomaly-candidate-v1",
+    "candidate_prompt_version": "anomaly-prompt-v1",
+    "provider_model_version": "prevalidated-candidate-fixture-v1",
+    "critic_schema_version": "recommendation-critic-v1",
+    "critic_prompt_version": "recommendation-critic-prompt-v1",
+    "critic_model_version": "prevalidated-critic-fixture-v1"
+  },
+  "validation_fixtures": {
+    "invented_snapshot_id": "NOT-IN-CASE-SNAPSHOTS",
+    "critic_pass": {
+      "schema_version": "recommendation-critic-v1",
+      "verdict": "PASS",
+      "source_available": true,
+      "citation_direct_support": true,
+      "subject_matches": true,
+      "time_reasonable": true,
+      "invalidation_matches": true,
+      "b_independence": true,
+      "no_newer_a_refutation": true
+    },
+    "critic_schema": {},
+    "subject_failure": {
+      "schema_version": "recommendation-critic-v1",
+      "verdict": "FAIL",
+      "source_available": true,
+      "citation_direct_support": true,
+      "subject_matches": false,
+      "time_reasonable": true,
+      "invalidation_matches": true,
+      "b_independence": true,
+      "no_newer_a_refutation": true
+    },
+    "time_failure": {
+      "schema_version": "recommendation-critic-v1",
+      "verdict": "FAIL",
+      "source_available": true,
+      "citation_direct_support": true,
+      "subject_matches": true,
+      "time_reasonable": false,
+      "invalidation_matches": true,
+      "b_independence": true,
+      "no_newer_a_refutation": true
+    }
+  },
+  "cases": [
+    {
+      "case_id": "A-001",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-001-S1",
+          "publisher_identity": "AUTH-1",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-001-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-002",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-002-S1",
+          "publisher_identity": "AUTH-2",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-002-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-003",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-003-S1",
+          "publisher_identity": "AUTH-3",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-003-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-004",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-004-S1",
+          "publisher_identity": "AUTH-4",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-004-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-005",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-005-S1",
+          "publisher_identity": "AUTH-5",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-005-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-006",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-006-S1",
+          "publisher_identity": "AUTH-6",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-006-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-007",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-007-S1",
+          "publisher_identity": "AUTH-7",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-007-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-008",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-008-S1",
+          "publisher_identity": "AUTH-8",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-008-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-009",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-009-S1",
+          "publisher_identity": "AUTH-9",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-009-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-010",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-010-S1",
+          "publisher_identity": "AUTH-10",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-010-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-011",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-011-S1",
+          "publisher_identity": "AUTH-11",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-011-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-012",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-012-S1",
+          "publisher_identity": "AUTH-12",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-012-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-013",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-013-S1",
+          "publisher_identity": "AUTH-13",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-013-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-014",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-014-S1",
+          "publisher_identity": "AUTH-14",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-014-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-015",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-015-S1",
+          "publisher_identity": "AUTH-15",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-015-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-016",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-016-S1",
+          "publisher_identity": "AUTH-16",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-016-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-017",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-017-S1",
+          "publisher_identity": "AUTH-17",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-017-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-018",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-018-S1",
+          "publisher_identity": "AUTH-18",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-018-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-019",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-019-S1",
+          "publisher_identity": "AUTH-19",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-019-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "A-020",
+      "category": "single_a_positive",
+      "auxiliary_label": "direct_a",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "A-020-S1",
+          "publisher_identity": "AUTH-20",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "A-020-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-001",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-001-S1",
+          "publisher_identity": "PUB-1-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-1-1"
+        },
+        {
+          "source_snapshot_id": "B-001-S2",
+          "publisher_identity": "PUB-1-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-1-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-001-S1",
+        "B-001-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-002",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-002-S1",
+          "publisher_identity": "PUB-2-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-2-1"
+        },
+        {
+          "source_snapshot_id": "B-002-S2",
+          "publisher_identity": "PUB-2-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-2-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-002-S1",
+        "B-002-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-003",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-003-S1",
+          "publisher_identity": "PUB-3-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-3-1"
+        },
+        {
+          "source_snapshot_id": "B-003-S2",
+          "publisher_identity": "PUB-3-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-3-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-003-S1",
+        "B-003-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-004",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-004-S1",
+          "publisher_identity": "PUB-4-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-4-1"
+        },
+        {
+          "source_snapshot_id": "B-004-S2",
+          "publisher_identity": "PUB-4-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-4-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-004-S1",
+        "B-004-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-005",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-005-S1",
+          "publisher_identity": "PUB-5-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-5-1"
+        },
+        {
+          "source_snapshot_id": "B-005-S2",
+          "publisher_identity": "PUB-5-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-5-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-005-S1",
+        "B-005-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-006",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-006-S1",
+          "publisher_identity": "PUB-6-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-6-1"
+        },
+        {
+          "source_snapshot_id": "B-006-S2",
+          "publisher_identity": "PUB-6-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-6-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-006-S1",
+        "B-006-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-007",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-007-S1",
+          "publisher_identity": "PUB-7-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-7-1"
+        },
+        {
+          "source_snapshot_id": "B-007-S2",
+          "publisher_identity": "PUB-7-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-7-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-007-S1",
+        "B-007-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-008",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-008-S1",
+          "publisher_identity": "PUB-8-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-8-1"
+        },
+        {
+          "source_snapshot_id": "B-008-S2",
+          "publisher_identity": "PUB-8-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-8-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-008-S1",
+        "B-008-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-009",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-009-S1",
+          "publisher_identity": "PUB-9-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-9-1"
+        },
+        {
+          "source_snapshot_id": "B-009-S2",
+          "publisher_identity": "PUB-9-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-9-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-009-S1",
+        "B-009-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-010",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-010-S1",
+          "publisher_identity": "PUB-10-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-10-1"
+        },
+        {
+          "source_snapshot_id": "B-010-S2",
+          "publisher_identity": "PUB-10-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-10-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-010-S1",
+        "B-010-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-011",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-011-S1",
+          "publisher_identity": "PUB-11-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-11-1"
+        },
+        {
+          "source_snapshot_id": "B-011-S2",
+          "publisher_identity": "PUB-11-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-11-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-011-S1",
+        "B-011-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-012",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-012-S1",
+          "publisher_identity": "PUB-12-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-12-1"
+        },
+        {
+          "source_snapshot_id": "B-012-S2",
+          "publisher_identity": "PUB-12-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-12-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-012-S1",
+        "B-012-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-013",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-013-S1",
+          "publisher_identity": "PUB-13-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-13-1"
+        },
+        {
+          "source_snapshot_id": "B-013-S2",
+          "publisher_identity": "PUB-13-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-13-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-013-S1",
+        "B-013-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-014",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-014-S1",
+          "publisher_identity": "PUB-14-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-14-1"
+        },
+        {
+          "source_snapshot_id": "B-014-S2",
+          "publisher_identity": "PUB-14-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-14-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-014-S1",
+        "B-014-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-015",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-015-S1",
+          "publisher_identity": "PUB-15-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-15-1"
+        },
+        {
+          "source_snapshot_id": "B-015-S2",
+          "publisher_identity": "PUB-15-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-15-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-015-S1",
+        "B-015-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-016",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-016-S1",
+          "publisher_identity": "PUB-16-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-16-1"
+        },
+        {
+          "source_snapshot_id": "B-016-S2",
+          "publisher_identity": "PUB-16-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-16-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-016-S1",
+        "B-016-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-017",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-017-S1",
+          "publisher_identity": "PUB-17-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-17-1"
+        },
+        {
+          "source_snapshot_id": "B-017-S2",
+          "publisher_identity": "PUB-17-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-17-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-017-S1",
+        "B-017-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-018",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-018-S1",
+          "publisher_identity": "PUB-18-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-18-1"
+        },
+        {
+          "source_snapshot_id": "B-018-S2",
+          "publisher_identity": "PUB-18-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-18-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-018-S1",
+        "B-018-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-019",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-019-S1",
+          "publisher_identity": "PUB-19-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-19-1"
+        },
+        {
+          "source_snapshot_id": "B-019-S2",
+          "publisher_identity": "PUB-19-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-19-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-019-S1",
+        "B-019-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "B-020",
+      "category": "independent_b_positive",
+      "auxiliary_label": "two_independent_b",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "would_be_hard",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "B-020-S1",
+          "publisher_identity": "PUB-20-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-20-1"
+        },
+        {
+          "source_snapshot_id": "B-020-S2",
+          "publisher_identity": "PUB-20-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "EVID-20-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "B-020-S1",
+        "B-020-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-001",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-001-S1",
+          "publisher_identity": "NEG-PUB-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-1"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-001-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-002",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-002-S1",
+          "publisher_identity": "NEG-PUB-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-002-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-003",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-003-S1",
+          "publisher_identity": "NEG-PUB-3",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-3"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-003-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-004",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-004-S1",
+          "publisher_identity": "NEG-PUB-4",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-4"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-004-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-005",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-005-S1",
+          "publisher_identity": "NEG-PUB-5",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-5"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-005-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-006",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-006-S1",
+          "publisher_identity": "NEG-PUB-6",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-6"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-006-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-007",
+      "category": "insufficient_negative",
+      "auxiliary_label": "single_b",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-007-S1",
+          "publisher_identity": "NEG-PUB-7",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "NEG-EVID-7"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-007-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-008",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-008-S1",
+          "publisher_identity": "SOCIAL-8",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-008-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-009",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-009-S1",
+          "publisher_identity": "SOCIAL-9",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-009-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-010",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-010-S1",
+          "publisher_identity": "SOCIAL-10",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-010-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-011",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-011-S1",
+          "publisher_identity": "SOCIAL-11",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-011-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-012",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-012-S1",
+          "publisher_identity": "SOCIAL-12",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-012-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-013",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-013-S1",
+          "publisher_identity": "SOCIAL-13",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-013-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-014",
+      "category": "insufficient_negative",
+      "auxiliary_label": "high_c",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "C"
+      ],
+      "expected_score": 10,
+      "expected_route": "human_review",
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-014-S1",
+          "publisher_identity": "SOCIAL-14",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "NEG-014-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": {
+        "timeliness": 2,
+        "traceability": 2,
+        "specificity": 2,
+        "corroboration": 2,
+        "invalidation_relevance": 2
+      },
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-015",
+      "category": "insufficient_negative",
+      "auxiliary_label": "insufficient_evidence",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-015-S1",
+          "publisher_identity": "AUTH-NEG-15",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-016",
+      "category": "insufficient_negative",
+      "auxiliary_label": "insufficient_evidence",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-016-S1",
+          "publisher_identity": "AUTH-NEG-16",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-017",
+      "category": "insufficient_negative",
+      "auxiliary_label": "insufficient_evidence",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-017-S1",
+          "publisher_identity": "AUTH-NEG-17",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-018",
+      "category": "insufficient_negative",
+      "auxiliary_label": "insufficient_evidence",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-018-S1",
+          "publisher_identity": "AUTH-NEG-18",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-019",
+      "category": "insufficient_negative",
+      "auxiliary_label": "insufficient_evidence",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-019-S1",
+          "publisher_identity": "AUTH-NEG-19",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "NEG-020",
+      "category": "insufficient_negative",
+      "auxiliary_label": "insufficient_evidence",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "NEG-020-S1",
+          "publisher_identity": "AUTH-NEG-20",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-001",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_publisher",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-001-S1",
+          "publisher_identity": "SHARED-PUB-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-1"
+        },
+        {
+          "source_snapshot_id": "LIN-001-S2",
+          "publisher_identity": "SHARED-PUB-1",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-1"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-001-S1",
+        "LIN-001-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-002",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_publisher",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-002-S1",
+          "publisher_identity": "SHARED-PUB-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-2"
+        },
+        {
+          "source_snapshot_id": "LIN-002-S2",
+          "publisher_identity": "SHARED-PUB-2",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-2"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-002-S1",
+        "LIN-002-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-003",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_publisher",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-003-S1",
+          "publisher_identity": "SHARED-PUB-3",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-3"
+        },
+        {
+          "source_snapshot_id": "LIN-003-S2",
+          "publisher_identity": "SHARED-PUB-3",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-3"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-003-S1",
+        "LIN-003-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-004",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_publisher",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-004-S1",
+          "publisher_identity": "SHARED-PUB-4",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-4"
+        },
+        {
+          "source_snapshot_id": "LIN-004-S2",
+          "publisher_identity": "SHARED-PUB-4",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-4"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-004-S1",
+        "LIN-004-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-005",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_publisher",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-005-S1",
+          "publisher_identity": "SHARED-PUB-5",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-5"
+        },
+        {
+          "source_snapshot_id": "LIN-005-S2",
+          "publisher_identity": "SHARED-PUB-5",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-5"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-005-S1",
+        "LIN-005-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-006",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_underlying_evidence",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-006-S1",
+          "publisher_identity": "LIN-P1-6",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-6"
+        },
+        {
+          "source_snapshot_id": "LIN-006-S2",
+          "publisher_identity": "LIN-P2-6",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-6"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-006-S1",
+        "LIN-006-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-007",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_underlying_evidence",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-007-S1",
+          "publisher_identity": "LIN-P1-7",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-7"
+        },
+        {
+          "source_snapshot_id": "LIN-007-S2",
+          "publisher_identity": "LIN-P2-7",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-7"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-007-S1",
+        "LIN-007-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-008",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_underlying_evidence",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-008-S1",
+          "publisher_identity": "LIN-P1-8",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-8"
+        },
+        {
+          "source_snapshot_id": "LIN-008-S2",
+          "publisher_identity": "LIN-P2-8",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-8"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-008-S1",
+        "LIN-008-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-009",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_underlying_evidence",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-009-S1",
+          "publisher_identity": "LIN-P1-9",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-9"
+        },
+        {
+          "source_snapshot_id": "LIN-009-S2",
+          "publisher_identity": "LIN-P2-9",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-9"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-009-S1",
+        "LIN-009-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-010",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "same_underlying_evidence",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-010-S1",
+          "publisher_identity": "LIN-P1-10",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-10"
+        },
+        {
+          "source_snapshot_id": "LIN-010-S2",
+          "publisher_identity": "LIN-P2-10",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "SHARED-EVID-10"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-010-S1",
+        "LIN-010-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-011",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "source_conflict",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-011-S1",
+          "publisher_identity": "LIN-P1-11",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-11"
+        },
+        {
+          "source_snapshot_id": "LIN-011-S2",
+          "publisher_identity": "LIN-P2-11",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-11"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-011-S1",
+        "LIN-011-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": true,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-012",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "source_conflict",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-012-S1",
+          "publisher_identity": "LIN-P1-12",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-12"
+        },
+        {
+          "source_snapshot_id": "LIN-012-S2",
+          "publisher_identity": "LIN-P2-12",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-12"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-012-S1",
+        "LIN-012-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": true,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-013",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "source_conflict",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-013-S1",
+          "publisher_identity": "LIN-P1-13",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-13"
+        },
+        {
+          "source_snapshot_id": "LIN-013-S2",
+          "publisher_identity": "LIN-P2-13",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-13"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-013-S1",
+        "LIN-013-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": true,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-014",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "source_conflict",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-014-S1",
+          "publisher_identity": "LIN-P1-14",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-14"
+        },
+        {
+          "source_snapshot_id": "LIN-014-S2",
+          "publisher_identity": "LIN-P2-14",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-14"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-014-S1",
+        "LIN-014-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": true,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "LIN-015",
+      "category": "lineage_conflict_negative",
+      "auxiliary_label": "source_conflict",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "B",
+        "B"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "LIN-015-S1",
+          "publisher_identity": "LIN-P1-15",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E1-15"
+        },
+        {
+          "source_snapshot_id": "LIN-015-S2",
+          "publisher_identity": "LIN-P2-15",
+          "authoritative_first_party": false,
+          "formal_record": false,
+          "editorial_responsibility": true,
+          "attributed_author": true,
+          "verifiable_primary_evidence": true,
+          "underlying_evidence_id": "LIN-E2-15"
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "LIN-015-S1",
+        "LIN-015-S2"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": true,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-001",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "critic_timeout",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-001-S1",
+          "publisher_identity": "AUTH-CRI-1",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-001-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-002",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "critic_timeout",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-002-S1",
+          "publisher_identity": "AUTH-CRI-2",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-002-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-003",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "critic_timeout",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-003-S1",
+          "publisher_identity": "AUTH-CRI-3",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-003-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-004",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "critic_schema",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-004-S1",
+          "publisher_identity": "AUTH-CRI-4",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-004-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-005",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "critic_schema",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-005-S1",
+          "publisher_identity": "AUTH-CRI-5",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-005-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-006",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "critic_schema",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-006-S1",
+          "publisher_identity": "AUTH-CRI-6",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-006-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-007",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "citation_failure",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-007-S1",
+          "publisher_identity": "AUTH-CRI-7",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-007-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-008",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "citation_failure",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-008-S1",
+          "publisher_identity": "AUTH-CRI-8",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-008-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-009",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "citation_failure",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-009-S1",
+          "publisher_identity": "AUTH-CRI-9",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-009-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-010",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "subject_failure",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-010-S1",
+          "publisher_identity": "AUTH-CRI-10",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-010-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-011",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "subject_failure",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-011-S1",
+          "publisher_identity": "AUTH-CRI-11",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-011-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-012",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "subject_failure",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-012-S1",
+          "publisher_identity": "AUTH-CRI-12",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-012-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-013",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "time_failure",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-013-S1",
+          "publisher_identity": "AUTH-CRI-13",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-013-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-014",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "time_failure",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-014-S1",
+          "publisher_identity": "AUTH-CRI-14",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-014-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "CRI-015",
+      "category": "critic_failure_negative",
+      "auxiliary_label": "time_failure",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "CRI-015-S1",
+          "publisher_identity": "AUTH-CRI-15",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "CRI-015-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": false,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "MKT-001",
+      "category": "market_novel_negative",
+      "auxiliary_label": "price_volume_only",
+      "company_id": "COMPANY-01",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-001-S1",
+          "publisher_identity": "AUTH-MKT-1",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-001-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": true,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "MKT-002",
+      "category": "market_novel_negative",
+      "auxiliary_label": "price_volume_only",
+      "company_id": "COMPANY-02",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-002-S1",
+          "publisher_identity": "AUTH-MKT-2",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-002-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": true,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "MKT-003",
+      "category": "market_novel_negative",
+      "auxiliary_label": "price_volume_only",
+      "company_id": "COMPANY-03",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-003-S1",
+          "publisher_identity": "AUTH-MKT-3",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-003-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": true,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "MKT-004",
+      "category": "market_novel_negative",
+      "auxiliary_label": "price_volume_only",
+      "company_id": "COMPANY-04",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-004-S1",
+          "publisher_identity": "AUTH-MKT-4",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-004-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": true,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "MKT-005",
+      "category": "market_novel_negative",
+      "auxiliary_label": "price_volume_only",
+      "company_id": "COMPANY-05",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-005-S1",
+          "publisher_identity": "AUTH-MKT-5",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-005-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": true,
+      "novel_unsupported_event": false
+    },
+    {
+      "case_id": "MKT-006",
+      "category": "market_novel_negative",
+      "auxiliary_label": "novel_unsupported_event",
+      "company_id": "COMPANY-06",
+      "industry": "INDUSTRY-1",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-006-S1",
+          "publisher_identity": "AUTH-MKT-6",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-006-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": true
+    },
+    {
+      "case_id": "MKT-007",
+      "category": "market_novel_negative",
+      "auxiliary_label": "novel_unsupported_event",
+      "company_id": "COMPANY-07",
+      "industry": "INDUSTRY-2",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-007-S1",
+          "publisher_identity": "AUTH-MKT-7",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-007-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": true
+    },
+    {
+      "case_id": "MKT-008",
+      "category": "market_novel_negative",
+      "auxiliary_label": "novel_unsupported_event",
+      "company_id": "COMPANY-08",
+      "industry": "INDUSTRY-3",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-008-S1",
+          "publisher_identity": "AUTH-MKT-8",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-008-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": true
+    },
+    {
+      "case_id": "MKT-009",
+      "category": "market_novel_negative",
+      "auxiliary_label": "novel_unsupported_event",
+      "company_id": "COMPANY-09",
+      "industry": "INDUSTRY-4",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-009-S1",
+          "publisher_identity": "AUTH-MKT-9",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-009-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": true
+    },
+    {
+      "case_id": "MKT-010",
+      "category": "market_novel_negative",
+      "auxiliary_label": "novel_unsupported_event",
+      "company_id": "COMPANY-10",
+      "industry": "INDUSTRY-5",
+      "expected_class": "soft",
+      "expected_tiers": [
+        "A"
+      ],
+      "expected_score": null,
+      "expected_route": null,
+      "sources": [
+        {
+          "source_snapshot_id": "MKT-010-S1",
+          "publisher_identity": "AUTH-MKT-10",
+          "authoritative_first_party": true,
+          "formal_record": true,
+          "editorial_responsibility": false,
+          "attributed_author": false,
+          "verifiable_primary_evidence": false,
+          "underlying_evidence_id": null
+        }
+      ],
+      "direct_supporting_snapshot_ids": [
+        "MKT-010-S1"
+      ],
+      "predeclared_invalidation_matches": true,
+      "critic_passed": true,
+      "clue_features": null,
+      "has_source_conflict": false,
+      "newer_authoritative_refutation": false,
+      "price_or_volume_only": false,
+      "novel_unsupported_event": true
+    }
+  ]
+}

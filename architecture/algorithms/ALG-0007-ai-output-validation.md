@@ -1,12 +1,12 @@
 # ALG-0007: AI output validation
 ## Metadata
-- Status: proposed
-- Owner module: recommendation
+- Status: accepted
+- Owner module: thesis_trace_application
 - Product feature: Candidate fact and recommendation validation
 - Flow IDs: recommendation-analysis-flow, anomaly-evaluation-flow
-- Related ADRs: none
-- Source paths: planned recommendation policy
-- Test and benchmark paths: planned critic/provider contract tests
+- Related ADRs: ADR-0005
+- Source paths: `backend/src/thesis_trace/application/ai_ports.py`, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`
+- Test and benchmark paths: `backend/tests/test_anomaly_worker.py`, `backend/tests/test_openai_recommendation_adapter.py`
 - Supersedes: none
 ## Problem and observable success
 Convert untrusted model output into a candidate input only when structure and citations are provably valid.
@@ -31,4 +31,6 @@ Fixtures cover malformed JSON, extra/missing fields, invented citations, wrong s
 ## Risks and monitoring
 Validator/schema drift can reject valid outputs; monitor gate-specific failure rates.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-21
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

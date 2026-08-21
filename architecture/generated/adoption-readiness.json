@@ -39,16 +39,21 @@
         "analyzed_files": [
           "backend/src/thesis_trace/adapters/cloudflare_identity/__init__.py",
           "backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py",
+          "backend/src/thesis_trace/adapters/openai_recommendation/__init__.py",
+          "backend/src/thesis_trace/adapters/openai_recommendation/adapter.py",
           "backend/src/thesis_trace/adapters/postgres_access/__init__.py",
           "backend/src/thesis_trace/adapters/postgres_access/adapter.py",
           "backend/src/thesis_trace/api.py",
           "backend/src/thesis_trace/application/__init__.py",
+          "backend/src/thesis_trace/application/ai_ports.py",
           "backend/src/thesis_trace/application/contracts.py",
           "backend/src/thesis_trace/application/flows/__init__.py",
+          "backend/src/thesis_trace/application/flows/anomaly_assessment.py",
           "backend/src/thesis_trace/application/flows/evidence_intake.py",
           "backend/src/thesis_trace/application/flows/evidence_stage.py",
           "backend/src/thesis_trace/bootstrap/__init__.py",
           "backend/src/thesis_trace/bootstrap/application.py",
+          "backend/src/thesis_trace/entrypoints/ai_worker.py",
           "backend/src/thesis_trace/entrypoints/api.py",
           "backend/src/thesis_trace/entrypoints/collector_worker.py",
           "backend/src/thesis_trace/entrypoints/healthcheck.py",
@@ -80,6 +85,12 @@
           "backend/src/thesis_trace/modules/recommendation/__init__.py",
           "backend/src/thesis_trace/modules/recommendation/service.py",
           "backend/src/thesis_trace/modules/research/__init__.py",
+          "backend/src/thesis_trace/modules/research/anomaly_assessment/__init__.py",
+          "backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py",
+          "backend/src/thesis_trace/modules/research/anomaly_assessment/policy.py",
+          "backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py",
+          "backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py",
+          "backend/src/thesis_trace/modules/research/anomaly_assessment/service.py",
           "backend/src/thesis_trace/modules/research/evidence_collection/__init__.py",
           "backend/src/thesis_trace/modules/research/evidence_collection/contracts.py",
           "backend/src/thesis_trace/modules/research/evidence_collection/ports.py",
@@ -101,7 +112,7 @@
           "infra/postgres/run-production-migrations.py"
         ],
         "mode": "python-ast",
-        "type_count": 110
+        "type_count": 158
       },
       "typescript": {
         "analyzed_files": [

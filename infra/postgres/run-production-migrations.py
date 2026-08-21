@@ -9,12 +9,12 @@ from thesis_trace.platform.runtime import required_secret_provider
 def apply_runtime_grants(connection: psycopg.Connection) -> None:
     database_name = connection.execute("SELECT current_database()").fetchone()[0]
     connection.execute(
-        sql.SQL("REVOKE CREATE,TEMP ON DATABASE {} FROM thesis_trace_api,thesis_trace_collector")
+        sql.SQL("REVOKE CREATE,TEMP ON DATABASE {} FROM thesis_trace_api,thesis_trace_collector,thesis_trace_ai_worker")
         .format(sql.Identifier(database_name))
     )
-    connection.execute("REVOKE ALL PRIVILEGES ON SCHEMA access,research,public FROM thesis_trace_api,thesis_trace_collector")
-    connection.execute("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA access,research FROM thesis_trace_api,thesis_trace_collector")
-    connection.execute("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA access,research FROM thesis_trace_api,thesis_trace_collector")
+    connection.execute("REVOKE ALL PRIVILEGES ON SCHEMA access,research,public FROM thesis_trace_api,thesis_trace_collector,thesis_trace_ai_worker")
+    connection.execute("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA access,research FROM thesis_trace_api,thesis_trace_collector,thesis_trace_ai_worker")
+    connection.execute("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA access,research FROM thesis_trace_api,thesis_trace_collector,thesis_trace_ai_worker")
     connection.execute("GRANT USAGE ON SCHEMA access,research TO thesis_trace_api")
     connection.execute("GRANT SELECT ON research.schema_migrations TO thesis_trace_api")
     connection.execute("GRANT SELECT,INSERT,UPDATE ON access.users,access.identities,access.sessions,access.confirmation_challenges TO thesis_trace_api")
@@ -24,6 +24,8 @@ def apply_runtime_grants(connection: psycopg.Connection) -> None:
     connection.execute("GRANT INSERT ON research.audit_events,research.collection_jobs TO thesis_trace_api")
     connection.execute("GRANT SELECT ON research.source_observations,research.source_snapshots TO thesis_trace_api")
     connection.execute("GRANT SELECT,INSERT ON research.evidence_stage_versions TO thesis_trace_api")
+    connection.execute("GRANT SELECT,INSERT ON research.anomaly_assessments TO thesis_trace_api")
+    connection.execute("GRANT INSERT ON research.anomaly_analysis_jobs TO thesis_trace_api")
     connection.execute("GRANT USAGE ON SCHEMA research TO thesis_trace_collector")
     connection.execute("GRANT SELECT ON research.schema_migrations TO thesis_trace_collector")
     connection.execute("GRANT SELECT ON research.companies TO thesis_trace_collector")
@@ -33,6 +35,17 @@ def apply_runtime_grants(connection: psycopg.Connection) -> None:
         """GRANT SELECT,INSERT ON research.canonical_sources,research.source_snapshots,
         research.source_observations TO thesis_trace_collector"""
     )
+    connection.execute("GRANT USAGE ON SCHEMA research TO thesis_trace_ai_worker")
+    connection.execute("GRANT SELECT ON research.schema_migrations TO thesis_trace_ai_worker")
+    connection.execute(
+        "GRANT SELECT ON research.evidence_intakes,research.source_snapshots,"
+        "research.anomaly_assessments TO thesis_trace_ai_worker"
+    )
+    connection.execute(
+        "GRANT SELECT,UPDATE ON research.anomaly_analysis_jobs TO thesis_trace_ai_worker"
+    )
+    connection.execute("GRANT UPDATE ON research.anomaly_assessments TO thesis_trace_ai_worker")
+    connection.execute("GRANT INSERT ON research.audit_events TO thesis_trace_ai_worker")
 
 
 def run_production_migrations() -> None:

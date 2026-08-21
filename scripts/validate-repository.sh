@@ -4,7 +4,7 @@ set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
 
-required_services=(api collector web postgres origin-gateway cloudflared)
+required_services=(api collector ai-worker migration web postgres origin-gateway cloudflared)
 for service in "${required_services[@]}"; do
   if ! grep -Eq "^  ${service}:$" compose.yaml; then
     echo "compose.yaml is missing service: ${service}" >&2

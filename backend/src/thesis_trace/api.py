@@ -15,6 +15,12 @@ from thesis_trace.application.flows.evidence_stage import (
     EvidenceStageResult,
     QueryEvidenceStageRequest,
 )
+from thesis_trace.application.flows.anomaly_assessment import (
+    AnomalyAssessmentFlow,
+    AnomalyAssessmentResult,
+    AnomalySourceInput,
+    RequestAnomalyAssessment,
+)
 from thesis_trace.modules.access.contracts import AuthenticatedActor
 from thesis_trace.modules.access.contracts import Role
 from thesis_trace.modules.access.identity_registry.contracts import ProviderIdentity
@@ -85,6 +91,46 @@ class EvidenceStageResponse(BaseModel):
     stage: str
     gate_trace: list[GateResultResponse]
     policy_version: str
+
+
+class AnomalySourceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_snapshot_id: str = Field(min_length=1)
+
+
+class AnomalyAssessmentRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_evidence_version: int = Field(ge=1)
+    sources: list[AnomalySourceBody] = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class AnomalyGateResponse(BaseModel):
+    gate: str
+    passed: bool
+    code: str
+
+
+class AnomalyTraceResponse(BaseModel):
+    anomaly_class: Literal["soft", "would_be_hard"]
+    source_tiers: list[Literal["A", "B", "C"]]
+    clue_score: int | None
+    clue_route: Literal["save_only", "watch_daily", "human_review"] | None
+    gates: list[AnomalyGateResponse]
+    policy_version: str
+
+
+class AnomalyAssessmentResponse(BaseModel):
+    assessment_id: str
+    version: int
+    evidence_id: str
+    evidence_version: int
+    source_snapshot_ids: list[str]
+    status: Literal["pending", "succeeded", "failed", "superseded"]
+    requested_at: str
+    trace: AnomalyTraceResponse | None
+    failure_code: str | None
 
 
 class OwnerSessionResponse(BaseModel):
@@ -257,9 +303,16 @@ class AccessApi:
 class EvidenceApi:
     """Framework-independent HTTP boundary contract used by the FastAPI adapter."""
 
-    def __init__(self, *, flow: EvidenceIntakeFlow, stage_flow: EvidenceStageFlow | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        flow: EvidenceIntakeFlow,
+        stage_flow: EvidenceStageFlow | None = None,
+        anomaly_flow: AnomalyAssessmentFlow | None = None,
+    ) -> None:
         self._flow = flow
         self._stage_flow = stage_flow
+        self._anomaly_flow = anomaly_flow
 
     def create_company(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -356,6 +409,58 @@ class EvidenceApi:
             self._stage_flow.get_stage(actor, QueryEvidenceStageRequest(evidence_id))
         )
 
+    @staticmethod
+    def _anomaly_response(record: AnomalyAssessmentResult) -> dict[str, Any]:
+        trace = None
+        if record.trace is not None:
+            trace = {
+                "anomaly_class": record.trace.anomaly_class,
+                "source_tiers": list(record.trace.source_tiers),
+                "clue_score": record.trace.clue_score,
+                "clue_route": record.trace.clue_route,
+                "gates": [
+                    {"gate": item.gate, "passed": item.passed, "code": item.code}
+                    for item in record.trace.gates
+                ],
+                "policy_version": record.trace.policy_version,
+            }
+        return {
+            "assessment_id": record.assessment_id,
+            "version": record.version,
+            "evidence_id": record.evidence_id,
+            "evidence_version": record.evidence_version,
+            "source_snapshot_ids": list(record.source_snapshot_ids),
+            "status": record.status,
+            "requested_at": record.requested_at,
+            "trace": trace,
+            "failure_code": record.failure_code,
+        }
+
+    def request_anomaly_assessment(
+        self, actor: AuthenticatedActor, evidence_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        if self._anomaly_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._anomaly_response(
+            self._anomaly_flow.request(
+                actor,
+                RequestAnomalyAssessment(
+                    evidence_id=evidence_id,
+                    expected_evidence_version=body["expected_evidence_version"],
+                    sources=tuple(AnomalySourceInput(**item) for item in body["sources"]),
+                    reason=body["reason"],
+                    idempotency_key=body["idempotency_key"],
+                ),
+            )
+        )
+
+    def get_anomaly_assessment(
+        self, actor: AuthenticatedActor, assessment_id: str
+    ) -> dict[str, Any]:
+        if self._anomaly_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._anomaly_response(self._anomaly_flow.get(actor, assessment_id))
+
 
 def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: AccessApiPort | None = None) -> Any:
     """Create the delivery adapter; import FastAPI only in installed runtimes."""
@@ -424,6 +529,39 @@ def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: Access
     ) -> dict[str, Any]:
         try:
             return api.get_evidence_stage(actor, evidence_id)
+        except (PermissionError, LookupError) as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+
+    @app.post(
+        "/api/evidence/{evidence_id}/anomaly-assessments",
+        status_code=202,
+        response_model=AnomalyAssessmentResponse,
+    )
+    async def request_anomaly_assessment(
+        evidence_id: str,
+        body: AnomalyAssessmentRequestBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.request_anomaly_assessment(actor, evidence_id, body.model_dump())
+        except PermissionError as error:
+            raise HTTPException(status_code=403, detail="forbidden") from error
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+        except ValueError as error:
+            status_code = 409 if str(error) in {"version_conflict", "idempotency_conflict"} else 422
+            raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+    @app.get(
+        "/api/anomaly-assessments/{assessment_id}",
+        response_model=AnomalyAssessmentResponse,
+    )
+    async def get_anomaly_assessment(
+        assessment_id: str,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.get_anomaly_assessment(actor, assessment_id)
         except (PermissionError, LookupError) as error:
             raise HTTPException(status_code=404, detail="resource_unavailable") from error
 

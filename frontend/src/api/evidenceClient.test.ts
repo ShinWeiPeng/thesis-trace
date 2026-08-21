@@ -22,4 +22,19 @@ describe("generated API adapter", () => {
     await expect(client.confirmEvidenceStage("e-1", body)).resolves.toEqual(response);
     expect(fetcher).toHaveBeenCalledWith("/api/evidence/e-1/stage-confirmations", expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
   });
+
+  it("uses generated anomaly request and query operations", async () => {
+    const pending = { assessment_id: "a-1", evidence_id: "e-1", evidence_version: 2, failure_code: null, requested_at: "now", source_snapshot_ids: ["s-1"], status: "pending", trace: null, version: 1 };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(pending), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(pending), { status: 200 }));
+    const client = createEvidenceClient({ baseUrl: "/api", fetcher });
+    const body = { expected_evidence_version: 2, idempotency_key: "a-key", reason: "review", sources: [{ source_snapshot_id: "s-1" }] };
+
+    await client.requestAnomalyAssessment("e-1", body);
+    await client.getAnomalyAssessment("a-1");
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, "/api/evidence/e-1/anomaly-assessments", expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, "/api/anomaly-assessments/a-1", { credentials: "same-origin" });
+  });
 });

@@ -17,6 +17,15 @@ from thesis_trace.modules.research.evidence_stage.contracts import (
     StageEvaluation,
     confirmation_matches,
 )
+from thesis_trace.modules.research.anomaly_assessment.contracts import (
+    AnomalyAnalysisJob,
+    AnomalyAnalysisVersions,
+    AnomalyAssessmentRecord,
+    AnomalyDecisionTrace,
+    AssessmentStatus,
+    EvaluateAssessmentCommand,
+    RequestAssessmentCommand,
+)
 
 
 class InMemoryEvidenceStore:
@@ -31,6 +40,11 @@ class InMemoryEvidenceStore:
         self._accepted_by_key: dict[str, EvidenceAccepted] = {}
         self.stage_records: dict[str, EvidenceStageRecord] = {}
         self._stage_by_idempotency_key: dict[str, EvidenceStageRecord] = {}
+        self.anomaly_records: dict[str, AnomalyAssessmentRecord] = {}
+        self.anomaly_jobs: list[AnomalyAnalysisJob] = []
+        self._anomaly_by_idempotency_key: dict[str, tuple[RequestAssessmentCommand, AnomalyAssessmentRecord]] = {}
+        self._anomaly_sources: dict[str, tuple[object, ...]] = {}
+        self.current_evidence_versions: dict[str, int] = {}
 
     def create_company(self, ticker: str, name: str) -> CompanyRecord:
         ticker = ticker.strip()
@@ -155,3 +169,115 @@ class InMemoryEvidenceStore:
 
     def get_stage(self, evidence_id: str) -> EvidenceStageRecord | None:
         return self.stage_records.get(evidence_id)
+
+    def request_assessment(
+        self,
+        *,
+        command: RequestAssessmentCommand,
+        requested_at: str,
+        policy_version: str,
+        versions: AnomalyAnalysisVersions,
+    ) -> AnomalyAssessmentRecord:
+        replay = self._anomaly_by_idempotency_key.get(command.idempotency_key)
+        if replay is not None:
+            if replay[0] != command:
+                raise ValueError("idempotency_conflict")
+            return replay[1]
+        current_version = self.current_evidence_versions.setdefault(
+            command.evidence_id, command.expected_evidence_version
+        )
+        if current_version != command.expected_evidence_version:
+            raise ValueError("version_conflict")
+        assessment_id = f"assessment-{len(self.anomaly_records) + 1}"
+        record = AnomalyAssessmentRecord(
+            assessment_id=assessment_id,
+            version=1,
+            evidence_id=command.evidence_id,
+            evidence_version=command.expected_evidence_version,
+            actor_id=command.actor_id,
+            source_snapshot_ids=tuple(source.source_snapshot_id for source in command.sources),
+            status=AssessmentStatus.PENDING,
+            reason=command.reason,
+            requested_at=requested_at,
+        )
+        self.anomaly_records[assessment_id] = record
+        self._anomaly_sources[assessment_id] = command.sources
+        self._anomaly_by_idempotency_key[command.idempotency_key] = (command, record)
+        self.anomaly_jobs.append(
+            AnomalyAnalysisJob(
+                job_id=f"anomaly-job-{len(self.anomaly_jobs) + 1}",
+                assessment_id=assessment_id,
+                assessment_version=1,
+                evidence_id=command.evidence_id,
+                evidence_version=command.expected_evidence_version,
+                lease_token=None,
+                attempt=0,
+                build_version=versions.build_version,
+                policy_version=policy_version,
+                candidate_schema_version=versions.candidate_schema_version,
+                candidate_prompt_version=versions.candidate_prompt_version,
+                provider_model_version=versions.provider_model_version,
+                critic_schema_version=versions.critic_schema_version,
+                critic_prompt_version=versions.critic_prompt_version,
+                critic_model_version=versions.critic_model_version,
+            )
+        )
+        return record
+
+    def claim_anomaly_job(self) -> AnomalyAnalysisJob | None:
+        if not self.anomaly_jobs:
+            return None
+        queued = self.anomaly_jobs.pop(0)
+        return AnomalyAnalysisJob(
+            job_id=queued.job_id,
+            assessment_id=queued.assessment_id,
+            assessment_version=queued.assessment_version,
+            evidence_id=queued.evidence_id,
+            evidence_version=queued.evidence_version,
+            lease_token=str(uuid.uuid4()),
+            attempt=queued.attempt + 1,
+            build_version=queued.build_version,
+            policy_version=queued.policy_version,
+            candidate_schema_version=queued.candidate_schema_version,
+            candidate_prompt_version=queued.candidate_prompt_version,
+            provider_model_version=queued.provider_model_version,
+            critic_schema_version=queued.critic_schema_version,
+            critic_prompt_version=queued.critic_prompt_version,
+            critic_model_version=queued.critic_model_version,
+        )
+
+    def load_anomaly_sources(self, assessment_id: str):
+        return self._anomaly_sources.get(assessment_id, ())
+
+    def commit_anomaly_result(
+        self,
+        *,
+        command: EvaluateAssessmentCommand,
+        trace: AnomalyDecisionTrace,
+    ) -> AnomalyAssessmentRecord:
+        current = self.anomaly_records.get(command.assessment_id)
+        if current is None:
+            raise LookupError("resource_unavailable")
+        if current.version != command.expected_assessment_version:
+            raise ValueError("version_conflict")
+        if not command.lease_token:
+            raise ValueError("lease_unavailable")
+        stale = self.current_evidence_versions.get(current.evidence_id) != current.evidence_version
+        record = AnomalyAssessmentRecord(
+            assessment_id=current.assessment_id,
+            version=current.version + 1,
+            evidence_id=current.evidence_id,
+            evidence_version=current.evidence_version,
+            actor_id=current.actor_id,
+            source_snapshot_ids=current.source_snapshot_ids,
+            status=AssessmentStatus.SUPERSEDED if stale else AssessmentStatus.SUCCEEDED,
+            reason=current.reason,
+            requested_at=current.requested_at,
+            trace=trace,
+            failure_code="stale_input" if stale else None,
+        )
+        self.anomaly_records[record.assessment_id] = record
+        return record
+
+    def get_anomaly_assessment(self, assessment_id: str) -> AnomalyAssessmentRecord | None:
+        return self.anomaly_records.get(assessment_id)

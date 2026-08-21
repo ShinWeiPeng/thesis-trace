@@ -1,12 +1,22 @@
 /* eslint-disable */
 // Generated from backend OpenAPI. Do not edit.
-export const OPENAPI_SHA256 = "baff18c1514e178d0b4718a51277384cdae9dc8665f537a2f0a2369fe4089917";
+export const OPENAPI_SHA256 = "9a26c930f9f9dcc88d1927a36de082d3f408636c00b3acc7eff44c89e8e05cef";
 
 export type AccountCreateBody = { "challenge_token": string; "email_fact": string; "provider_id": string; "provider_subject": string; "provider_type": string; "reason": string; "role": Role };
 
 export type AccountResponse = { "masked_identity": string; "role": Role; "status": "active" | "disabled"; "user_id": string; "version": number };
 
 export type AdminSessionResponse = { "capabilities": string[]; "display_name": string; "is_recovery_session": boolean; "kind": "admin"; "session_expires_at": string; "user_id": string };
+
+export type AnomalyAssessmentRequestBody = { "expected_evidence_version": number; "idempotency_key": string; "reason": string; "sources": AnomalySourceBody[] };
+
+export type AnomalyAssessmentResponse = { "assessment_id": string; "evidence_id": string; "evidence_version": number; "failure_code": string | null; "requested_at": string; "source_snapshot_ids": string[]; "status": "pending" | "succeeded" | "failed" | "superseded"; "trace": AnomalyTraceResponse | null; "version": number };
+
+export type AnomalyGateResponse = { "code": string; "gate": string; "passed": boolean };
+
+export type AnomalySourceBody = { "source_snapshot_id": string };
+
+export type AnomalyTraceResponse = { "anomaly_class": "soft" | "would_be_hard"; "clue_route": "save_only" | "watch_daily" | "human_review" | null; "clue_score": number | null; "gates": AnomalyGateResponse[]; "policy_version": string; "source_tiers": ("A" | "B" | "C")[] };
 
 export type CompanyCreateBody = { "name": string; "ticker": string };
 
@@ -66,6 +76,10 @@ export function account_detail_api_admin_accounts__user_id__get(baseUrl: string,
   return request(fetcher, `${baseUrl}/admin/accounts/${encodeURIComponent(user_id)}`);
 }
 
+export function get_anomaly_assessment_api_anomaly_assessments__assessment_id__get(baseUrl: string, assessment_id: string, fetcher: typeof fetch = fetch): Promise<AnomalyAssessmentResponse> {
+  return request(fetcher, `${baseUrl}/anomaly-assessments/${encodeURIComponent(assessment_id)}`);
+}
+
 export function list_companies_api_companies_get(baseUrl: string, fetcher: typeof fetch = fetch): Promise<CompanyResponse[]> {
   return request(fetcher, `${baseUrl}/companies`);
 }
@@ -88,6 +102,10 @@ export function submit_api_evidence_post(baseUrl: string, body: EvidenceSubmissi
 
 export function status_api_evidence__evidence_id__get(baseUrl: string, evidence_id: string, fetcher: typeof fetch = fetch): Promise<EvidenceResponse> {
   return request(fetcher, `${baseUrl}/evidence/${encodeURIComponent(evidence_id)}`);
+}
+
+export function request_anomaly_assessment_api_evidence__evidence_id__anomaly_assessments_post(baseUrl: string, evidence_id: string, body: AnomalyAssessmentRequestBody, fetcher: typeof fetch = fetch): Promise<AnomalyAssessmentResponse> {
+  return request(fetcher, `${baseUrl}/evidence/${encodeURIComponent(evidence_id)}/anomaly-assessments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
 
 export function get_evidence_stage_api_evidence__evidence_id__stage_get(baseUrl: string, evidence_id: string, fetcher: typeof fetch = fetch): Promise<EvidenceStageResponse> {

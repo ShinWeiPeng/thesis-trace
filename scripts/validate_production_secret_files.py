@@ -20,6 +20,7 @@ _CONSUMER_FILE_AUTHORITY = {
     "postgres": (70, "0440"),
     "api": (65532, "0440"),
     "collector": (65532, "0440"),
+    "ai-worker": (65532, "0440"),
     "migration": (65532, "0440"),
     "cloudflared": (65532, "0440"),
     "origin-gateway": (0, "0400"),

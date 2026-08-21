@@ -5,7 +5,7 @@ import pytest
 from thesis_trace.platform import postgres
 from thesis_trace.platform.postgres import PostgresEvidenceStore, PostgresUnavailable
 from thesis_trace.platform.runtime import required_secret_provider
-from thesis_trace.entrypoints import collector_worker
+from thesis_trace.entrypoints import ai_worker, collector_worker
 from thesis_trace.modules.access.jwt_verifier import AccessJwtConfiguration, derive_identity_facts
 
 
@@ -71,6 +71,28 @@ def test_collector_entrypoint_only_invokes_composition_factory(monkeypatch: pyte
     monkeypatch.setattr(collector_worker, "compose_application", lambda role: factory() if role == "collector" else None)
 
     assert collector_worker.main() == 17
+    assert calls == ["factory", "worker"]
+
+
+def test_ai_worker_entrypoint_only_invokes_composition_factory(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def factory():
+        calls.append("factory")
+
+        def worker() -> int:
+            calls.append("worker")
+            return 19
+
+        return worker
+
+    monkeypatch.setattr(
+        ai_worker,
+        "compose_application",
+        lambda role: factory() if role == "ai-worker" else None,
+    )
+
+    assert ai_worker.main() == 19
     assert calls == ["factory", "worker"]
 
 

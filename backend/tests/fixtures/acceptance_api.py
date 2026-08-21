@@ -6,7 +6,10 @@ import uuid
 
 from thesis_trace.api import EvidenceApi, OwnerSessionResponse, create_fastapi_app
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
+from thesis_trace.application.flows.anomaly_assessment import AnomalyAssessmentFlow
 from thesis_trace.modules.access.contracts import AuthenticatedActor, Role
+from thesis_trace.modules.research import ResearchAnomalyFacade
+from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAssessmentService
 from thesis_trace.platform.postgres import PostgresEvidenceStore, bootstrap_schema
 
 
@@ -22,7 +25,16 @@ async def fixture_owner() -> AuthenticatedActor:
 
 
 app = create_fastapi_app(
-    EvidenceApi(flow=EvidenceIntakeFlow(store=store, id_generator=lambda: str(uuid.uuid4()))),
+    EvidenceApi(
+        flow=EvidenceIntakeFlow(store=store, id_generator=lambda: str(uuid.uuid4())),
+        anomaly_flow=AnomalyAssessmentFlow(
+            research=ResearchAnomalyFacade(
+                AnomalyAssessmentService(
+                    store=store, clock=lambda: datetime.now(timezone.utc).isoformat()
+                )
+            )
+        ),
+    ),
     fixture_owner,
 )
 
@@ -50,4 +62,12 @@ async def acceptance_evidence(evidence_id: str) -> dict[str, object]:
         "audit_events": store.count_audit_events(evidence_id),
         "collection_jobs": store.count_collection_jobs(evidence_id),
         "provenance": store.get_source_provenance(evidence_id),
+    }
+
+
+@app.get("/acceptance/anomaly/{assessment_id}")
+async def acceptance_anomaly(assessment_id: str) -> dict[str, int]:
+    return {
+        "audit_events": store.count_audit_events(assessment_id),
+        "analysis_jobs": store.count_anomaly_jobs(assessment_id),
     }

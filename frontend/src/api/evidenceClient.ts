@@ -1,10 +1,14 @@
 import {
+  get_anomaly_assessment_api_anomaly_assessments__assessment_id__get,
   confirm_evidence_stage_api_evidence__evidence_id__stage_confirmations_post,
   create_company_api_companies_post,
   get_evidence_stage_api_evidence__evidence_id__stage_get,
   list_companies_api_companies_get,
+  request_anomaly_assessment_api_evidence__evidence_id__anomaly_assessments_post,
   status_api_evidence__evidence_id__get,
   submit_api_evidence_post,
+  type AnomalyAssessmentRequestBody,
+  type AnomalyAssessmentResponse,
   type CompanyCreateBody,
   type CompanyResponse,
   type EvidenceResponse,
@@ -12,7 +16,7 @@ import {
   type EvidenceStageResponse,
   type EvidenceSubmissionBody,
 } from "../generated/api";
-export type { CompanyResponse, DimensionFactsBody, EvidenceResponse, EvidenceStageConfirmationBody, EvidenceStageResponse, EvidenceStatus } from "../generated/api";
+export type { AnomalyAssessmentRequestBody, AnomalyAssessmentResponse, CompanyResponse, DimensionFactsBody, EvidenceResponse, EvidenceStageConfirmationBody, EvidenceStageResponse, EvidenceStatus } from "../generated/api";
 
 export interface EvidenceIntake extends EvidenceResponse { company: CompanyResponse; submittedUrl: string }
 export interface EvidenceClient {
@@ -22,6 +26,8 @@ export interface EvidenceClient {
   getEvidenceIntake(evidenceId: string): Promise<EvidenceResponse>;
   getEvidenceStage(evidenceId: string): Promise<EvidenceStageResponse>;
   confirmEvidenceStage(evidenceId: string, input: EvidenceStageConfirmationBody): Promise<EvidenceStageResponse>;
+  requestAnomalyAssessment(evidenceId: string, input: AnomalyAssessmentRequestBody): Promise<AnomalyAssessmentResponse>;
+  getAnomalyAssessment(assessmentId: string): Promise<AnomalyAssessmentResponse>;
 }
 export class ApiError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) { super(message); this.name = "ApiError"; }
@@ -45,6 +51,8 @@ export function createEvidenceClient({ baseUrl, fetcher = fetch, idempotencyKey 
     getEvidenceIntake: (id) => safe(status_api_evidence__evidence_id__get(baseUrl, id, fetcher)),
     getEvidenceStage: (id) => safe(get_evidence_stage_api_evidence__evidence_id__stage_get(baseUrl, id, fetcher)),
     confirmEvidenceStage: (id, input) => safe(confirm_evidence_stage_api_evidence__evidence_id__stage_confirmations_post(baseUrl, id, input, fetcher)),
+    requestAnomalyAssessment: (id, input) => safe(request_anomaly_assessment_api_evidence__evidence_id__anomaly_assessments_post(baseUrl, id, input, fetcher)),
+    getAnomalyAssessment: (id) => safe(get_anomaly_assessment_api_anomaly_assessments__assessment_id__get(baseUrl, id, fetcher)),
   };
 }
 export const evidenceClient = createEvidenceClient({ baseUrl: "/api" });

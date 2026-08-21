@@ -38,14 +38,17 @@ def main() -> None:
                 "FROM pg_roles WHERE rolname LIKE 'thesis_trace_%'"
             ).fetchall()
         }
-        for role in ("thesis_trace_migration", "thesis_trace_api", "thesis_trace_collector"):
+        for role in (
+            "thesis_trace_migration", "thesis_trace_api", "thesis_trace_collector",
+            "thesis_trace_ai_worker",
+        ):
             assert roles[role] == (False, False, False, False, False), f"unsafe attributes for {role}"
         owner = admin.execute(
             "SELECT r.rolname FROM pg_database d JOIN pg_roles r ON r.oid=d.datdba "
             "WHERE d.datname=current_database()"
         ).fetchone()[0]
         assert owner == "thesis_trace_migration", "migration role must own production database"
-        for role in ("thesis_trace_api", "thesis_trace_collector"):
+        for role in ("thesis_trace_api", "thesis_trace_collector", "thesis_trace_ai_worker"):
             assert role != owner, f"{role} must not own the production database"
             can_create = admin.execute(
                 "SELECT has_schema_privilege(%s,'public','CREATE')", (role,)
@@ -68,6 +71,15 @@ def main() -> None:
         assert not admin.execute(
             "SELECT has_table_privilege('thesis_trace_collector','research.canonical_sources','UPDATE,DELETE')"
         ).fetchone()[0]
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_ai_worker','research.anomaly_analysis_jobs','SELECT,UPDATE')"
+        ).fetchone()[0]
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_ai_worker','research.anomaly_assessments','SELECT,UPDATE')"
+        ).fetchone()[0]
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_ai_worker','research.anomaly_assessments','INSERT,DELETE')"
+        ).fetchone()[0]
         source_id = uuid.uuid4()
         admin.execute("BEGIN")
         try:
@@ -81,7 +93,7 @@ def main() -> None:
             )
         finally:
             admin.execute("ROLLBACK")
-    print("Production migration/API/collector role separation passed")
+    print("Production migration/API/collector/AI-worker role separation passed")
 
 
 if __name__ == "__main__":

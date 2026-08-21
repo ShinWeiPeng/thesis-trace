@@ -1,12 +1,12 @@
 # ALG-0003: Source classification and independence
 ## Metadata
-- Status: proposed
-- Owner module: research
+- Status: accepted
+- Owner module: anomaly_assessment
 - Product feature: A/B/C source model
 - Flow IDs: evidence-evaluation-flow
-- Related ADRs: none
-- Source paths: planned research policy
-- Test and benchmark paths: planned research policy tests
+- Related ADRs: ADR-0005
+- Source paths: `backend/src/thesis_trace/modules/research/anomaly_assessment/policy.py`
+- Test and benchmark paths: `backend/tests/test_anomaly_policy.py`, `backend/tests/fixtures/anomaly-qualification-v1.json`
 - Supersedes: none
 ## Problem and observable success
 Classify raw sources and determine whether B sources are genuinely independent.
@@ -31,4 +31,6 @@ Fixtures cover official, editorial, repost, shared anonymous claim, shared repor
 ## Risks and monitoring
 Publisher identity drift and hidden syndication; monitor manual reclassifications.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-21
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

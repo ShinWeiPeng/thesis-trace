@@ -33,6 +33,14 @@ from thesis_trace.modules.research.evidence_stage.contracts import (
     StageActorContext,
 )
 from thesis_trace.modules.research.evidence_stage.service import EvidenceStageService
+from thesis_trace.modules.research.anomaly_assessment.contracts import (
+    AnomalyClass,
+    AssessmentStatus,
+    EvaluateAssessmentCommand,
+    RequestAssessmentCommand,
+    SourceCharacteristicSnapshot,
+)
+from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAssessmentService
 
 
 pytestmark = pytest.mark.skipif(
@@ -196,7 +204,163 @@ def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: Postg
         (4, "recovery_session_policy_binding"),
         (5, "source_normalization_policy_version"),
         (6, "owner_confirmed_evidence_stage"),
+        (7, "shadow_first_anomaly_assessment"),
     ]
+
+
+def test_anomaly_request_job_and_result_are_atomic_version_bound_and_shadow_only(
+    store: PostgresEvidenceStore,
+) -> None:
+    evidence_id = str(uuid.uuid4())
+    store.commit_admission(
+        idempotency_key="anomaly-intake",
+        record=EvidenceRecord(
+            evidence_id, 1, "2330", 1, "https://example.com/anomaly", EvidenceStatus.RECEIVED
+        ),
+        audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
+        job=CollectionRequest(evidence_id, 1, "https://example.com/anomaly", f"collect:{evidence_id}"),
+        accepted=EvidenceAccepted(evidence_id, 1),
+    )
+    collection_job = store.claim_collection_job()
+    assert collection_job is not None
+    assert store.complete_collection(
+        evidence_id,
+        CollectedSourceSnapshot(
+            canonical_url="https://example.com/anomaly",
+            publisher="Publisher 1",
+            content_hash=f"anomaly-{evidence_id}",
+            retrieved_at="2026-08-21T09:00:00+00:00",
+            normalization_policy_version="url-normalization-v1",
+            source_category="B",
+            lineage="underlying-1",
+        ),
+        collection_job.lease_token,
+    )
+    second_evidence_id = str(uuid.uuid4())
+    store.commit_admission(
+        idempotency_key="anomaly-intake-2",
+        record=EvidenceRecord(
+            second_evidence_id, 1, "2330", 1, "https://example.com/anomaly-2",
+            EvidenceStatus.RECEIVED,
+        ),
+        audit=EvidenceAuditFact("owner-1", "evidence.received", second_evidence_id, 1),
+        job=CollectionRequest(
+            second_evidence_id, 1, "https://example.com/anomaly-2",
+            f"collect:{second_evidence_id}",
+        ),
+        accepted=EvidenceAccepted(second_evidence_id, 1),
+    )
+    second_job = store.claim_collection_job()
+    assert second_job is not None
+    assert store.complete_collection(
+        second_evidence_id,
+        CollectedSourceSnapshot(
+            canonical_url="https://example.com/anomaly-2",
+            publisher="Publisher 2",
+            content_hash=f"anomaly-{second_evidence_id}",
+            retrieved_at="2026-08-21T09:05:00+00:00",
+            normalization_policy_version="url-normalization-v1",
+            source_category="B",
+            lineage="underlying-2",
+        ),
+        second_job.lease_token,
+    )
+    evidence = store.get_record(evidence_id)
+    snapshot_id = store.get_source_snapshot_id(evidence_id)
+    second_snapshot_id = store.get_source_snapshot_id(second_evidence_id)
+    assert evidence is not None and snapshot_id is not None and second_snapshot_id is not None
+    requested_sources = (
+        SourceCharacteristicSnapshot(snapshot_id, "browser-value-is-not-authority"),
+        SourceCharacteristicSnapshot(second_snapshot_id, "browser-value-is-not-authority"),
+    )
+    service = AnomalyAssessmentService(
+        store=store, clock=lambda: "2026-08-21T10:00:00+00:00"
+    )
+    requested = service.request(
+        RequestAssessmentCommand(
+            "owner-1", True, evidence_id, evidence.version, requested_sources, "review", "anomaly-1"
+        )
+    )
+    assert service.request(
+        RequestAssessmentCommand(
+            "owner-1", True, evidence_id, evidence.version, requested_sources, "review", "anomaly-1"
+        )
+    ) == requested
+    assert service.request(
+        RequestAssessmentCommand(
+                "owner-1", True, evidence_id, evidence.version,
+                (
+                    SourceCharacteristicSnapshot(snapshot_id, "different-browser-value"),
+                    SourceCharacteristicSnapshot(second_snapshot_id, "different-browser-value"),
+                ),
+            "review", "anomaly-1",
+        )
+    ) == requested
+    assert requested.status is AssessmentStatus.PENDING
+    assert store.count_anomaly_jobs(requested.assessment_id) == 1
+    job = store.claim_anomaly_job()
+    assert job is not None
+    assert job.build_version == "test-build"
+    assert job.provider_model_version == "test-provider-model"
+    assert job.critic_model_version == "test-critic-model"
+    stored_sources = service.load_sources(requested.assessment_id)
+    assert tuple(source.publisher_identity for source in stored_sources) == (
+        "Publisher 1", "Publisher 2",
+    )
+    assert all(source.editorial_responsibility for source in stored_sources)
+    assert tuple(source.underlying_evidence_id for source in stored_sources) == (
+        "underlying-1", "underlying-2",
+    )
+    result = service.evaluate(
+        EvaluateAssessmentCommand(
+            requested.assessment_id,
+            job.lease_token or "",
+            1,
+            stored_sources,
+            (snapshot_id, second_snapshot_id),
+            True,
+            True,
+        )
+    )
+    assert result.status is AssessmentStatus.SUCCEEDED
+    assert result.trace is not None
+    assert result.trace.anomaly_class is AnomalyClass.WOULD_BE_HARD
+    assert store.count_audit_events(requested.assessment_id) == 2
+
+    role_name = "thesis_trace_anomaly_rls_integration"
+    with psycopg.connect(os.environ["THESIS_TRACE_TEST_DATABASE_URL"], autocommit=True) as connection:
+        connection.execute(
+            f"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{role_name}') "
+            f"THEN CREATE ROLE {role_name} NOLOGIN NOBYPASSRLS; END IF; END $$"
+        )
+        connection.execute(f"GRANT USAGE ON SCHEMA research TO {role_name}")
+        connection.execute(
+            f"GRANT SELECT,UPDATE ON research.anomaly_assessments TO {role_name}"
+        )
+        connection.execute(f"SET ROLE {role_name}")
+        with connection.transaction():
+            assert connection.execute(
+                "SELECT count(*) FROM research.anomaly_assessments"
+            ).fetchone()[0] == 0
+        with connection.transaction():
+            connection.execute("SELECT set_config('app.role','learner',true)")
+            assert connection.execute(
+                "SELECT count(*) FROM research.anomaly_assessments"
+            ).fetchone()[0] == 1
+            assert connection.execute(
+                "UPDATE research.anomaly_assessments SET failure_code='forbidden'"
+            ).rowcount == 0
+        with connection.transaction():
+            connection.execute("SELECT set_config('app.role','admin',true)")
+            assert connection.execute(
+                "SELECT count(*) FROM research.anomaly_assessments"
+            ).fetchone()[0] == 0
+        with connection.transaction():
+            connection.execute("SELECT set_config('app.role','ai_worker',true)")
+            assert connection.execute(
+                "UPDATE research.anomaly_assessments SET failure_code=failure_code"
+            ).rowcount == 1
+        connection.execute("RESET ROLE")
 
 
 def test_migration_0005_preserves_pre_versioned_keys_as_legacy() -> None:

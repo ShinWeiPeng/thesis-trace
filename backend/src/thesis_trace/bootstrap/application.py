@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from typing import Protocol
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -11,6 +12,9 @@ from thesis_trace.adapters.cloudflare_identity.adapter import CloudflareGetIdent
 from thesis_trace.adapters.postgres_access.adapter import PostgresAccessAdapter
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
 from thesis_trace.application.flows.evidence_stage import EvidenceStageFlow
+from thesis_trace.application.flows.anomaly_assessment import AnomalyAssessmentFlow
+from thesis_trace.application.flows.anomaly_assessment import AnomalyJobProcessor
+from thesis_trace.adapters.openai_recommendation.adapter import OpenAIRecommendationAdapter
 from thesis_trace.modules.access.contracts import AuthenticatedActor, SecurityContext
 from thesis_trace.modules.access.jwt_verifier import AccessJwtConfiguration, CloudflareJwtVerifier, JwtVerificationError
 from thesis_trace.modules.access.jwt_verifier import derive_identity_facts
@@ -25,7 +29,9 @@ from thesis_trace.platform.runtime import required_secret_provider, required_set
 from thesis_trace.platform.source_fetch import RestrictedHttpSourceFetcher
 from thesis_trace.modules.research.evidence_collection.service import EvidenceCollector
 from thesis_trace.modules.research.evidence_stage.service import EvidenceStageService
-from thesis_trace.modules.research import ResearchStageFacade
+from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAssessmentService
+from thesis_trace.modules.research.anomaly_assessment.contracts import AnomalyAnalysisVersions
+from thesis_trace.modules.research import ResearchAnomalyFacade, ResearchStageFacade
 
 
 @dataclass(slots=True)
@@ -48,6 +54,36 @@ class CollectorRuntime:
         while True:
             if not self.collector.run_once():
                 time.sleep(2)
+
+
+class AnomalyProcessor(Protocol):
+    """Composition-local structural contract retained by the AI worker runtime."""
+
+    def run_once(self) -> bool: ...
+
+
+@dataclass(slots=True)
+class AiWorkerRuntime:
+    """Process-lifetime AI bindings retained by the isolated worker handle."""
+
+    processor: AnomalyProcessor
+
+    def run_forever(self) -> int:
+        while True:
+            if not self.processor.run_once():
+                time.sleep(2)
+
+
+def _anomaly_analysis_versions() -> AnomalyAnalysisVersions:
+    return AnomalyAnalysisVersions(
+        build_version=required_setting("THESIS_TRACE_BUILD_ID"),
+        candidate_schema_version="anomaly-candidate-v1",
+        candidate_prompt_version="anomaly-prompt-v1",
+        provider_model_version=required_setting("THESIS_TRACE_OPENAI_MODEL"),
+        critic_schema_version="recommendation-critic-v1",
+        critic_prompt_version="recommendation-critic-prompt-v1",
+        critic_model_version=required_setting("THESIS_TRACE_OPENAI_CRITIC_MODEL"),
+    )
 
 
 def create_authenticated_actor_dependency(identity_adapter, identity_registry, sessions):
@@ -89,10 +125,11 @@ def create_authenticated_actor_dependency(identity_adapter, identity_registry, s
 
 def compose_application(role: str = "api") -> object:
     """Construct one release role while keeping all adapter selection behind one symbol."""
-    if role not in {"api", "collector", "collector-healthcheck"}:
+    if role not in {"api", "collector", "collector-healthcheck", "ai-worker"}:
         raise ValueError("unknown_runtime_role")
     database_url_provider = required_secret_provider("THESIS_TRACE_DATABASE_URL")
-    store = PostgresEvidenceStore(database_url_provider, runtime_role="collector" if role == "collector" else None)
+    runtime_role = "collector" if role == "collector" else ("ai_worker" if role == "ai-worker" else None)
+    store = PostgresEvidenceStore(database_url_provider, runtime_role=runtime_role)
     verify_schema_compatibility(database_url_provider)
 
     if role == "collector-healthcheck":
@@ -101,6 +138,26 @@ def compose_application(role: str = "api") -> object:
     if role == "collector":
         runtime = CollectorRuntime(
             EvidenceCollector(store=store, source_fetcher=RestrictedHttpSourceFetcher())
+        )
+        return runtime.run_forever
+
+    if role == "ai-worker":
+        service = AnomalyAssessmentService(
+            store=store,
+            clock=lambda: datetime.now(timezone.utc).isoformat(),
+            versions=_anomaly_analysis_versions(),
+        )
+        provider = OpenAIRecommendationAdapter(
+            api_key_provider=required_secret_provider("THESIS_TRACE_OPENAI_API_KEY"),
+            model=required_setting("THESIS_TRACE_OPENAI_MODEL"),
+            critic_model=required_setting("THESIS_TRACE_OPENAI_CRITIC_MODEL"),
+        )
+        runtime = AiWorkerRuntime(
+            AnomalyJobProcessor(
+                research=ResearchAnomalyFacade(service),
+                provider=provider,
+                critic=provider,
+            )
         )
         return runtime.run_forever
 
@@ -141,8 +198,17 @@ def compose_application(role: str = "api") -> object:
             EvidenceStageService(store=store, clock=lambda: datetime.now(timezone.utc).isoformat())
         )
     )
+    anomaly_flow = AnomalyAssessmentFlow(
+        research=ResearchAnomalyFacade(
+            AnomalyAssessmentService(
+                store=store,
+                clock=lambda: datetime.now(timezone.utc).isoformat(),
+                versions=_anomaly_analysis_versions(),
+            )
+        )
+    )
     app = create_fastapi_app(
-        EvidenceApi(flow=flow, stage_flow=stage_flow), authenticated_actor,
+        EvidenceApi(flow=flow, stage_flow=stage_flow, anomaly_flow=anomaly_flow), authenticated_actor,
         AccessApi(access_store, sessions, account_actions),
     )
     app.state.thesis_trace_runtime = runtime

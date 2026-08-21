@@ -30,7 +30,7 @@ class AccessContractTests(unittest.TestCase):
 
     def test_production_database_roles_are_separate_and_least_privilege(self) -> None:
         sql = (ROOT / "infra/postgres/production-roles.sql").read_text(encoding="utf-8").upper()
-        for role in ("THESIS_TRACE_MIGRATION", "THESIS_TRACE_API", "THESIS_TRACE_COLLECTOR"):
+        for role in ("THESIS_TRACE_MIGRATION", "THESIS_TRACE_API", "THESIS_TRACE_COLLECTOR", "THESIS_TRACE_AI_WORKER"):
             self.assertIn(role, sql)
         self.assertIn("NOBYPASSRLS", sql)
         self.assertIn("REVOKE CREATE ON SCHEMA PUBLIC", sql)
