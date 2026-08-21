@@ -8,7 +8,7 @@
 ## 系統目的與程式入口
 
 - `thesis_trace_application` — Coordinate authenticated cross-domain product flows without owning domain state.
-  - 程式入口: [`EvidenceIntakeFlow`](../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)
+  - 程式入口: [`EvidenceIntakeFlow`](../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)<br>[`EvidenceStageFlow`](../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)
 - `backend_composition` — Construct the release application and wire functional ports to concrete adapters.
   - 程式入口: [`compose_application`](../backend/src/thesis_trace/bootstrap/application.py) (initializer)
 
@@ -22,6 +22,7 @@ flowchart TD
     n_research_domain["research_domain (L1)<br/>管理公司與研究證據"]
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
+    n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
     n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
@@ -35,6 +36,7 @@ flowchart TD
     n_thesis_trace_application -->|owns| n_research_domain
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
+    n_research_domain -->|owns| n_evidence_stage
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
@@ -52,7 +54,7 @@ flowchart TD
 
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **子功能:** `access_domain`, `research_domain`, `thesis_domain`, `portfolio_domain`, `recommendation_domain`, `workflow_domain`, `notification_domain`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake)
+- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage)
 - **保護理由:** Sibling domains communicate only through this parent; Domain state remains child-owned.; Reject unauthenticated or unauthorized commands → Reject unauthenticated or unauthorized commands; Propagate child admission failures. → Propagate child admission failures.
 
 ### `backend_composition`
@@ -66,13 +68,13 @@ flowchart TD
 
 - **目的:** Own authenticated actor identity and application authorization decisions.
 - **子功能:** `identity_registry`, `session_management`, `account_administration`, `confirmation_challenge`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake)
+- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage)
 - **保護理由:** Provider identity never collapses by email alone; JWT subject and provider discriminator resolve through a preapproved mapping.; Unknown provider, identity, session, role, or challenge fails closed without existence disclosure.; Authorization fails closed.; Reject absent → Reject absent; expired → expired; or unauthorized identities. → or unauthorized identities.
 
 ### `research_domain`
 
 - **目的:** Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts.
-- **子功能:** `evidence_intake`, `evidence_collection`
+- **子功能:** `evidence_intake`, `evidence_collection`, `evidence_stage`
 - **相關 Flows:** [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake)
 - **保護理由:** State commits before success events; Evidence streams are serialized; Source records are immutable.; Reject invalid URLs or stale company versions → Reject invalid URLs or stale company versions; Record safe retry and terminal failures. → Record safe retry and terminal failures.
 
@@ -89,6 +91,13 @@ flowchart TD
 - **子功能:** 無
 - **相關 Flows:** 無
 - **保護理由:** A lease token is opaque; Success is published only after snapshot commit.; Retry transient failures and dead-letter terminal failures without leaking secrets. → Retry transient failures and dead-letter terminal failures without leaking secrets.
+
+### `evidence_stage`
+
+- **目的:** Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation.
+- **子功能:** 無
+- **相關 Flows:** [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage)
+- **保護理由:** Canonical stage is derived only by ALG-0002 from confirmed facts.; Every committed version binds one immutable source snapshot, actor, Server time, reason and complete E1-E6 gate trace.; Learner and Admin, client-computed values and unconfirmed AI candidates have no mutation authority.
 
 ### `thesis_domain`
 
@@ -174,6 +183,7 @@ flowchart TD
 - [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link) — Resolve responsive direct routes with server role filtering and indistinguishable unavailable-resource behavior.
 - [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation) — Revalidate and revoke one application session without extending the Cloudflare Access credential.
 - [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake) — Admit an Owner Evidence URL and expose durable lifecycle state.
+- [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage) — Confirm Owner-authored dimension facts and synchronously expose the atomically committed deterministic E0-E6 stage.
 
 ## 完整技術參考
 
@@ -187,6 +197,7 @@ flowchart TD
     n_research_domain["research_domain (L1)<br/>管理公司與研究證據"]
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
+    n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
     n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
@@ -212,9 +223,12 @@ flowchart TD
     n_thesis_trace_application -.->|depends| n_recommendation_domain
     n_thesis_trace_application -.->|depends| n_workflow_domain
     n_thesis_trace_application -.->|depends| n_notification_domain
+    n_backend_composition -.->|depends| n_thesis_trace_application
     n_backend_composition -.->|depends| n_fastapi_entrypoint
     n_backend_composition -.->|depends| n_access_domain
+    n_backend_composition -.->|depends| n_research_domain
     n_backend_composition -.->|depends| n_evidence_collection
+    n_backend_composition -.->|depends| n_evidence_stage
     n_backend_composition -.->|depends| n_postgres_research_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
@@ -228,15 +242,19 @@ flowchart TD
     n_thesis_trace_application -->|owns| n_research_domain
     n_research_domain -.->|depends| n_evidence_intake
     n_research_domain -.->|depends| n_evidence_collection
+    n_research_domain -.->|depends| n_evidence_stage
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
+    n_research_domain -->|owns| n_evidence_stage
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
     n_thesis_trace_application -->|owns| n_workflow_domain
     n_thesis_trace_application -->|owns| n_notification_domain
+    n_fastapi_entrypoint -.->|depends| n_thesis_trace_application
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
+    n_postgres_research_adapter -.->|depends| n_evidence_stage
     n_restricted_source_fetch_adapter -.->|depends| n_evidence_collection
     n_access_domain -->|owns| n_identity_registry
     n_access_domain -->|owns| n_session_management
@@ -253,6 +271,23 @@ flowchart TD
 
 ## Type Catalog
 
+- `dimensionfactsbody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `evidencestageconfirmationbody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `gateresultresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `evidencestageresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `evidencestageflow` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `confirmevidencestagerequest` — `thesis_trace_application` / `command` / `module-public`
+- `queryevidencestagerequest` — `thesis_trace_application` / `query` / `module-public`
+- `evidencestagefactsresult` — `thesis_trace_application` / `domain-value` / `module-public`
+- `evidencestagegateresult` — `thesis_trace_application` / `domain-value` / `module-public`
+- `evidencestageresult` — `thesis_trace_application` / `domain-value` / `module-public`
+- `researchactorcontext` — `research_domain` / `composition-mapping` / `module-public`
+- `researchstageconfirmationrequest` — `research_domain` / `command` / `module-public`
+- `researchstagequery` — `research_domain` / `query` / `module-public`
+- `researchstagefacts` — `research_domain` / `domain-value` / `module-public`
+- `researchstagegate` — `research_domain` / `domain-value` / `module-public`
+- `researchstageresult` — `research_domain` / `domain-value` / `module-public`
+- `researchstagefacade` — `research_domain` / `composition-mapping` / `module-public`
 - `evidenceapi` — `fastapi_entrypoint` / `wire-representation` / `private`
 - `submitevidencerequest` — `thesis_trace_application` / `command` / `module-public`
 - `evidenceintakeflow` — `thesis_trace_application` / `private-helper` / `private`
@@ -340,6 +375,16 @@ flowchart TD
 - `cloudflarejwksdecoder` — `cloudflare_identity_adapter` / `adapter-binding` / `module-public`
 - `accountactionview` — `react_access_adapter` / `policy` / `private`
 - `pendingaccountconfirmation` — `react_access_adapter` / `runtime-state` / `private`
+- `evidencestage` — `evidence_stage` / `policy` / `module-public`
+- `sourceconfirmation` — `evidence_stage` / `policy` / `module-public`
+- `dimensionfacts` — `evidence_stage` / `domain-value` / `module-public`
+- `stageactorcontext` — `evidence_stage` / `domain-value` / `module-public`
+- `confirmdimensionfactscommand` — `evidence_stage` / `command` / `module-public`
+- `gateresult` — `evidence_stage` / `domain-value` / `module-public`
+- `stageevaluation` — `evidence_stage` / `domain-value` / `module-public`
+- `evidencestagerecord` — `evidence_stage` / `domain-value` / `module-public`
+- `evidencestagestoreport` — `evidence_stage` / `port` / `module-public`
+- `evidencestageservice` — `evidence_stage` / `policy` / `module-public`
 
 ## State Ownership
 
@@ -351,6 +396,8 @@ flowchart TD
 - `session-to-rls-context` / `access_domain` / `access_domain` to `session_management`
 - `account-intent-to-confirmed-change` / `access_domain` / `account_administration` to `confirmation_challenge`
 - `access-response-to-react-view` / `thesis_trace_application` / `thesis_trace_application` to `access_domain`
+- `authenticated-owner-to-stage-command` / `thesis_trace_application` / `access_domain` to `research_domain`
+- `source-snapshot-to-confirmed-stage` / `research_domain` / `evidence_collection` to `evidence_stage`
 
 ## Adoption Readiness
 

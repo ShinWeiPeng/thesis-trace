@@ -1,6 +1,6 @@
 /* eslint-disable */
 // Generated from backend OpenAPI. Do not edit.
-export const OPENAPI_SHA256 = "0e86074825d849c212d209f8fde202991e001158236a176465091c29d351a0dd";
+export const OPENAPI_SHA256 = "baff18c1514e178d0b4718a51277384cdae9dc8665f537a2f0a2369fe4089917";
 
 export type AccountCreateBody = { "challenge_token": string; "email_fact": string; "provider_id": string; "provider_subject": string; "provider_type": string; "reason": string; "role": Role };
 
@@ -20,11 +20,19 @@ export type ConfirmedActionBody = { "action_type": string; "challenge_token": st
 
 export type ConfirmedActionResponse = { "accepted": boolean; "challenge_id": string };
 
-export type EvidenceResponse = { "evidence_id": string; "status": EvidenceStatus; "version": number };
+export type DimensionFactsBody = { "commercialization_established": boolean; "consecutive_financial_quarters": number; "identifiable_profit_or_cash_flow": boolean; "identifiable_revenue": boolean; "product_established": boolean; "source_confirmation": "unverified" | "official" };
+
+export type EvidenceResponse = { "evidence_id": string; "source_snapshot_id"?: string | null; "status": EvidenceStatus; "version": number };
+
+export type EvidenceStageConfirmationBody = { "expected_version": number; "facts": DimensionFactsBody; "idempotency_key": string; "reason": string; "source_snapshot_id": string };
+
+export type EvidenceStageResponse = { "actor_id": string; "confirmed_at": string; "evidence_id": string; "facts": DimensionFactsBody; "gate_trace": GateResultResponse[]; "policy_version": string; "reason": string; "source_snapshot_id": string; "stage": string; "version": number };
 
 export type EvidenceStatus = "received" | "processing" | "succeeded" | "failed" | "retrying" | "dead_letter";
 
 export type EvidenceSubmissionBody = { "company_id": string; "company_version": number; "idempotency_key": string; "url": string };
+
+export type GateResultResponse = { "code": string; "gate": string; "passed": boolean };
 
 export type HTTPValidationError = { "detail"?: ValidationError[] };
 
@@ -80,6 +88,14 @@ export function submit_api_evidence_post(baseUrl: string, body: EvidenceSubmissi
 
 export function status_api_evidence__evidence_id__get(baseUrl: string, evidence_id: string, fetcher: typeof fetch = fetch): Promise<EvidenceResponse> {
   return request(fetcher, `${baseUrl}/evidence/${encodeURIComponent(evidence_id)}`);
+}
+
+export function get_evidence_stage_api_evidence__evidence_id__stage_get(baseUrl: string, evidence_id: string, fetcher: typeof fetch = fetch): Promise<EvidenceStageResponse> {
+  return request(fetcher, `${baseUrl}/evidence/${encodeURIComponent(evidence_id)}/stage`);
+}
+
+export function confirm_evidence_stage_api_evidence__evidence_id__stage_confirmations_post(baseUrl: string, evidence_id: string, body: EvidenceStageConfirmationBody, fetcher: typeof fetch = fetch): Promise<EvidenceStageResponse> {
+  return request(fetcher, `${baseUrl}/evidence/${encodeURIComponent(evidence_id)}/stage-confirmations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
 
 export function delete_session_api_session_delete(baseUrl: string, fetcher: typeof fetch = fetch): Promise<unknown> {

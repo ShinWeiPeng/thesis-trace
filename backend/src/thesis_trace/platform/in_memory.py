@@ -11,6 +11,12 @@ from thesis_trace.modules.research.evidence_intake.contracts import (
 )
 import uuid
 from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot
+from thesis_trace.modules.research.evidence_stage.contracts import (
+    ConfirmDimensionFactsCommand,
+    EvidenceStageRecord,
+    StageEvaluation,
+    confirmation_matches,
+)
 
 
 class InMemoryEvidenceStore:
@@ -23,6 +29,8 @@ class InMemoryEvidenceStore:
         self.collection_jobs: list[CollectionRequest] = []
         self.source_snapshots: dict[str, CollectedSourceSnapshot] = {}
         self._accepted_by_key: dict[str, EvidenceAccepted] = {}
+        self.stage_records: dict[str, EvidenceStageRecord] = {}
+        self._stage_by_idempotency_key: dict[str, EvidenceStageRecord] = {}
 
     def create_company(self, ticker: str, name: str) -> CompanyRecord:
         ticker = ticker.strip()
@@ -65,6 +73,9 @@ class InMemoryEvidenceStore:
     def get_record(self, evidence_id: str) -> EvidenceRecord | None:
         return self.records.get(evidence_id)
 
+    def get_source_snapshot_id(self, evidence_id: str) -> str | None:
+        return evidence_id if evidence_id in self.source_snapshots else None
+
     def claim_collection_job(self) -> LeasedCollectionJob | None:
         if not self.collection_jobs:
             return None
@@ -104,3 +115,43 @@ class InMemoryEvidenceStore:
         status = EvidenceStatus.RETRYING if retryable else EvidenceStatus.FAILED
         self.transition(job.evidence_id, status)
         return True
+
+    def commit_confirmation(
+        self,
+        *,
+        command: ConfirmDimensionFactsCommand,
+        evaluation: StageEvaluation,
+        confirmed_at: str,
+        policy_version: str,
+    ) -> EvidenceStageRecord:
+        replay = self._stage_by_idempotency_key.get(command.idempotency_key)
+        if replay is not None:
+            if not confirmation_matches(replay, command, evaluation, policy_version):
+                raise ValueError("idempotency_conflict")
+            return replay
+        evidence = self.records.get(command.evidence_id)
+        if evidence is None or evidence.status is not EvidenceStatus.SUCCEEDED:
+            raise LookupError("resource_unavailable")
+        if command.source_snapshot_id != command.evidence_id or command.evidence_id not in self.source_snapshots:
+            raise LookupError("resource_unavailable")
+        current = self.stage_records.get(command.evidence_id)
+        current_version = 0 if current is None else current.version
+        if command.expected_version != current_version:
+            raise ValueError("version_conflict")
+        record = EvidenceStageRecord(
+            evidence_id=command.evidence_id,
+            version=current_version + 1,
+            source_snapshot_id=command.source_snapshot_id,
+            actor_id=command.actor.actor_id,
+            confirmed_at=confirmed_at,
+            reason=command.reason,
+            facts=command.facts,
+            evaluation=evaluation,
+            policy_version=policy_version,
+        )
+        self.stage_records[command.evidence_id] = record
+        self._stage_by_idempotency_key[command.idempotency_key] = record
+        return record
+
+    def get_stage(self, evidence_id: str) -> EvidenceStageRecord | None:
+        return self.stage_records.get(evidence_id)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from hashlib import sha256
+import json
 import uuid
 from typing import Any, Callable, Iterator, Protocol
 
@@ -17,6 +18,16 @@ from thesis_trace.modules.research.evidence_intake.contracts import (
     EvidenceRecord,
     EvidenceStatus,
     LeasedCollectionJob,
+)
+from thesis_trace.modules.research.evidence_stage.contracts import (
+    ConfirmDimensionFactsCommand,
+    DimensionFacts,
+    EvidenceStage,
+    EvidenceStageRecord,
+    GateResult,
+    SourceConfirmation,
+    StageEvaluation,
+    confirmation_matches,
 )
 
 
@@ -120,12 +131,41 @@ ALTER TABLE research.source_observations ALTER COLUMN source_id SET NOT NULL;
 ALTER TABLE research.source_snapshots DROP CONSTRAINT source_snapshots_canonical_url_key;
 """
 
+MIGRATION_0006 = """
+CREATE TABLE research.evidence_stage_versions (
+  evidence_id text NOT NULL REFERENCES research.evidence_intakes(evidence_id),
+  version integer NOT NULL CHECK(version >= 1),
+  source_snapshot_id uuid NOT NULL REFERENCES research.source_snapshots(snapshot_id),
+  actor_id text NOT NULL,
+  confirmed_at timestamptz NOT NULL,
+  reason text NOT NULL CHECK(length(btrim(reason)) > 0),
+  source_confirmation text NOT NULL CHECK(source_confirmation IN ('unverified','official','two_independent_credible')),
+  product_established boolean NOT NULL,
+  commercialization_established boolean NOT NULL,
+  identifiable_revenue boolean NOT NULL,
+  identifiable_profit_or_cash_flow boolean NOT NULL,
+  consecutive_financial_quarters integer NOT NULL CHECK(consecutive_financial_quarters >= 0),
+  stage text NOT NULL CHECK(stage IN ('E0','E1','E2','E3','E4','E5','E6')),
+  policy_version text NOT NULL,
+  gate_trace jsonb NOT NULL,
+  idempotency_key text NOT NULL UNIQUE,
+  PRIMARY KEY(evidence_id,version)
+);
+ALTER TABLE research.evidence_stage_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE research.evidence_stage_versions FORCE ROW LEVEL SECURITY;
+CREATE POLICY evidence_stage_read ON research.evidence_stage_versions FOR SELECT
+  USING (current_setting('app.role',true) IN ('owner','learner'));
+CREATE POLICY evidence_stage_owner_insert ON research.evidence_stage_versions FOR INSERT
+  WITH CHECK (current_setting('app.role',true)='owner');
+"""
+
 MIGRATIONS: tuple[tuple[int, str, str], ...] = (
     (1, "wave0_company_evidence", MIGRATION_0001),
     (2, "access_identity_session_confirmation", MIGRATION_0002),
     (3, "access_rls", MIGRATION_0003),
     (4, "recovery_session_policy_binding", MIGRATION_0004),
     (5, "source_normalization_policy_version", MIGRATION_0005),
+    (6, "owner_confirmed_evidence_stage", MIGRATION_0006),
 )
 
 
@@ -311,6 +351,125 @@ class PostgresEvidenceStore:
             ).fetchone()
         return None if row is None else EvidenceRecord(str(row[0]), int(row[1]), str(row[2]), int(row[3]), str(row[4]), EvidenceStatus(row[5]))
 
+    def get_source_snapshot_id(self, evidence_id: str) -> str | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """SELECT o.snapshot_id FROM research.evidence_intakes e
+                JOIN research.source_observations o USING(evidence_id)
+                WHERE e.evidence_id=%s AND e.status='succeeded'""",
+                (evidence_id,),
+            ).fetchone()
+        return None if row is None else str(row[0])
+
+    @staticmethod
+    def _stage_record(row: Any) -> EvidenceStageRecord:
+        trace = tuple(
+            GateResult(EvidenceStage(item["gate"]), bool(item["passed"]), str(item["code"]))
+            for item in row[13]
+        )
+        facts = DimensionFacts(
+            source_confirmation=SourceConfirmation(row[6]),
+            product_established=bool(row[7]),
+            commercialization_established=bool(row[8]),
+            identifiable_revenue=bool(row[9]),
+            identifiable_profit_or_cash_flow=bool(row[10]),
+            consecutive_financial_quarters=int(row[11]),
+        )
+        confirmed_at = row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4])
+        return EvidenceStageRecord(
+            evidence_id=str(row[0]),
+            version=int(row[1]),
+            source_snapshot_id=str(row[2]),
+            actor_id=str(row[3]),
+            confirmed_at=confirmed_at,
+            reason=str(row[5]),
+            facts=facts,
+            evaluation=StageEvaluation(EvidenceStage(row[12]), trace),
+            policy_version=str(row[14]),
+        )
+
+    @staticmethod
+    def _stage_select() -> str:
+        return """SELECT evidence_id,version,source_snapshot_id,actor_id,confirmed_at,reason,
+        source_confirmation,product_established,commercialization_established,identifiable_revenue,
+        identifiable_profit_or_cash_flow,consecutive_financial_quarters,stage,gate_trace,policy_version
+        FROM research.evidence_stage_versions"""
+
+    def commit_confirmation(
+        self,
+        *,
+        command: ConfirmDimensionFactsCommand,
+        evaluation: StageEvaluation,
+        confirmed_at: str,
+        policy_version: str,
+    ) -> EvidenceStageRecord:
+        with self._connection() as connection:
+            with connection.transaction():
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"evidence-stage:{command.evidence_id}",),
+                )
+                replay_row = connection.execute(
+                    f"{self._stage_select()} WHERE idempotency_key=%s",
+                    (command.idempotency_key,),
+                ).fetchone()
+                if replay_row is not None:
+                    replay = self._stage_record(replay_row)
+                    if not confirmation_matches(replay, command, evaluation, policy_version):
+                        raise ValueError("idempotency_conflict")
+                    return replay
+                target = connection.execute(
+                    """SELECT e.evidence_id FROM research.evidence_intakes e
+                    JOIN research.source_observations o USING(evidence_id)
+                    WHERE e.evidence_id=%s AND e.status='succeeded' AND o.snapshot_id=%s::uuid
+                    FOR UPDATE OF e""",
+                    (command.evidence_id, command.source_snapshot_id),
+                ).fetchone()
+                if target is None:
+                    raise LookupError("resource_unavailable")
+                current = connection.execute(
+                    "SELECT coalesce(max(version),0) FROM research.evidence_stage_versions WHERE evidence_id=%s",
+                    (command.evidence_id,),
+                ).fetchone()[0]
+                if int(current) != command.expected_version:
+                    raise ValueError("version_conflict")
+                version = int(current) + 1
+                trace_json = json.dumps([
+                    {"gate": item.gate.value, "passed": item.passed, "code": item.code}
+                    for item in evaluation.gate_trace
+                ], separators=(",", ":"))
+                row = connection.execute(
+                    f"""INSERT INTO research.evidence_stage_versions(
+                    evidence_id,version,source_snapshot_id,actor_id,confirmed_at,reason,
+                    source_confirmation,product_established,commercialization_established,
+                    identifiable_revenue,identifiable_profit_or_cash_flow,consecutive_financial_quarters,
+                    stage,policy_version,gate_trace,idempotency_key)
+                    VALUES (%s,%s,%s::uuid,%s,%s::timestamptz,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
+                    RETURNING {self._stage_select().split('FROM ')[0].removeprefix('SELECT ')}""",
+                    (
+                        command.evidence_id, version, command.source_snapshot_id, command.actor.actor_id,
+                        confirmed_at, command.reason, command.facts.source_confirmation.value,
+                        command.facts.product_established, command.facts.commercialization_established,
+                        command.facts.identifiable_revenue, command.facts.identifiable_profit_or_cash_flow,
+                        command.facts.consecutive_financial_quarters, evaluation.stage.value, policy_version,
+                        trace_json, command.idempotency_key,
+                    ),
+                ).fetchone()
+                connection.execute(
+                    """INSERT INTO research.audit_events(event_id,actor_id,action,subject_id,subject_version,occurred_at)
+                    VALUES (%s,%s,'evidence.stage.confirmed',%s,%s,%s::timestamptz)""",
+                    (uuid.uuid4(), command.actor.actor_id, command.evidence_id, version, confirmed_at),
+                )
+        return self._stage_record(row)
+
+    def get_stage(self, evidence_id: str) -> EvidenceStageRecord | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                f"{self._stage_select()} WHERE evidence_id=%s ORDER BY version DESC LIMIT 1",
+                (evidence_id,),
+            ).fetchone()
+        return None if row is None else self._stage_record(row)
+
     def claim_collection_job(self) -> LeasedCollectionJob | None:
         lease_token = uuid.uuid4()
         with self._connection() as connection:
@@ -426,7 +585,7 @@ class PostgresEvidenceStore:
 
     def delete_all_for_test(self) -> None:
         with self._connection() as connection:
-            connection.execute("TRUNCATE research.source_observations,research.canonical_sources,research.source_snapshots,research.collection_jobs,research.audit_events,research.idempotency_receipts,research.evidence_intakes,research.companies CASCADE")
+            connection.execute("TRUNCATE research.evidence_stage_versions,research.source_observations,research.canonical_sources,research.source_snapshots,research.collection_jobs,research.audit_events,research.idempotency_receipts,research.evidence_intakes,research.companies CASCADE")
 
     def count_audit_events(self, evidence_id: str) -> int:
         with self._connection() as connection:

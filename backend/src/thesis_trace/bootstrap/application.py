@@ -10,6 +10,7 @@ from thesis_trace.api import AccessApi, EvidenceApi
 from thesis_trace.adapters.cloudflare_identity.adapter import CloudflareGetIdentityClient, CloudflareIdentityAdapter, CloudflareJwksDecoder
 from thesis_trace.adapters.postgres_access.adapter import PostgresAccessAdapter
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
+from thesis_trace.application.flows.evidence_stage import EvidenceStageFlow
 from thesis_trace.modules.access.contracts import AuthenticatedActor, SecurityContext
 from thesis_trace.modules.access.jwt_verifier import AccessJwtConfiguration, CloudflareJwtVerifier, JwtVerificationError
 from thesis_trace.modules.access.jwt_verifier import derive_identity_facts
@@ -23,6 +24,8 @@ from thesis_trace.platform.postgres import PostgresEvidenceStore, database_secur
 from thesis_trace.platform.runtime import required_secret_provider, required_setting
 from thesis_trace.platform.source_fetch import RestrictedHttpSourceFetcher
 from thesis_trace.modules.research.evidence_collection.service import EvidenceCollector
+from thesis_trace.modules.research.evidence_stage.service import EvidenceStageService
+from thesis_trace.modules.research import ResearchStageFacade
 
 
 @dataclass(slots=True)
@@ -133,8 +136,13 @@ def compose_application(role: str = "api") -> object:
         identity_adapter=identity_adapter,
     )
     flow = EvidenceIntakeFlow(store=store, id_generator=lambda: str(uuid.uuid4()))
+    stage_flow = EvidenceStageFlow(
+        research=ResearchStageFacade(
+            EvidenceStageService(store=store, clock=lambda: datetime.now(timezone.utc).isoformat())
+        )
+    )
     app = create_fastapi_app(
-        EvidenceApi(flow=flow), authenticated_actor,
+        EvidenceApi(flow=flow, stage_flow=stage_flow), authenticated_actor,
         AccessApi(access_store, sessions, account_actions),
     )
     app.state.thesis_trace_runtime = runtime

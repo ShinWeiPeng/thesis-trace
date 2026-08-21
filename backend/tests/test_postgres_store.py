@@ -25,6 +25,14 @@ from thesis_trace.platform.postgres import (
     verify_schema_compatibility,
 )
 from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot
+from thesis_trace.modules.research.evidence_stage.contracts import (
+    ConfirmDimensionFactsCommand,
+    DimensionFacts,
+    EvidenceStage,
+    SourceConfirmation,
+    StageActorContext,
+)
+from thesis_trace.modules.research.evidence_stage.service import EvidenceStageService
 
 
 pytestmark = pytest.mark.skipif(
@@ -60,6 +68,124 @@ def test_admission_atomically_persists_record_audit_and_durable_job(store: Postg
     assert store.count_collection_jobs(evidence_id) == 1
 
 
+def test_owner_stage_confirmation_is_atomic_versioned_snapshot_bound_and_idempotent(
+    store: PostgresEvidenceStore,
+) -> None:
+    evidence_id = str(uuid.uuid4())
+    store.commit_admission(
+        idempotency_key="stage-intake",
+        record=EvidenceRecord(
+            evidence_id, 1, "2330", 1, "https://example.com/stage", EvidenceStatus.RECEIVED
+        ),
+        audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
+        job=CollectionRequest(evidence_id, 1, "https://example.com/stage", f"collect:{evidence_id}"),
+        accepted=EvidenceAccepted(evidence_id, 1),
+    )
+    lease = store.claim_collection_job()
+    assert lease is not None
+    assert store.complete_collection(
+        evidence_id,
+        CollectedSourceSnapshot(
+            canonical_url="https://example.com/stage",
+            publisher="MOPS",
+            content_hash="stage-content",
+            retrieved_at="2026-08-20T10:00:00+00:00",
+            normalization_policy_version="url-normalization-v1",
+        ),
+        lease.lease_token,
+    )
+    snapshot_id = store.get_source_snapshot_id(evidence_id)
+    assert snapshot_id is not None
+    service = EvidenceStageService(store=store, clock=lambda: "2026-08-20T12:00:00+00:00")
+    command = ConfirmDimensionFactsCommand(
+        actor=StageActorContext("owner-1", may_confirm=True, may_read=True),
+        evidence_id=evidence_id,
+        source_snapshot_id=snapshot_id,
+        expected_version=0,
+        facts=DimensionFacts(
+            SourceConfirmation.OFFICIAL,
+            product_established=True,
+            commercialization_established=True,
+            identifiable_revenue=True,
+            identifiable_profit_or_cash_flow=True,
+            consecutive_financial_quarters=2,
+        ),
+        reason="verified against MOPS snapshot",
+        idempotency_key="stage-confirmation-1",
+    )
+
+    first = service.confirm(command)
+    replay = service.confirm(command)
+
+    assert first == replay == store.get_stage(evidence_id)
+    assert first.version == 1
+    assert first.evaluation.stage is EvidenceStage.E6
+    assert first.source_snapshot_id == snapshot_id
+    assert store.count_audit_events(evidence_id) == 2
+    with pytest.raises(ValueError, match="version_conflict"):
+        service.confirm(
+            ConfirmDimensionFactsCommand(
+                actor=command.actor,
+                evidence_id=evidence_id,
+                source_snapshot_id=snapshot_id,
+                expected_version=0,
+                facts=command.facts,
+                reason="a distinct stale command",
+                idempotency_key="stage-confirmation-2",
+            )
+        )
+
+    role_name = "thesis_trace_stage_rls_integration"
+    with psycopg.connect(os.environ["THESIS_TRACE_TEST_DATABASE_URL"], autocommit=True) as connection:
+        connection.execute(
+            f"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{role_name}') "
+            f"THEN CREATE ROLE {role_name} NOLOGIN NOBYPASSRLS; END IF; END $$"
+        )
+        connection.execute(f"GRANT USAGE ON SCHEMA research TO {role_name}")
+        connection.execute(f"GRANT SELECT,INSERT ON research.evidence_stage_versions TO {role_name}")
+        assert connection.execute(
+            "SELECT rolbypassrls FROM pg_roles WHERE rolname=%s", (role_name,)
+        ).fetchone()[0] is False
+        connection.execute(f"SET ROLE {role_name}")
+        with connection.transaction():
+            assert connection.execute(
+                "SELECT count(*) FROM research.evidence_stage_versions"
+            ).fetchone()[0] == 0
+        with connection.transaction():
+            connection.execute("SELECT set_config('app.role','learner',true)")
+            assert connection.execute(
+                "SELECT count(*) FROM research.evidence_stage_versions"
+            ).fetchone()[0] == 1
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                connection.execute(
+                    """INSERT INTO research.evidence_stage_versions
+                    SELECT evidence_id,2,source_snapshot_id,'learner',now(),'forbidden',
+                    source_confirmation,product_established,commercialization_established,
+                    identifiable_revenue,identifiable_profit_or_cash_flow,
+                    consecutive_financial_quarters,stage,policy_version,gate_trace,'learner-forbidden'
+                    FROM research.evidence_stage_versions WHERE version=1"""
+                )
+        with connection.transaction():
+            connection.execute("SELECT set_config('app.role','admin',true)")
+            assert connection.execute(
+                "SELECT count(*) FROM research.evidence_stage_versions"
+            ).fetchone()[0] == 0
+        with connection.transaction():
+            connection.execute("SELECT set_config('app.role','owner',true)")
+            connection.execute(
+                """INSERT INTO research.evidence_stage_versions
+                SELECT evidence_id,2,source_snapshot_id,'owner-1',now(),'owner reconfirmed',
+                source_confirmation,product_established,commercialization_established,
+                identifiable_revenue,identifiable_profit_or_cash_flow,
+                consecutive_financial_quarters,stage,policy_version,gate_trace,'owner-confirmed-2'
+                FROM research.evidence_stage_versions WHERE version=1"""
+            )
+            assert connection.execute(
+                "SELECT count(*) FROM research.evidence_stage_versions"
+            ).fetchone()[0] == 2
+        connection.execute("RESET ROLE")
+
+
 def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: PostgresEvidenceStore) -> None:
     bootstrap_schema(lambda: os.environ["THESIS_TRACE_TEST_DATABASE_URL"])
     verify_schema_compatibility(lambda: os.environ["THESIS_TRACE_TEST_DATABASE_URL"])
@@ -69,6 +195,7 @@ def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: Postg
         (3, "access_rls"),
         (4, "recovery_session_policy_binding"),
         (5, "source_normalization_policy_version"),
+        (6, "owner_confirmed_evidence_stage"),
     ]
 
 

@@ -147,6 +147,7 @@ def test_collector_processes_durable_job_and_commits_server_owned_provenance() -
     snapshot = flow.get_status(owner(), "evidence-1")
     assert snapshot.status is EvidenceStatus.SUCCEEDED
     assert snapshot.version == 3
+    assert snapshot.source_snapshot_id == "evidence-1"
     assert store.source_snapshots["evidence-1"].content_hash == (
         "250e4986203ad771abcd8c96ba5a62646d7011c2259c400cb15e574024c10b8c"
     )

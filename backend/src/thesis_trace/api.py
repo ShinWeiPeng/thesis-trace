@@ -9,6 +9,12 @@ from starlette.responses import Response
 
 from thesis_trace.application.contracts import CreateCompanyCommand, ListCompaniesQuery, SubmitEvidenceRequest
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
+from thesis_trace.application.flows.evidence_stage import (
+    ConfirmEvidenceStageRequest,
+    EvidenceStageFlow,
+    EvidenceStageResult,
+    QueryEvidenceStageRequest,
+)
 from thesis_trace.modules.access.contracts import AuthenticatedActor
 from thesis_trace.modules.access.contracts import Role
 from thesis_trace.modules.access.identity_registry.contracts import ProviderIdentity
@@ -40,6 +46,45 @@ class EvidenceResponse(BaseModel):
     evidence_id: str
     version: int
     status: EvidenceStatus
+    source_snapshot_id: str | None = None
+
+
+class DimensionFactsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_confirmation: Literal["unverified", "official"]
+    product_established: bool
+    commercialization_established: bool
+    identifiable_revenue: bool
+    identifiable_profit_or_cash_flow: bool
+    consecutive_financial_quarters: int = Field(ge=0, le=100)
+
+
+class EvidenceStageConfirmationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_snapshot_id: str = Field(min_length=1)
+    expected_version: int = Field(ge=0)
+    facts: DimensionFactsBody
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class GateResultResponse(BaseModel):
+    gate: str
+    passed: bool
+    code: str
+
+
+class EvidenceStageResponse(BaseModel):
+    evidence_id: str
+    version: int
+    source_snapshot_id: str
+    actor_id: str
+    confirmed_at: str
+    reason: str
+    facts: DimensionFactsBody
+    stage: str
+    gate_trace: list[GateResultResponse]
+    policy_version: str
 
 
 class OwnerSessionResponse(BaseModel):
@@ -212,8 +257,9 @@ class AccessApi:
 class EvidenceApi:
     """Framework-independent HTTP boundary contract used by the FastAPI adapter."""
 
-    def __init__(self, *, flow: EvidenceIntakeFlow) -> None:
+    def __init__(self, *, flow: EvidenceIntakeFlow, stage_flow: EvidenceStageFlow | None = None) -> None:
         self._flow = flow
+        self._stage_flow = stage_flow
 
     def create_company(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -250,11 +296,65 @@ class EvidenceApi:
 
     def get_evidence(self, actor: AuthenticatedActor, evidence_id: str) -> dict[str, Any]:
         snapshot = self._flow.get_status(actor, evidence_id)
-        return {
+        response = {
             "evidence_id": snapshot.evidence_id,
             "version": snapshot.version,
             "status": snapshot.status.value,
         }
+        if snapshot.source_snapshot_id is not None:
+            response["source_snapshot_id"] = snapshot.source_snapshot_id
+        return response
+
+    @staticmethod
+    def _stage_response(record: EvidenceStageResult) -> dict[str, Any]:
+        return {
+            "evidence_id": record.evidence_id,
+            "version": record.version,
+            "source_snapshot_id": record.source_snapshot_id,
+            "actor_id": record.actor_id,
+            "confirmed_at": record.confirmed_at,
+            "reason": record.reason,
+            "facts": {
+                "source_confirmation": record.facts.source_confirmation,
+                "product_established": record.facts.product_established,
+                "commercialization_established": record.facts.commercialization_established,
+                "identifiable_revenue": record.facts.identifiable_revenue,
+                "identifiable_profit_or_cash_flow": record.facts.identifiable_profit_or_cash_flow,
+                "consecutive_financial_quarters": record.facts.consecutive_financial_quarters,
+            },
+            "stage": record.stage,
+            "gate_trace": [
+                {"gate": item.gate, "passed": item.passed, "code": item.code}
+                for item in record.gate_trace
+            ],
+            "policy_version": record.policy_version,
+        }
+
+    def confirm_evidence_stage(self, actor: AuthenticatedActor, evidence_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        if self._stage_flow is None:
+            raise LookupError("resource_unavailable")
+        facts = body["facts"]
+        record = self._stage_flow.confirm(actor, ConfirmEvidenceStageRequest(
+            evidence_id=evidence_id,
+            source_snapshot_id=body["source_snapshot_id"],
+            expected_version=body["expected_version"],
+            source_confirmation=facts["source_confirmation"],
+            product_established=facts["product_established"],
+            commercialization_established=facts["commercialization_established"],
+            identifiable_revenue=facts["identifiable_revenue"],
+            identifiable_profit_or_cash_flow=facts["identifiable_profit_or_cash_flow"],
+            consecutive_financial_quarters=facts["consecutive_financial_quarters"],
+            reason=body["reason"],
+            idempotency_key=body["idempotency_key"],
+        ))
+        return self._stage_response(record)
+
+    def get_evidence_stage(self, actor: AuthenticatedActor, evidence_id: str) -> dict[str, Any]:
+        if self._stage_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._stage_response(
+            self._stage_flow.get_stage(actor, QueryEvidenceStageRequest(evidence_id))
+        )
 
 
 def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: AccessApiPort | None = None) -> Any:
@@ -280,7 +380,7 @@ def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: Access
         except PermissionError as error:
             raise HTTPException(status_code=403, detail="forbidden") from error
 
-    @app.post("/api/evidence", status_code=202, response_model=EvidenceResponse)
+    @app.post("/api/evidence", status_code=202, response_model=EvidenceResponse, response_model_exclude_none=True)
     async def submit(body: EvidenceSubmissionBody, actor: AuthenticatedActor = Depends(actor_provider)) -> dict[str, Any]:
         response = api.submit_evidence(actor, {**body.model_dump(), "url": str(body.url)})
         if "error" in response:
@@ -288,7 +388,7 @@ def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: Access
             raise HTTPException(status_code=code, detail=response["error"])
         return response
 
-    @app.get("/api/evidence/{evidence_id}", response_model=EvidenceResponse)
+    @app.get("/api/evidence/{evidence_id}", response_model=EvidenceResponse, response_model_exclude_none=True)
     async def status(evidence_id: str, actor: AuthenticatedActor = Depends(actor_provider)) -> dict[str, Any]:
         try:
             return api.get_evidence(actor, evidence_id)
@@ -296,6 +396,36 @@ def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: Access
             raise HTTPException(status_code=403, detail="forbidden") from error
         except LookupError as error:
             raise HTTPException(status_code=404, detail="not_found") from error
+
+    @app.post(
+        "/api/evidence/{evidence_id}/stage-confirmations",
+        status_code=201,
+        response_model=EvidenceStageResponse,
+    )
+    async def confirm_evidence_stage(
+        evidence_id: str,
+        body: EvidenceStageConfirmationBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.confirm_evidence_stage(actor, evidence_id, body.model_dump())
+        except PermissionError as error:
+            raise HTTPException(status_code=403, detail="forbidden") from error
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+        except ValueError as error:
+            status_code = 409 if str(error) == "version_conflict" else 422
+            raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+    @app.get("/api/evidence/{evidence_id}/stage", response_model=EvidenceStageResponse)
+    async def get_evidence_stage(
+        evidence_id: str,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.get_evidence_stage(actor, evidence_id)
+        except (PermissionError, LookupError) as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
 
     if access_api is not None:
         from fastapi.exceptions import RequestValidationError

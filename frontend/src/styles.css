@@ -67,6 +67,25 @@ dl div { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: 0.6rem;
 dt { color: #718096; font-size: 0.8rem; }
 dd { min-width: 0; margin: 0; color: #27334a; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .url-value { overflow-wrap: anywhere; }
+.stage-panel { grid-column: 1 / -1; }
+.stage-guidance { margin: -0.65rem 0 1.4rem; color: #526078; line-height: 1.55; }
+.stage-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.72fr); gap: 1.5rem; align-items: start; }
+.stage-layout.stage-readonly { grid-template-columns: minmax(0, 1fr); }
+.stage-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; min-width: 0; margin: 0; border: 1px solid #d8dfeb; border-radius: 0.7rem; padding: 1rem; }
+.stage-form legend { padding: 0 0.35rem; color: #253149; font-size: 0.9rem; font-weight: 700; }
+.check-field { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.check-field input { flex: 0 0 auto; width: 1.1rem; min-height: 1.1rem; margin: 0; }
+.stage-badge { display: grid; place-items: center; min-width: 3.4rem; min-height: 3.4rem; border-radius: 0.8rem; color: #fff; background: #19815d; font-size: 1.25rem; font-weight: 850; }
+.stage-result { min-width: 0; border: 1px solid #cbd5e3; border-radius: 0.8rem; padding: 1.25rem; background: #f8fafc; overflow-wrap: anywhere; }
+.stage-label { margin: 0; color: #526ddd; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.stage-value { display: block; margin-top: 0.35rem; color: #19815d; font-size: 2.6rem; line-height: 1; }
+.stage-meta { color: #68758c; font-size: 0.78rem; }
+.stage-placeholder { min-height: 12rem; display: grid; place-items: center; color: #68758c; line-height: 1.6; }
+.gate-trace { display: grid; gap: 0.45rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.gate-trace li { display: grid; grid-template-columns: 2.5rem 3rem minmax(0, 1fr); gap: 0.5rem; align-items: center; border-radius: 0.45rem; padding: 0.5rem 0.6rem; background: #eef2f7; font-size: 0.78rem; }
+.gate-trace code { min-width: 0; overflow-wrap: anywhere; }
+.gate-pass > span:nth-child(2) { color: #167451; }
+.gate-stop > span:nth-child(2) { color: #9a3434; }
 
 @media (max-width: 760px) {
   .topbar { padding-inline: 1rem; }
@@ -76,6 +95,8 @@ dd { min-width: 0; margin: 0; color: #27334a; font-size: 0.85rem; font-variant-n
   .field-row { grid-template-columns: minmax(0, 1fr); }
   .panel-heading { align-items: center; }
   .status-panel { order: -1; }
+  .stage-layout { grid-template-columns: minmax(0, 1fr); }
+  .stage-form fieldset { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -85,6 +106,10 @@ dd { min-width: 0; margin: 0; color: #27334a; font-size: 0.85rem; font-variant-n
   label, input, select, dd { color: #e5eaf3; }
   input, select { border-color: #526078; background: #151d2c; }
   .secondary-button, .status-card { border-color: #46536a; color: #dce4f2; background: #222d40; }
+  .stage-guidance, .stage-placeholder, .stage-meta { color: #afbad0; }
+  .stage-form fieldset, .stage-result { border-color: #46536a; background: #222d40; }
+  .stage-form legend { color: #e5eaf3; }
+  .gate-trace li { background: #192334; }
 }
 * { box-sizing: border-box; }
 html, body, #root { min-width: 0; margin: 0; }

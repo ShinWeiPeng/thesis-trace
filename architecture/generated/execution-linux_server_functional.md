@@ -25,6 +25,7 @@
 | `production_database_migration_mapping` | `production_database_migration_workload` | `production_database_migration.apply` | `migration_job_process` | one migration process per deployment | False | not established |
 | `intake_api_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.authorize`, `owner_evidence_intake.map`, `owner_evidence_intake.commit`, `owner_evidence_intake.query` | `api_process` | one transaction per Evidence stream | False | not established |
 | `collection_worker_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.collect` | `collector_worker_process` | leased per Evidence stream | False | not established |
+| `evidence_stage_api_mapping` | `owner_confirmed_evidence_stage_workload` | `owner_confirmed_evidence_stage.authorize`, `owner_confirmed_evidence_stage.map`, `owner_confirmed_evidence_stage.evaluate`, `owner_confirmed_evidence_stage.commit`, `owner_confirmed_evidence_stage.present` | `api_process` | one optimistic append transaction per Evidence stage stream | False | not established |
 
 ## Execution Channels
 

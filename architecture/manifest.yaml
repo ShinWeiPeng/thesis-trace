@@ -106,6 +106,7 @@ modules:
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/application/contracts.py
+  - backend/src/thesis_trace/application/flows/evidence_stage.py
   description:
     purpose: Coordinate authenticated cross-domain product flows without owning domain
       state.
@@ -113,6 +114,8 @@ modules:
       zh-TW: 協調跨領域產品流程
     input_ports:
     - application.submit_evidence
+    - application.confirm_evidence_stage
+    - application.query_evidence_stage
     output_ports:
     - application.events
     emitted_events:
@@ -136,9 +139,30 @@ modules:
   - path: backend/src/thesis_trace/application/flows/evidence_intake.py
     symbol: EvidenceIntakeFlow
     kind: orchestrator
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: EvidenceStageFlow
+    kind: orchestrator
   public_symbols:
   - path: backend/src/thesis_trace/application/contracts.py
     symbol: SubmitEvidenceRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: EvidenceStageFlow
+    kind: orchestrator
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: ConfirmEvidenceStageRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: QueryEvidenceStageRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: EvidenceStageFactsResult
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: EvidenceStageGateResult
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/evidence_stage.py
+    symbol: EvidenceStageResult
     kind: contract
 - id: backend_composition
   level: L0
@@ -148,9 +172,12 @@ modules:
   - backend/src/thesis_trace/bootstrap
   parent: null
   depends_on:
+  - thesis_trace_application
   - fastapi_entrypoint
   - access_domain
+  - research_domain
   - evidence_collection
+  - evidence_stage
   - postgres_research_adapter
   - restricted_source_fetch_adapter
   - runtime_configuration_adapter
@@ -267,8 +294,10 @@ modules:
   depends_on:
   - evidence_intake
   - evidence_collection
+  - evidence_stage
   implements_ports: []
   public_headers:
+  - backend/src/thesis_trace/modules/research/__init__.py
   - backend/src/thesis_trace/modules/research/contracts.py
   description:
     purpose: Own companies, evidence provenance, collection lifecycle, evidence stages,
@@ -306,6 +335,27 @@ modules:
     symbol: EvidenceRecord
     kind: contract
   public_symbols:
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchActorContext
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchStageFacade
+    kind: orchestrator
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchStageConfirmationRequest
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchStageQuery
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchStageFacts
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchStageGate
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchStageResult
+    kind: contract
   - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
     symbol: EvidenceRecord
     kind: contract
@@ -409,6 +459,53 @@ modules:
     kind: port
   - path: backend/src/thesis_trace/modules/research/evidence_collection/ports.py
     symbol: SourceFetchPort
+    kind: port
+- id: evidence_stage
+  level: L2
+  role: component
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/modules/research/evidence_stage
+  parent: research_domain
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+  - backend/src/thesis_trace/modules/research/evidence_stage/ports.py
+  description:
+    purpose: Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation.
+    diagram_summaries:
+      zh-TW: 管理 Owner 確認的事實與 E0-E6 推導
+    input_ports:
+    - research.confirm_dimension_facts
+    - research.query_evidence_stage
+    output_ports:
+    - research.evidence_stage_store
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Append confirmed facts, derived stage, gate trace and audit through a demand-owned port.
+    errors: []
+    invariants:
+    - Canonical stage is derived only by ALG-0002 from confirmed facts.
+    - Every committed version binds one immutable source snapshot, actor, Server time, reason and complete E1-E6 gate trace.
+    - Learner and Admin, client-computed values and unconfirmed AI candidates have no mutation authority.
+  entrypoints:
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/service.py
+    symbol: EvidenceStageService
+    kind: service
+  public_symbols:
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+    symbol: StageActorContext
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+    symbol: ConfirmDimensionFactsCommand
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+    symbol: EvidenceStageRecord
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/evidence_stage/ports.py
+    symbol: EvidenceStageStorePort
     kind: port
 - id: thesis_domain
   level: L1
@@ -608,8 +705,11 @@ modules:
   - backend/src/thesis_trace/api.py
   - backend/src/thesis_trace/entrypoints/api.py
   parent: null
-  depends_on: []
-  implements_ports: []
+  depends_on:
+  - thesis_trace_application
+  implements_ports:
+  - application.confirm_evidence_stage
+  - application.query_evidence_stage
   public_headers:
   - backend/src/thesis_trace/api.py
   description:
@@ -648,9 +748,11 @@ modules:
   depends_on:
   - evidence_intake
   - evidence_collection
+  - evidence_stage
   implements_ports:
   - research.unit_of_work
   - research.collection_jobs
+  - research.evidence_stage_store
   public_headers:
   - backend/src/thesis_trace/platform/postgres.py
   description:
@@ -1010,6 +1112,43 @@ ports:
       condition: unavailable
   symbols:
   - SubmitEvidenceRequest
+- id: application.confirm_evidence_stage
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/flows/evidence_stage.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Admit an authenticated Owner intent to confirm dimension facts for one Evidence snapshot.
+    data: Actor, Evidence and snapshot identity, expected version, facts, reason and idempotency key.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor is not Owner.}
+    - {code: resource_unavailable, condition: Evidence or snapshot is unavailable.}
+    - {code: version_conflict, condition: Expected version is stale.}
+    - {code: invalid_facts, condition: Facts or reason fail policy validation.}
+  symbols:
+  - EvidenceStageFlow
+  - ConfirmEvidenceStageRequest
+  - EvidenceStageResult
+- id: application.query_evidence_stage
+  owner: thesis_trace_application
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/application/flows/evidence_stage.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Query one role-safe Server-authoritative Evidence stage projection.
+    data: Authenticated actor and Evidence identity.
+    timing: sync
+    immediate_rejections:
+    - {code: resource_unavailable, condition: Actor or Evidence is absent or unauthorized.}
+  symbols:
+  - EvidenceStageFlow
+  - QueryEvidenceStageRequest
+  - EvidenceStageResult
 - id: application.events
   owner: thesis_trace_application
   direction: output
@@ -1297,6 +1436,79 @@ ports:
       condition: unavailable
   symbols:
   - SourceFetchPort
+- id: research.confirm_dimension_facts
+  owner: evidence_stage
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+  implemented_by: []
+  description:
+    purpose: Confirm one complete version of Owner-authored E-stage dimension facts and derive the canonical stage.
+    data: Authorized Owner, Evidence and snapshot identity, expected version, immutable dimension facts, reason and idempotency key.
+    timing: sync
+    immediate_rejections:
+    - code: forbidden
+      condition: Actor is not an authenticated Owner.
+    - code: resource_unavailable
+      condition: Evidence or source snapshot is absent, unauthorized, unrelated or not succeeded.
+    - code: version_conflict
+      condition: Expected stage version is stale.
+    - code: invalid_facts
+      condition: Reason is blank or facts are contradictory or outside policy bounds.
+  symbols:
+  - ConfirmDimensionFactsCommand
+- id: research.query_evidence_stage
+  owner: evidence_stage
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return the current Server-authoritative E-stage projection for an authorized Evidence stream.
+    data: Authenticated Owner or Learner, Evidence identity and current stage version.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, Evidence or stage projection is absent or unauthorized.
+  symbols:
+  - EvidenceStageRecord
+- id: research.evidence_stage_store
+  owner: evidence_stage
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/evidence_stage/ports.py
+  implemented_by:
+  - postgres_research_adapter
+  description:
+    purpose: Atomically validate snapshot membership and expected version then append confirmed facts, derived stage, trace and audit.
+    data: Semantic stage record and idempotency key without SQL or wire representations.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Evidence or snapshot cannot be validated under the Server security context.
+    - code: version_conflict
+      condition: Another confirmation already advanced the stream.
+    - code: unavailable
+      condition: The transaction cannot commit.
+  symbols:
+  - EvidenceStageStorePort
+- id: research.evidence_stage_events
+  owner: evidence_stage
+  direction: output
+  kind: event
+  contract: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py
+  implemented_by: []
+  description:
+    purpose: Reserved for a later notification slice that will publish committed confirmed-fact and deterministic stage versions through a durable outbox.
+    data: Evidence identity, stage version, source snapshot, canonical stage and stable event identity.
+    timing: sync
+    delivery: in-process
+    delivery_semantics: at-least-once
+    ordering: serialized per Evidence stage stream
+    backpressure: Not active in the current synchronous confirmation slice; a future ADR must add durable enqueue, claim, retry and acknowledgement semantics before this port is emitted.
+    immediate_rejections: []
+  symbols:
+  - EvidenceStageRecord
 - id: research.clock
   owner: research_domain
   direction: output
@@ -1466,6 +1678,22 @@ events:
     - thesis_trace_application
   idempotency: Persistent event_id and stream sequence; consumers record processed
     event IDs.
+- id: research.evidence_stage_changed
+  owner: evidence_stage
+  output_port: research.evidence_stage_events
+  delivery: at-least-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload, event_id]
+  lifecycle: [received, validated, accepted, processing, succeeded, failed]
+  description:
+    purpose: Report a committed Owner-confirmed fact and deterministic E-stage version.
+    emitted_when: Confirmed facts, stage, complete gate trace and audit have committed atomically.
+    payload_fields:
+    - {name: evidence_id, type: EvidenceId, meaning: Evidence stage stream identity.}
+    - {name: stage_version, type: EvidenceStageVersion, meaning: New immutable stage version.}
+    - {name: stage, type: EvidenceStage, meaning: Server-derived canonical E0-E6 stage.}
+    - {name: source_snapshot_id, type: SourceSnapshotId, meaning: Immutable snapshot supporting this version.}
+    intended_consumers: [thesis_trace_application, notification_domain]
+  idempotency: Persistent event ID, Evidence stream sequence and stage version.
 - id: access.owner_authorized
   owner: access_domain
   output_port: access.events
@@ -1612,6 +1840,316 @@ events:
     intended_consumers:
     - fastapi_entrypoint
 types:
+- id: dimensionfactsbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: DimensionFactsBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Bounded Owner-confirmed dimension facts received over HTTP without a canonical stage field.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: source_confirmation, type: Literal, role: wire-representation, meaning: Unverified or official wire value; two-independent-credible fails closed until the request can bind two snapshots.}
+  - {name: product_established, type: bool, role: wire-representation, meaning: Product gate input.}
+  - {name: commercialization_established, type: bool, role: wire-representation, meaning: Commercialization gate input.}
+  - {name: identifiable_revenue, type: bool, role: wire-representation, meaning: Revenue gate input.}
+  - {name: identifiable_profit_or_cash_flow, type: bool, role: wire-representation, meaning: Profit or cash-flow gate input.}
+  - {name: consecutive_financial_quarters, type: int, role: wire-representation, meaning: Bounded continuity gate input.}
+- id: evidencestageconfirmationbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: EvidenceStageConfirmationBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Owner stage-confirmation request that intentionally excludes the canonical stage.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: [dimensionfactsbody]
+  fields:
+  - {name: source_snapshot_id, type: str, role: wire-representation, meaning: Selected immutable snapshot identity.}
+  - {name: expected_version, type: int, role: contract-control, meaning: Optimistic current stage version.}
+  - {name: facts, type: DimensionFactsBody, role: wire-representation, meaning: Complete dimension fact payload.}
+  - {name: reason, type: str, role: metadata, meaning: Required Owner rationale.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+- id: gateresultresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: GateResultResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Stable Server-derived result for one E1-E6 gate.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: gate, type: str, role: wire-representation, meaning: E1-E6 gate label.}
+  - {name: passed, type: bool, role: wire-representation, meaning: Sequential gate result.}
+  - {name: code, type: str, role: metadata, meaning: Stable explanatory code.}
+- id: evidencestageresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: EvidenceStageResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Committed Server-authoritative E-stage record and complete trace returned over HTTP.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: [dimensionfactsbody, gateresultresponse]
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Evidence stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Committed stage version.}
+  - {name: source_snapshot_id, type: str, role: metadata, meaning: Supporting immutable snapshot.}
+  - {name: actor_id, type: str, role: metadata, meaning: Confirming Owner identity.}
+  - {name: confirmed_at, type: str, role: metadata, meaning: Server confirmation time.}
+  - {name: reason, type: str, role: metadata, meaning: Owner rationale.}
+  - {name: facts, type: DimensionFactsBody, role: wire-representation, meaning: Confirmed facts.}
+  - {name: stage, type: str, role: wire-representation, meaning: Server-derived E0-E6 stage.}
+  - {name: gate_trace, type: 'list[GateResultResponse]', role: wire-representation, meaning: Complete E1-E6 trace.}
+  - {name: policy_version, type: str, role: policy, meaning: Deterministic policy version.}
+- id: evidencestageflow
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/evidence_stage.py, symbol: EvidenceStageFlow, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 mapping from authenticated Access actors and wire primitives into the Research Stage parent facade.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint, backend_composition]
+  references: [authenticatedactor, role, researchactorcontext, researchstagefacade, researchstageconfirmationrequest, researchstagequery, researchstageresult, confirmevidencestagerequest, queryevidencestagerequest, evidencestagefactsresult, evidencestagegateresult, evidencestageresult]
+  fields: []
+- id: confirmevidencestagerequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/evidence_stage.py, symbol: ConfirmEvidenceStageRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Typed L0 Owner confirmation request that excludes any client-computed canonical stage.
+  lifetime: One synchronous request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Target Evidence stream.}
+  - {name: source_snapshot_id, type: str, role: domain-identity, meaning: One immutable supporting snapshot; two-source confirmation fails closed until a multi-snapshot contract exists.}
+  - {name: expected_version, type: int, role: contract-control, meaning: Optimistic current stage version.}
+  - {name: source_confirmation, type: str, role: policy, meaning: Owner-confirmed unverified or official source classification.}
+  - {name: product_established, type: bool, role: domain-value, meaning: Product gate input.}
+  - {name: commercialization_established, type: bool, role: domain-value, meaning: Commercialization gate input.}
+  - {name: identifiable_revenue, type: bool, role: domain-value, meaning: Revenue gate input.}
+  - {name: identifiable_profit_or_cash_flow, type: bool, role: domain-value, meaning: Profit or cash-flow gate input.}
+  - {name: consecutive_financial_quarters, type: int, role: domain-value, meaning: Continuity gate input.}
+  - {name: reason, type: str, role: metadata, meaning: Required Owner rationale.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+- id: queryevidencestagerequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/evidence_stage.py, symbol: QueryEvidenceStageRequest, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Typed L0 request for the current role-safe stage projection.
+  lifetime: One synchronous request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Target Evidence stream.}
+- id: evidencestagefactsresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/evidence_stage.py, symbol: EvidenceStageFactsResult, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Role-safe primitive copy of confirmed dimension facts at the L0 boundary.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: source_confirmation, type: str, role: policy, meaning: Confirmed source class.}
+  - {name: product_established, type: bool, role: domain-value, meaning: Product gate fact.}
+  - {name: commercialization_established, type: bool, role: domain-value, meaning: Commercialization gate fact.}
+  - {name: identifiable_revenue, type: bool, role: domain-value, meaning: Revenue gate fact.}
+  - {name: identifiable_profit_or_cash_flow, type: bool, role: domain-value, meaning: Profit or cash-flow gate fact.}
+  - {name: consecutive_financial_quarters, type: int, role: domain-value, meaning: Continuity fact.}
+- id: evidencestagegateresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/evidence_stage.py, symbol: EvidenceStageGateResult, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Role-safe primitive copy of one deterministic gate result at L0.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: gate, type: str, role: policy, meaning: E1-E6 gate label.}
+  - {name: passed, type: bool, role: domain-value, meaning: Whether the sequential gate passed.}
+  - {name: code, type: str, role: metadata, meaning: Stable result code.}
+- id: evidencestageresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/evidence_stage.py, symbol: EvidenceStageResult, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Typed role-safe L0 result copied from the Research parent without exposing L2 contracts.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [evidencestagefactsresult, evidencestagegateresult]
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Evidence stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Committed stage version.}
+  - {name: source_snapshot_id, type: str, role: metadata, meaning: Supporting immutable snapshot.}
+  - {name: actor_id, type: str, role: metadata, meaning: Confirming Owner.}
+  - {name: confirmed_at, type: str, role: metadata, meaning: Server confirmation time.}
+  - {name: reason, type: str, role: metadata, meaning: Owner rationale.}
+  - {name: facts, type: EvidenceStageFactsResult, role: domain-value, meaning: Confirmed fact projection.}
+  - {name: stage, type: str, role: policy, meaning: Server-derived E0-E6 stage.}
+  - {name: gate_trace, type: 'tuple[EvidenceStageGateResult, ...]', role: domain-value, meaning: Ordered complete gate trace.}
+  - {name: policy_version, type: str, role: policy, meaning: Deterministic policy version.}
+- id: researchactorcontext
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchActorContext, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent actor identity and capabilities mapped from Access without importing Access types into Research children.
+  lifetime: One Research command or query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: actor_id, type: str, role: domain-identity, meaning: Stable internal actor identity.}
+  - {name: may_confirm_evidence_stage, type: bool, role: policy, meaning: Owner-only stage confirmation capability.}
+  - {name: may_read_evidence_stage, type: bool, role: policy, meaning: Owner or Learner stage read capability.}
+- id: researchstageconfirmationrequest
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchStageConfirmationRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Research-parent confirmation command that prevents L0 from importing Evidence Stage child contracts.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Target Evidence stream.}
+  - {name: source_snapshot_id, type: str, role: domain-identity, meaning: Supporting immutable snapshot.}
+  - {name: expected_version, type: int, role: contract-control, meaning: Optimistic current stage version.}
+  - {name: source_confirmation, type: str, role: policy, meaning: Owner-confirmed source class.}
+  - {name: product_established, type: bool, role: domain-value, meaning: Product gate fact.}
+  - {name: commercialization_established, type: bool, role: domain-value, meaning: Commercialization gate fact.}
+  - {name: identifiable_revenue, type: bool, role: domain-value, meaning: Revenue gate fact.}
+  - {name: identifiable_profit_or_cash_flow, type: bool, role: domain-value, meaning: Profit or cash-flow gate fact.}
+  - {name: consecutive_financial_quarters, type: int, role: domain-value, meaning: Continuity gate fact.}
+  - {name: reason, type: str, role: metadata, meaning: Required Owner rationale.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+- id: researchstagequery
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchStageQuery, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Research-parent query for the current role-safe stage projection.
+  lifetime: One synchronous query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Target Evidence stream.}
+- id: researchstagefacts
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchStageFacts, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Research-parent primitive projection of confirmed dimension facts.
+  lifetime: One synchronous result.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: source_confirmation, type: str, role: policy, meaning: Confirmed source class.}
+  - {name: product_established, type: bool, role: domain-value, meaning: Product gate fact.}
+  - {name: commercialization_established, type: bool, role: domain-value, meaning: Commercialization gate fact.}
+  - {name: identifiable_revenue, type: bool, role: domain-value, meaning: Revenue gate fact.}
+  - {name: identifiable_profit_or_cash_flow, type: bool, role: domain-value, meaning: Profit or cash-flow gate fact.}
+  - {name: consecutive_financial_quarters, type: int, role: domain-value, meaning: Continuity gate fact.}
+- id: researchstagegate
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchStageGate, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Research-parent primitive projection of one deterministic gate result.
+  lifetime: One synchronous result.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: gate, type: str, role: policy, meaning: E1-E6 gate label.}
+  - {name: passed, type: bool, role: domain-value, meaning: Whether the sequential gate passed.}
+  - {name: code, type: str, role: metadata, meaning: Stable result code.}
+- id: researchstageresult
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchStageResult, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Typed Research-parent result that hides Evidence Stage child contracts from L0.
+  lifetime: One synchronous result.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: [researchstagefacts, researchstagegate]
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Evidence stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Committed stage version.}
+  - {name: source_snapshot_id, type: str, role: metadata, meaning: Supporting immutable snapshot.}
+  - {name: actor_id, type: str, role: metadata, meaning: Confirming Owner.}
+  - {name: confirmed_at, type: str, role: metadata, meaning: Server confirmation time.}
+  - {name: reason, type: str, role: metadata, meaning: Owner rationale.}
+  - {name: facts, type: ResearchStageFacts, role: domain-value, meaning: Confirmed fact projection.}
+  - {name: stage, type: str, role: policy, meaning: Server-derived E0-E6 stage.}
+  - {name: gate_trace, type: 'tuple[ResearchStageGate, ...]', role: domain-value, meaning: Ordered complete gate trace.}
+  - {name: policy_version, type: str, role: policy, meaning: Deterministic policy version.}
+- id: researchstagefacade
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchStageFacade, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent facade that maps authorized parent primitives into Evidence Stage child contracts without exposing L2 types to L0.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, backend_composition]
+  references: [researchactorcontext, researchstageconfirmationrequest, researchstagequery, researchstagefacts, researchstagegate, researchstageresult, stageactorcontext, confirmdimensionfactscommand, dimensionfacts, sourceconfirmation, evidencestagerecord, evidencestageservice]
+  fields: []
 - id: evidenceapi
   owner: fastapi_entrypoint
   language: python
@@ -1627,7 +2165,7 @@ types:
   mutation_authority: []
   consumers:
   - fastapi_entrypoint
-  references: []
+  references: [evidencestageflow, confirmevidencestagerequest, queryevidencestagerequest, evidencestageresult]
   fields: []
 - id: submitevidencerequest
   owner: thesis_trace_application
@@ -2007,6 +2545,10 @@ types:
     type: EvidenceStatus
     role: domain-value
     meaning: EvidenceStatusSnapshot status value.
+  - name: source_snapshot_id
+    type: 'str | None'
+    role: metadata
+    meaning: Immutable collected source snapshot identity when status is succeeded.
 - id: evidenceauditfact
   owner: evidence_intake
   language: python
@@ -2291,7 +2833,11 @@ types:
   mutation_authority: [fastapi_entrypoint]
   consumers: [fastapi_entrypoint]
   references: []
-  fields: []
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Evidence stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Current Evidence record version.}
+  - {name: status, type: EvidenceStatus, role: wire-representation, meaning: Current Server-owned collection status.}
+  - {name: source_snapshot_id, type: 'str | None', role: metadata, meaning: Immutable snapshot identity after successful collection.}
 - id: secretprovider
   owner: runtime_configuration_adapter
   language: python
@@ -2403,7 +2949,7 @@ types:
   mutability: owner-mutable
   mutation_authority: [postgres_research_adapter]
   consumers: [backend_composition]
-  references: [databaseurlprovider]
+  references: [databaseurlprovider, companyrecord, evidenceaccepted, evidencerecord, evidenceauditfact, collectionrequest, evidencestatus, leasedcollectionjob, collectedsourcesnapshot, confirmdimensionfactscommand, dimensionfacts, evidencestage, evidencestagerecord, gateresult, sourceconfirmation, stageevaluation]
   fields: []
 - id: sourcefetchfailure
   owner: restricted_source_fetch_adapter
@@ -3084,6 +3630,169 @@ types:
   consumers: [react_access_adapter]
   references: [accountactionview]
   fields: []
+- id: evidencestage
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: EvidenceStage, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Ordered canonical E0-E6 stage derived by ALG-0002.
+  lifetime: Immutable value within one evaluation or persisted stage version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter]
+  references: []
+  fields: []
+  values: [E0, E1, E2, E3, E4, E5, E6]
+- id: sourceconfirmation
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: SourceConfirmation, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Confirmed source gate classification for E1.
+  lifetime: Immutable fact within one stage version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter, research_domain]
+  references: []
+  fields: []
+  values: [unverified, official, two_independent_credible]
+- id: dimensionfacts
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: DimensionFacts, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable confirmed source, product, commercialization, financial impact and continuity facts.
+  lifetime: One command and one immutable persisted stage version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter, research_domain]
+  references: [sourceconfirmation]
+  fields:
+  - {name: source_confirmation, type: SourceConfirmation, role: policy, meaning: E1 confirmation class.}
+  - {name: product_established, type: bool, role: domain-value, meaning: Product technology capacity or partnership is established.}
+  - {name: commercialization_established, type: bool, role: domain-value, meaning: Contract order customer or shipment evidence exists.}
+  - {name: identifiable_revenue, type: bool, role: domain-value, meaning: Revenue impact is identifiable.}
+  - {name: identifiable_profit_or_cash_flow, type: bool, role: domain-value, meaning: Profit or cash-flow impact is identifiable.}
+  - {name: consecutive_financial_quarters, type: int, role: domain-value, meaning: Consecutive quarters with E5-class impact.}
+- id: stageactorcontext
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: StageActorContext, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Research-local actor identity and confirmation capability mapped only by the application parent after Access revalidation.
+  lifetime: One stage command or query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, research_domain]
+  references: []
+  fields:
+  - {name: actor_id, type: str, role: domain-identity, meaning: Stable internal actor identity.}
+  - {name: may_confirm, type: bool, role: policy, meaning: Server-mapped Owner confirmation authority.}
+  - {name: may_read, type: bool, role: policy, meaning: Server-mapped Owner or Learner read authority.}
+- id: confirmdimensionfactscommand
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: ConfirmDimensionFactsCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Owner-only intent to append one complete confirmed fact and stage version.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter, research_domain]
+  references: [stageactorcontext, dimensionfacts]
+  fields:
+  - {name: actor, type: StageActorContext, role: policy, meaning: Research-local actor context mapped after Server authorization.}
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Target Evidence stream.}
+  - {name: source_snapshot_id, type: str, role: domain-identity, meaning: Supporting immutable source snapshot.}
+  - {name: expected_version, type: int, role: contract-control, meaning: Optimistic expected current stage version.}
+  - {name: facts, type: DimensionFacts, role: domain-value, meaning: Complete confirmed dimension facts.}
+  - {name: reason, type: str, role: metadata, meaning: Nonblank Owner rationale.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+- id: gateresult
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: GateResult, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: One ordered E1-E6 predicate result with stable reason code.
+  lifetime: One evaluation and its immutable persisted trace.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter]
+  references: [evidencestage]
+  fields:
+  - {name: gate, type: EvidenceStage, role: policy, meaning: Evaluated gate E1-E6.}
+  - {name: passed, type: bool, role: domain-value, meaning: Whether this gate and prerequisites passed.}
+  - {name: code, type: str, role: metadata, meaning: Stable explanatory result code.}
+- id: stageevaluation
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: StageEvaluation, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: ALG-0002 result containing canonical stage, complete trace and optional abstention.
+  lifetime: One deterministic policy evaluation.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter]
+  references: [evidencestage, gateresult]
+  fields:
+  - {name: stage, type: EvidenceStage, role: policy, meaning: Highest sequentially satisfied canonical stage.}
+  - {name: gate_trace, type: 'tuple[GateResult, ...]', role: metadata, meaning: Ordered E1-E6 evaluation trace.}
+  - {name: abstention_code, type: 'str | None', role: metadata, meaning: Stable invalid or contradictory fact reason.}
+- id: evidencestagerecord
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/contracts.py, symbol: EvidenceStageRecord, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable versioned confirmed facts and Server-derived stage projection.
+  lifetime: Durable append-only version and request projection.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter, research_domain]
+  references: [dimensionfacts, stageevaluation]
+  fields:
+  - {name: evidence_id, type: str, role: domain-identity, meaning: Evidence stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Monotonic stage version.}
+  - {name: source_snapshot_id, type: str, role: metadata, meaning: Supporting immutable snapshot.}
+  - {name: actor_id, type: str, role: metadata, meaning: Confirming Owner identity.}
+  - {name: confirmed_at, type: str, role: metadata, meaning: Server confirmation time.}
+  - {name: reason, type: str, role: metadata, meaning: Nonblank Owner rationale.}
+  - {name: facts, type: DimensionFacts, role: domain-value, meaning: Confirmed dimension facts.}
+  - {name: evaluation, type: StageEvaluation, role: policy, meaning: Deterministic stage and gate trace.}
+  - {name: policy_version, type: str, role: policy, meaning: ALG-0002 implementation policy version.}
+- id: evidencestagestoreport
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/ports.py, symbol: EvidenceStageStorePort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Evidence Stage-owned atomic persistence and query demand.
+  lifetime: Process binding with transaction-scoped operations.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [evidence_stage, postgres_research_adapter]
+  references: [confirmdimensionfactscommand, evidencestagerecord, stageevaluation]
+  fields: []
+- id: evidencestageservice
+  owner: evidence_stage
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/evidence_stage/service.py, symbol: EvidenceStageService, kind: class}
+  visibility: module-public
+  semantic_kind: policy
+  description: Authorize, evaluate and atomically confirm or query E-stage versions.
+  lifetime: API process lifetime with request-scoped immutable commands.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, research_domain]
+  references: [evidencestagestoreport, confirmdimensionfactscommand, dimensionfacts, evidencestage, evidencestagerecord, gateresult, sourceconfirmation, stageactorcontext, stageevaluation]
+  fields: []
 type_exclusions: []
 state_objects: []
 boundary_mappings:
@@ -3142,6 +3851,28 @@ boundary_mappings:
   state_objects: []
   allowed_edges: [thesis_trace_application->access_domain]
   forbidden_edges: [access_domain->thesis_trace_application]
+- id: authenticated-owner-to-stage-command
+  interaction: Map a revalidated Owner actor and HTTP intent into a semantic confirmed-dimension command without granting Access-to-Research dependency.
+  producer: access_domain
+  consumer: research_domain
+  parent: thesis_trace_application
+  producer_contract: authenticatedactor
+  consumer_contract: researchactorcontext
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->access_domain, thesis_trace_application->research_domain]
+  forbidden_edges: [access_domain->research_domain, research_domain->access_domain, evidence_stage->access_domain, evidence_stage->fastapi_entrypoint]
+- id: source-snapshot-to-confirmed-stage
+  interaction: Validate an immutable collected source snapshot as the provenance target of one confirmed fact and stage version.
+  producer: evidence_collection
+  consumer: evidence_stage
+  parent: research_domain
+  producer_contract: collectedsourcesnapshot
+  consumer_contract: evidencestagerecord
+  mapping_owner: research_domain
+  state_objects: []
+  allowed_edges: [research_domain->evidence_collection, research_domain->evidence_stage]
+  forbidden_edges: [evidence_collection->evidence_stage, evidence_stage->evidence_collection]
 flows:
 - id: production_database_migration
   owner: backend_composition
@@ -3304,7 +4035,68 @@ flows:
     - research.collection_failed
     event: research.collection_failed
     handling: Commit retrying
-adr_exceptions: []
+- id: owner_confirmed_evidence_stage
+  owner: thesis_trace_application
+  description: Confirm Owner-authored dimension facts and synchronously expose the atomically committed deterministic E0-E6 stage.
+  trigger:
+    kind: command
+    ref: application.confirm_evidence_stage
+    description: An authenticated Owner submits complete dimension facts, supporting source snapshot, expected version and reason.
+  steps:
+  - id: owner_confirmed_evidence_stage.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate the semantic actor and require Owner stage-confirmation authority.
+    receives: [application.confirm_evidence_stage]
+    emits: [access.owner_authorized]
+    state_changes: []
+    side_effects: []
+  - id: owner_confirmed_evidence_stage.map
+    order: 2
+    module: thesis_trace_application
+    action: Map the authorized wire intent into immutable Research dimension facts without accepting a client-computed stage.
+    receives: [access.owner_authorized]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_confirmed_evidence_stage.evaluate
+    order: 3
+    module: evidence_stage
+    action: Validate fact consistency and evaluate ordered ALG-0002 gates E1 through E6 with a complete trace.
+    receives: [research.confirm_dimension_facts]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_confirmed_evidence_stage.commit
+    order: 4
+    module: evidence_stage
+    action: Atomically validate succeeded Evidence, source snapshot membership and expected version then append facts, stage, trace and audit.
+    receives: [research.evidence_stage_store]
+    emits: []
+    state_changes:
+    - The Evidence stage stream appends exactly one immutable next version.
+    side_effects:
+    - One PostgreSQL transaction under Server-derived RLS context.
+  - id: owner_confirmed_evidence_stage.present
+    order: 5
+    module: thesis_trace_application
+    action: Return the committed role-safe Server stage projection and version to the responsive UI.
+    receives: [research.evidence_stage_store, research.query_evidence_stage]
+    emits: []
+    state_changes: []
+    side_effects:
+    - Generated HTTPS response; browser retains only volatile form state.
+  success:
+    result: Owner and Learner queries observe one Server-authoritative stage version with source, actor, reason, policy and complete gate trace.
+    events: []
+  errors: []
+adr_exceptions:
+- rule_id: DEP001
+  scope: backend_composition->thesis_trace_application
+  adr: decisions/ADR-0004-backend-composition-root-seam.md
+  status: accepted
+  approved_by: project owner
+  approval_reference: codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1
 c_analyzer:
   ast:
     status: not-applicable
@@ -3376,6 +4168,20 @@ workloads:
     threshold: 10
     unit: minutes
     method: rolling fixture SLO defined by REQ-051
+- id: owner_confirmed_evidence_stage_workload
+  flow: owner_confirmed_evidence_stage
+  steps:
+  - owner_confirmed_evidence_stage.authorize
+  - owner_confirmed_evidence_stage.map
+  - owner_confirmed_evidence_stage.evaluate
+  - owner_confirmed_evidence_stage.commit
+  - owner_confirmed_evidence_stage.present
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: one Evidence stream, one immutable source snapshot and six bounded sequential gates per confirmation
+  budgets: []
 execution_profiles:
 - id: linux_server_functional
   status: accepted
@@ -3483,6 +4289,21 @@ execution_mappings:
   serialization: leased per Evidence stream
   reentrant: false
   activation: durable job availability
+  wcet: not established
+- id: evidence_stage_api_mapping
+  profile: linux_server_functional
+  workload: owner_confirmed_evidence_stage_workload
+  steps:
+  - owner_confirmed_evidence_stage.authorize
+  - owner_confirmed_evidence_stage.map
+  - owner_confirmed_evidence_stage.evaluate
+  - owner_confirmed_evidence_stage.commit
+  - owner_confirmed_evidence_stage.present
+  units:
+  - api_process
+  serialization: one optimistic append transaction per Evidence stage stream
+  reentrant: false
+  activation: authenticated HTTP command or query
   wcet: not established
 execution_channels:
 - id: collection_job_channel

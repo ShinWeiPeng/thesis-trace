@@ -1,14 +1,18 @@
 import {
+  confirm_evidence_stage_api_evidence__evidence_id__stage_confirmations_post,
   create_company_api_companies_post,
+  get_evidence_stage_api_evidence__evidence_id__stage_get,
   list_companies_api_companies_get,
   status_api_evidence__evidence_id__get,
   submit_api_evidence_post,
   type CompanyCreateBody,
   type CompanyResponse,
   type EvidenceResponse,
+  type EvidenceStageConfirmationBody,
+  type EvidenceStageResponse,
   type EvidenceSubmissionBody,
 } from "../generated/api";
-export type { CompanyResponse, EvidenceResponse, EvidenceStatus } from "../generated/api";
+export type { CompanyResponse, DimensionFactsBody, EvidenceResponse, EvidenceStageConfirmationBody, EvidenceStageResponse, EvidenceStatus } from "../generated/api";
 
 export interface EvidenceIntake extends EvidenceResponse { company: CompanyResponse; submittedUrl: string }
 export interface EvidenceClient {
@@ -16,6 +20,8 @@ export interface EvidenceClient {
   createCompany(input: CompanyCreateBody): Promise<CompanyResponse>;
   submitEvidenceUrl(input: { company: CompanyResponse; submittedUrl: string; idempotencyKey?: string }): Promise<EvidenceIntake>;
   getEvidenceIntake(evidenceId: string): Promise<EvidenceResponse>;
+  getEvidenceStage(evidenceId: string): Promise<EvidenceStageResponse>;
+  confirmEvidenceStage(evidenceId: string, input: EvidenceStageConfirmationBody): Promise<EvidenceStageResponse>;
 }
 export class ApiError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) { super(message); this.name = "ApiError"; }
@@ -37,6 +43,8 @@ export function createEvidenceClient({ baseUrl, fetcher = fetch, idempotencyKey 
       return { ...await safe(submit_api_evidence_post(baseUrl, body, fetcher)), company: input.company, submittedUrl: input.submittedUrl };
     },
     getEvidenceIntake: (id) => safe(status_api_evidence__evidence_id__get(baseUrl, id, fetcher)),
+    getEvidenceStage: (id) => safe(get_evidence_stage_api_evidence__evidence_id__stage_get(baseUrl, id, fetcher)),
+    confirmEvidenceStage: (id, input) => safe(confirm_evidence_stage_api_evidence__evidence_id__stage_confirmations_post(baseUrl, id, input, fetcher)),
   };
 }
 export const evidenceClient = createEvidenceClient({ baseUrl: "/api" });

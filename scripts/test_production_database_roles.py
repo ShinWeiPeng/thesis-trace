@@ -54,6 +54,15 @@ def main() -> None:
         migration_module = runpy.run_path(str(root / "infra/postgres/run-production-migrations.py"))
         migration_module["apply_runtime_grants"](admin)
         assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','research.evidence_stage_versions','SELECT,INSERT')"
+        ).fetchone()[0]
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','research.evidence_stage_versions','UPDATE,DELETE')"
+        ).fetchone()[0]
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_collector','research.evidence_stage_versions','SELECT,INSERT,UPDATE,DELETE')"
+        ).fetchone()[0]
+        assert admin.execute(
             "SELECT has_table_privilege('thesis_trace_collector','research.canonical_sources','SELECT,INSERT')"
         ).fetchone()[0]
         assert not admin.execute(

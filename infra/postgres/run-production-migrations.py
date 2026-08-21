@@ -22,6 +22,8 @@ def apply_runtime_grants(connection: psycopg.Connection) -> None:
     connection.execute("GRANT INSERT ON access.security_audit_events,access.workflow_outbox TO thesis_trace_api")
     connection.execute("GRANT SELECT,INSERT ON research.companies,research.evidence_intakes,research.idempotency_receipts TO thesis_trace_api")
     connection.execute("GRANT INSERT ON research.audit_events,research.collection_jobs TO thesis_trace_api")
+    connection.execute("GRANT SELECT ON research.source_observations,research.source_snapshots TO thesis_trace_api")
+    connection.execute("GRANT SELECT,INSERT ON research.evidence_stage_versions TO thesis_trace_api")
     connection.execute("GRANT USAGE ON SCHEMA research TO thesis_trace_collector")
     connection.execute("GRANT SELECT ON research.schema_migrations TO thesis_trace_collector")
     connection.execute("GRANT SELECT ON research.companies TO thesis_trace_collector")

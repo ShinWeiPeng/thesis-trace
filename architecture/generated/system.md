@@ -10,6 +10,7 @@ flowchart TD
     n_research_domain["research_domain (L1)<br/>管理公司與研究證據"]
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
+    n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
     n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
@@ -35,9 +36,12 @@ flowchart TD
     n_thesis_trace_application -.->|depends| n_recommendation_domain
     n_thesis_trace_application -.->|depends| n_workflow_domain
     n_thesis_trace_application -.->|depends| n_notification_domain
+    n_backend_composition -.->|depends| n_thesis_trace_application
     n_backend_composition -.->|depends| n_fastapi_entrypoint
     n_backend_composition -.->|depends| n_access_domain
+    n_backend_composition -.->|depends| n_research_domain
     n_backend_composition -.->|depends| n_evidence_collection
+    n_backend_composition -.->|depends| n_evidence_stage
     n_backend_composition -.->|depends| n_postgres_research_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
@@ -51,15 +55,19 @@ flowchart TD
     n_thesis_trace_application -->|owns| n_research_domain
     n_research_domain -.->|depends| n_evidence_intake
     n_research_domain -.->|depends| n_evidence_collection
+    n_research_domain -.->|depends| n_evidence_stage
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
+    n_research_domain -->|owns| n_evidence_stage
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
     n_thesis_trace_application -->|owns| n_workflow_domain
     n_thesis_trace_application -->|owns| n_notification_domain
+    n_fastapi_entrypoint -.->|depends| n_thesis_trace_application
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
+    n_postgres_research_adapter -.->|depends| n_evidence_stage
     n_restricted_source_fetch_adapter -.->|depends| n_evidence_collection
     n_access_domain -->|owns| n_identity_registry
     n_access_domain -->|owns| n_session_management
@@ -84,6 +92,7 @@ flowchart TD
 | `research_domain` | L1 | domain | `thesis_trace_application` | implemented | Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts. |
 | `evidence_intake` | L2 | component | `research_domain` | implemented | Admit Evidence URLs and atomically create received state, audit fact, and collection job. |
 | `evidence_collection` | L2 | component | `research_domain` | implemented | Collect restricted sources and commit immutable snapshots or safe failures. |
+| `evidence_stage` | L2 | component | `research_domain` | implemented | Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation. |
 | `thesis_domain` | L1 | domain | `thesis_trace_application` | planned | Own Thesis lifecycle |
 | `portfolio_domain` | L1 | domain | `thesis_trace_application` | planned | Own holdings |
 | `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own immutable recommendations |
@@ -108,15 +117,15 @@ flowchart TD
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **父模組:** `-`
 - **實作狀態:** `implemented`
-- **輸入 Ports:** `application.submit_evidence`
+- **輸入 Ports:** `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`
 - **輸出 Ports:** `application.events`
 - **輸出 Events:** `application.evidence_submission_completed`
 - **擁有狀態:** 無
 - **副作用:** Coordinate child commands and map child events. (`-`)
 - **異常:** `thesis_trace_application-error-1`: Reject unauthenticated or unauthorized commands → `application.evidence_submission_completed` → Reject unauthenticated or unauthorized commands; `thesis_trace_application-error-2`: Propagate child admission failures. → `application.evidence_submission_completed` → Propagate child admission failures.
 - **不變條件:** Sibling domains communicate only through this parent; Domain state remains child-owned.
-- **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)
-- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)
+- **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)
+- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)
 
 ### `backend_composition`
 
@@ -161,7 +170,7 @@ flowchart TD
 - **異常:** `research_domain-error-1`: Reject invalid URLs or stale company versions → `research.evidence_received` → Reject invalid URLs or stale company versions; `research_domain-error-2`: Record safe retry and terminal failures. → `research.evidence_received` → Record safe retry and terminal failures.
 - **不變條件:** State commits before success events; Evidence streams are serialized; Source records are immutable.
 - **程式入口:** [`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
-- **公開 Symbols:** [`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
+- **公開 Symbols:** [`ResearchActorContext`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchStageConfirmationRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageQuery`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacts`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
 
 ### `evidence_intake`
 
@@ -192,6 +201,21 @@ flowchart TD
 - **不變條件:** A lease token is opaque; Success is published only after snapshot commit.
 - **程式入口:** [`EvidenceCollector`](../../backend/src/thesis_trace/modules/research/evidence_collection/service.py) (service)
 - **公開 Symbols:** [`CollectedSourceSnapshot`](../../backend/src/thesis_trace/modules/research/evidence_collection/contracts.py) (contract)<br>[`CollectionStorePort`](../../backend/src/thesis_trace/modules/research/evidence_collection/ports.py) (port)<br>[`SourceFetchPort`](../../backend/src/thesis_trace/modules/research/evidence_collection/ports.py) (port)
+
+### `evidence_stage`
+
+- **目的:** Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation.
+- **父模組:** `research_domain`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `research.confirm_dimension_facts`, `research.query_evidence_stage`
+- **輸出 Ports:** `research.evidence_stage_store`
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Append confirmed facts, derived stage, gate trace and audit through a demand-owned port. (`-`)
+- **異常:** 無
+- **不變條件:** Canonical stage is derived only by ALG-0002 from confirmed facts.; Every committed version binds one immutable source snapshot, actor, Server time, reason and complete E1-E6 gate trace.; Learner and Admin, client-computed values and unconfirmed AI candidates have no mutation authority.
+- **程式入口:** [`EvidenceStageService`](../../backend/src/thesis_trace/modules/research/evidence_stage/service.py) (service)
+- **公開 Symbols:** [`StageActorContext`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`ConfirmDimensionFactsCommand`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`EvidenceStageRecord`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`EvidenceStageStorePort`](../../backend/src/thesis_trace/modules/research/evidence_stage/ports.py) (port)
 
 ### `thesis_domain`
 
@@ -469,6 +493,8 @@ flowchart TD
 |---|---|---|---|---|---|---|
 | `platform.migration_events` | `postgres_migration_entrypoint` | output | event | sync | Describe the redacted terminal outcome of the one-shot migration process.: Stable migration outcome code without credentials or schema values. | 無 |
 | `application.submit_evidence` | `thesis_trace_application` | input | command | async | Submit an authenticated Evidence URL intent.: Actor | `SubmitEvidenceRequest` |
+| `application.confirm_evidence_stage` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner intent to confirm dimension facts for one Evidence snapshot.: Actor, Evidence and snapshot identity, expected version, facts, reason and idempotency key. | `EvidenceStageFlow`, `ConfirmEvidenceStageRequest`, `EvidenceStageResult` |
+| `application.query_evidence_stage` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative Evidence stage projection.: Authenticated actor and Evidence identity. | `EvidenceStageFlow`, `QueryEvidenceStageRequest`, `EvidenceStageResult` |
 | `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible evidence submission results.: Record identity | `SubmitEvidenceRequest` |
 | `access.authorize_owner` | `access_domain` | input | query | sync | Decide whether the actor may submit Owner evidence.: Immutable authenticated actor snapshot. | `AuthenticatedActor` |
 | `access.events` | `access_domain` | output | event | sync | Publish authorization facts after validation.: Actor ID and authorization purpose. | `AuthenticatedActor` |
@@ -489,6 +515,10 @@ flowchart TD
 | `research.unit_of_work` | `evidence_intake` | output | dependency | sync | Atomically save evidence state: Semantic records without ORM representations. | `EvidenceIntakeUnitOfWorkPort` |
 | `research.collection_jobs` | `evidence_collection` | output | dependency | async | Lease: Collection request and opaque lease token. | `CollectionStorePort` |
 | `research.source_fetch` | `evidence_collection` | output | dependency | async | Fetch one admitted external source under SSRF and size restrictions.: Evidence URL and semantic fetch result. | `SourceFetchPort` |
+| `research.confirm_dimension_facts` | `evidence_stage` | input | command | sync | Confirm one complete version of Owner-authored E-stage dimension facts and derive the canonical stage.: Authorized Owner, Evidence and snapshot identity, expected version, immutable dimension facts, reason and idempotency key. | `ConfirmDimensionFactsCommand` |
+| `research.query_evidence_stage` | `evidence_stage` | input | query | sync | Return the current Server-authoritative E-stage projection for an authorized Evidence stream.: Authenticated Owner or Learner, Evidence identity and current stage version. | `EvidenceStageRecord` |
+| `research.evidence_stage_store` | `evidence_stage` | output | dependency | sync | Atomically validate snapshot membership and expected version then append confirmed facts, derived stage, trace and audit.: Semantic stage record and idempotency key without SQL or wire representations. | `EvidenceStageStorePort` |
+| `research.evidence_stage_events` | `evidence_stage` | output | event | sync | Reserved for a later notification slice that will publish committed confirmed-fact and deterministic stage versions through a durable outbox.: Evidence identity, stage version, source snapshot, canonical stage and stable event identity. | `EvidenceStageRecord` |
 | `research.clock` | `research_domain` | output | dependency | sync | Supply observed and retrieved times.: Time value with provenance. | `EvidenceRecord` |
 | `research.ids` | `research_domain` | output | dependency | sync | Generate persistent semantic identifiers.: Opaque unique identifier. | `EvidenceRecord` |
 | `research.events` | `research_domain` | output | event | async | Publish committed evidence lifecycle transitions.: Persistent event envelope and semantic payload. | `EvidenceRecord` |
@@ -501,6 +531,7 @@ flowchart TD
 | `research.evidence_received` | `research_domain` | at-least-once | The atomic intake transaction has committed. | Report that received evidence | `thesis_trace_application`, `research_domain` |
 | `research.collection_succeeded` | `research_domain` | at-least-once | The snapshot and succeeded state have committed. | Report a committed immutable source snapshot. | `thesis_trace_application` |
 | `research.collection_failed` | `research_domain` | at-least-once | Failure state and retry metadata have committed. | Report a committed retryable or terminal safe failure. | `thesis_trace_application` |
+| `research.evidence_stage_changed` | `evidence_stage` | at-least-once | Confirmed facts, stage, complete gate trace and audit have committed atomically. | Report a committed Owner-confirmed fact and deterministic E-stage version. | `thesis_trace_application`, `notification_domain` |
 | `access.owner_authorized` | `access_domain` | at-most-once | Identity and role checks have succeeded. | Record a successful Owner authorization decision. | `thesis_trace_application` |
 | `access.identity_resolved` | `access_domain` | at-most-once | Full JWT and get-identity facts match one enabled preapproved mapping. | Record successful resolution of provider-discriminated identity to one internal user. | `access_domain` |
 | `access.identity_rejected` | `access_domain` | at-most-once | Provider evidence or preapproved mapping fails closed. | Record a non-disclosing identity rejection category. | `thesis_trace_application` |
@@ -516,7 +547,24 @@ flowchart TD
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
-| `evidenceapi` | `fastapi_entrypoint` | `EvidenceApi` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `dimensionfactsbody` | `fastapi_entrypoint` | `DimensionFactsBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `evidencestageconfirmationbody` | `fastapi_entrypoint` | `EvidenceStageConfirmationBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `dimensionfactsbody` |
+| `gateresultresponse` | `fastapi_entrypoint` | `GateResultResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `evidencestageresponse` | `fastapi_entrypoint` | `EvidenceStageResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `dimensionfactsbody`, `gateresultresponse` |
+| `evidencestageflow` | `thesis_trace_application` | `EvidenceStageFlow` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | composition-mapping | `fastapi_entrypoint`, `backend_composition` | `authenticatedactor`, `role`, `researchactorcontext`, `researchstagefacade`, `researchstageconfirmationrequest`, `researchstagequery`, `researchstageresult`, `confirmevidencestagerequest`, `queryevidencestagerequest`, `evidencestagefactsresult`, `evidencestagegateresult`, `evidencestageresult` |
+| `confirmevidencestagerequest` | `thesis_trace_application` | `ConfirmEvidenceStageRequest` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `queryevidencestagerequest` | `thesis_trace_application` | `QueryEvidenceStageRequest` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | query | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `evidencestagefactsresult` | `thesis_trace_application` | `EvidenceStageFactsResult` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `evidencestagegateresult` | `thesis_trace_application` | `EvidenceStageGateResult` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `evidencestageresult` | `thesis_trace_application` | `EvidenceStageResult` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `evidencestagefactsresult`, `evidencestagegateresult` |
+| `researchactorcontext` | `research_domain` | `ResearchActorContext` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstageconfirmationrequest` | `research_domain` | `ResearchStageConfirmationRequest` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | command | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstagequery` | `research_domain` | `ResearchStageQuery` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | query | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstagefacts` | `research_domain` | `ResearchStageFacts` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstagegate` | `research_domain` | `ResearchStageGate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstageresult` | `research_domain` | `ResearchStageResult` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | `researchstagefacts`, `researchstagegate` |
+| `researchstagefacade` | `research_domain` | `ResearchStageFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `thesis_trace_application`, `backend_composition` | `researchactorcontext`, `researchstageconfirmationrequest`, `researchstagequery`, `researchstagefacts`, `researchstagegate`, `researchstageresult`, `stageactorcontext`, `confirmdimensionfactscommand`, `dimensionfacts`, `sourceconfirmation`, `evidencestagerecord`, `evidencestageservice` |
+| `evidenceapi` | `fastapi_entrypoint` | `EvidenceApi` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `evidencestageflow`, `confirmevidencestagerequest`, `queryevidencestagerequest`, `evidencestageresult` |
 | `submitevidencerequest` | `thesis_trace_application` | `SubmitEvidenceRequest` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application` | `authenticatedactor` |
 | `evidenceintakeflow` | `thesis_trace_application` | `EvidenceIntakeFlow` (class, `backend/src/thesis_trace/application/flows/evidence_intake.py`) | private | private-helper | `thesis_trace_application` | 無 |
 | `role` | `access_domain` | `Role` (enum, `backend/src/thesis_trace/modules/access/contracts.py`) | module-public | policy | `access_domain` | 無 |
@@ -550,7 +598,7 @@ flowchart TD
 | `postgresunavailable` | `postgres_research_adapter` | `PostgresUnavailable` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | domain-value | `backend_composition` | 無 |
 | `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter` |
 | `collectorruntime` | `backend_composition` | `CollectorRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `evidencecollector` |
-| `postgresevidencestore` | `postgres_research_adapter` | `PostgresEvidenceStore` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | adapter-binding | `backend_composition` | `databaseurlprovider` |
+| `postgresevidencestore` | `postgres_research_adapter` | `PostgresEvidenceStore` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | adapter-binding | `backend_composition` | `databaseurlprovider`, `companyrecord`, `evidenceaccepted`, `evidencerecord`, `evidenceauditfact`, `collectionrequest`, `evidencestatus`, `leasedcollectionjob`, `collectedsourcesnapshot`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageevaluation` |
 | `sourcefetchfailure` | `restricted_source_fetch_adapter` | `SourceFetchFailure` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | module-public | domain-value | `evidence_collection` | 無 |
 | `transportresponse` | `restricted_source_fetch_adapter` | `TransportResponse` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | private | wire-representation | `restricted_source_fetch_adapter` | 無 |
 | `sourcetransport` | `restricted_source_fetch_adapter` | `SourceTransport` (protocol, `backend/src/thesis_trace/platform/source_fetch.py`) | private | port | `restricted_source_fetch_adapter` | `transportresponse` |
@@ -603,6 +651,16 @@ flowchart TD
 | `cloudflarejwksdecoder` | `cloudflare_identity_adapter` | `CloudflareJwksDecoder` (class, `backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py`) | module-public | adapter-binding | `backend_composition`, `cloudflare_identity_adapter` | 無 |
 | `accountactionview` | `react_access_adapter` | `AccountAction` (alias, `frontend/src/access/client.ts`) | private | policy | `react_access_adapter` | 無 |
 | `pendingaccountconfirmation` | `react_access_adapter` | `Pending` (alias, `frontend/src/access/routes.tsx`) | private | runtime-state | `react_access_adapter` | `accountactionview` |
+| `evidencestage` | `evidence_stage` | `EvidenceStage` (enum, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | policy | `evidence_stage`, `postgres_research_adapter` | 無 |
+| `sourceconfirmation` | `evidence_stage` | `SourceConfirmation` (enum, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | policy | `evidence_stage`, `postgres_research_adapter`, `research_domain` | 無 |
+| `dimensionfacts` | `evidence_stage` | `DimensionFacts` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `sourceconfirmation` |
+| `stageactorcontext` | `evidence_stage` | `StageActorContext` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `research_domain` | 無 |
+| `confirmdimensionfactscommand` | `evidence_stage` | `ConfirmDimensionFactsCommand` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | command | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `stageactorcontext`, `dimensionfacts` |
+| `gateresult` | `evidence_stage` | `GateResult` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter` | `evidencestage` |
+| `stageevaluation` | `evidence_stage` | `StageEvaluation` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter` | `evidencestage`, `gateresult` |
+| `evidencestagerecord` | `evidence_stage` | `EvidenceStageRecord` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `dimensionfacts`, `stageevaluation` |
+| `evidencestagestoreport` | `evidence_stage` | `EvidenceStageStorePort` (protocol, `backend/src/thesis_trace/modules/research/evidence_stage/ports.py`) | module-public | port | `evidence_stage`, `postgres_research_adapter` | `confirmdimensionfactscommand`, `evidencestagerecord`, `stageevaluation` |
+| `evidencestageservice` | `evidence_stage` | `EvidenceStageService` (class, `backend/src/thesis_trace/modules/research/evidence_stage/service.py`) | module-public | policy | `backend_composition`, `research_domain` | `evidencestagestoreport`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageactorcontext`, `stageevaluation` |
 
 ## State Ownership
 
@@ -618,3 +676,5 @@ flowchart TD
 | `session-to-rls-context`: Convert a validated application session into transaction-local PostgreSQL RLS context without exposing SQL handles. | `access_domain` | `session_management` | `access_domain` | `securitycontext` | `sessionprofile` | `access_domain` | 無 | `access_domain->session_management` | `session_management->access_domain`, `session_management->postgres_access_adapter` |
 | `account-intent-to-confirmed-change`: Map an exact versioned account mutation intent into a single-use confirmation and resume the mutation only after atomic validation. | `account_administration` | `confirmation_challenge` | `access_domain` | `accountsummary` | `confirmationchallenge` | `access_domain` | 無 | 無 | `account_administration->confirmation_challenge`, `confirmation_challenge->account_administration` |
 | `access-response-to-react-view`: Deliver server-authoritative role-discriminated Access projections to responsive React routes through generated transport contracts. | `thesis_trace_application` | `access_domain` | `thesis_trace_application` | `-` | `-` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain` | `access_domain->thesis_trace_application` |
+| `authenticated-owner-to-stage-command`: Map a revalidated Owner actor and HTTP intent into a semantic confirmed-dimension command without granting Access-to-Research dependency. | `access_domain` | `research_domain` | `thesis_trace_application` | `authenticatedactor` | `researchactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->research_domain` | `access_domain->research_domain`, `research_domain->access_domain`, `evidence_stage->access_domain`, `evidence_stage->fastapi_entrypoint` |
+| `source-snapshot-to-confirmed-stage`: Validate an immutable collected source snapshot as the provenance target of one confirmed fact and stage version. | `evidence_collection` | `evidence_stage` | `research_domain` | `collectedsourcesnapshot` | `evidencestagerecord` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->evidence_stage` | `evidence_collection->evidence_stage`, `evidence_stage->evidence_collection` |
