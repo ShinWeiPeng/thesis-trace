@@ -134,7 +134,7 @@ flowchart TD
 - **目的:** Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries.
 - **子功能:** 無
 - **相關 Flows:** [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox)
-- **保護理由:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.
+- **保護理由:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.; Version-only source changes with identical material handling reuse the existing item; materially new work links the most relevant terminal item.; Exact transition retries replay their committed result before stale-version rejection.
 
 ### `notification_domain`
 

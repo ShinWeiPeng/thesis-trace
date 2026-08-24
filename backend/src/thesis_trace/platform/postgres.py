@@ -238,6 +238,9 @@ CREATE TABLE workflow.action_items (
   source_record_id text NOT NULL,
   source_version integer NOT NULL CHECK(source_version >= 1),
   trigger_fingerprint text NOT NULL UNIQUE,
+  material_fingerprint text NOT NULL,
+  creation_rule_version text NOT NULL,
+  trigger_kind text NOT NULL,
   company_id text NOT NULL,
   company_ticker text NOT NULL,
   company_name text NOT NULL,
@@ -282,15 +285,19 @@ CREATE TABLE workflow.audit_events (
   occurred_at timestamptz NOT NULL
 );
 CREATE TABLE workflow.creation_receipts (
-  idempotency_key text PRIMARY KEY,
-  command_digest text NOT NULL,
-  item_id text NOT NULL REFERENCES workflow.action_items(item_id)
-);
-CREATE TABLE workflow.transition_receipts (
-  idempotency_key text PRIMARY KEY,
+  actor_user_id text NOT NULL,
+  idempotency_key text NOT NULL,
   command_digest text NOT NULL,
   item_id text NOT NULL REFERENCES workflow.action_items(item_id),
-  item_version integer NOT NULL
+  PRIMARY KEY(actor_user_id,idempotency_key)
+);
+CREATE TABLE workflow.transition_receipts (
+  actor_user_id text NOT NULL,
+  idempotency_key text NOT NULL,
+  command_digest text NOT NULL,
+  item_id text NOT NULL REFERENCES workflow.action_items(item_id),
+  item_version integer NOT NULL,
+  PRIMARY KEY(actor_user_id,idempotency_key)
 );
 CREATE INDEX workflow_inbox_assignee_idx ON workflow.action_items(assignee_user_id,status,effective_priority,due_at,created_at,item_id);
 CREATE INDEX workflow_search_idx ON workflow.action_items(assignee_user_id,company_ticker,company_name);
@@ -309,6 +316,16 @@ ALTER TABLE workflow.audit_events FORCE ROW LEVEL SECURITY;
 CREATE POLICY workflow_audit_scope ON workflow.audit_events
   USING (EXISTS (SELECT 1 FROM workflow.action_items i WHERE i.item_id=audit_events.item_id))
   WITH CHECK (EXISTS (SELECT 1 FROM workflow.action_items i WHERE i.item_id=audit_events.item_id));
+ALTER TABLE workflow.creation_receipts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow.creation_receipts FORCE ROW LEVEL SECURITY;
+CREATE POLICY workflow_creation_receipt_scope ON workflow.creation_receipts
+  USING (actor_user_id=current_setting('app.user_id',true))
+  WITH CHECK (actor_user_id=current_setting('app.user_id',true));
+ALTER TABLE workflow.transition_receipts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow.transition_receipts FORCE ROW LEVEL SECURITY;
+CREATE POLICY workflow_transition_receipt_scope ON workflow.transition_receipts
+  USING (actor_user_id=current_setting('app.user_id',true))
+  WITH CHECK (actor_user_id=current_setting('app.user_id',true));
 CREATE OR REPLACE FUNCTION workflow.reject_audit_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'append_only_audit'; END $$;
 CREATE TRIGGER workflow_audit_append_only BEFORE UPDATE OR DELETE ON workflow.audit_events

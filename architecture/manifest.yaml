@@ -840,12 +840,14 @@ modules:
     emitted_events: []
     owned_state: []
     side_effects:
-    - description: Persist Action Items, priority evaluations, and append-only audit through a demand-owned port.
+    - description: Persist Action Items, exact and material trigger fingerprints, recurrence links, actor-scoped idempotency receipts, priority evaluations, and append-only audit through a demand-owned port.
     errors: []
     invariants:
     - System priority and safety floors are server-owned.
     - Terminal Action Items never reopen or rewrite source records.
     - Assignees derive only from Server-owned identity and source ownership.
+    - Version-only source changes with identical material handling reuse the existing item; materially new work links the most relevant terminal item.
+    - Exact transition retries replay their committed result before stale-version rejection.
   entrypoints:
   - path: backend/src/thesis_trace/modules/workflow/service.py
     symbol: WorkflowService
@@ -970,7 +972,7 @@ modules:
   public_headers:
   - backend/src/thesis_trace/adapters/postgres_workflow/adapter.py
   description:
-    purpose: Persist Workflow Action Items, priority evaluations, and append-only audit using PostgreSQL.
+    purpose: Persist Workflow Action Items, exact/material fingerprints, recurrence, actor-scoped receipts, priority evaluations, and append-only audit using PostgreSQL.
     diagram_summaries:
       zh-TW: 保存待辦、優先級與稽核紀錄
     input_ports: []
@@ -982,6 +984,8 @@ modules:
     errors: []
     invariants:
     - Workflow audit is append-only.
+    - Creation reasons remain aggregate facts while transition reasons are append-only audit facts.
+    - Idempotency receipts are isolated by actor RLS and cannot collide across assignees.
     - Summary counts and page rows use one authorization scope and query snapshot.
     - The adapter never reads or writes Research tables to derive Workflow policy.
   entrypoints:
@@ -2163,8 +2167,8 @@ ports:
   implemented_by:
   - postgres_workflow_adapter
   description:
-    purpose: Atomically persist and query Action Item aggregates, priority history, idempotency receipts, and append-only audit under assignee RLS.
-    data: Workflow semantic values without SQL, ORM, Access, Research, or wire representations.
+    purpose: Atomically persist and query Action Item aggregates, exact/material fingerprints, terminal recurrence links, priority history, actor-scoped idempotency receipts, and append-only audit under assignee RLS.
+    data: Workflow semantic values including creation-rule and trigger identity, without SQL, ORM, Access, Research, or wire representations.
     timing: sync
     immediate_rejections:
     - {code: conflict, condition: Fingerprint, idempotency, or expected-version constraint fails.}

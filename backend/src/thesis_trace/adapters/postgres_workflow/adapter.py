@@ -109,43 +109,79 @@ class PostgresWorkflowStore:
         item: ActionItem,
         *,
         fingerprint: str,
+        material_fingerprint: str,
+        creation_rule_version: str,
+        trigger_kind: str,
         idempotency_key: str,
         command_digest: str,
     ) -> ActionItem:
         with self._connection() as connection:
-            connection.execute("SELECT pg_advisory_xact_lock(%s)", (self._lock_key(idempotency_key),))
+            connection.execute("SELECT pg_advisory_xact_lock(%s)", (
+                self._lock_key(f"{item.assignee_user_id}:{idempotency_key}"),
+            ))
+            connection.execute("SELECT pg_advisory_xact_lock(%s)", (
+                self._lock_key(f"{creation_rule_version}:{item.source_domain}:{item.source_record_id}"),
+            ))
             receipt = connection.execute(
-                "SELECT command_digest,item_id FROM workflow.creation_receipts WHERE idempotency_key=%s",
-                (idempotency_key,),
+                "SELECT command_digest,item_id FROM workflow.creation_receipts WHERE actor_user_id=%s AND idempotency_key=%s",
+                (item.assignee_user_id, idempotency_key),
             ).fetchone()
             if receipt:
                 if receipt[0] != command_digest:
                     raise ValueError("idempotency_conflict")
                 return self._get(connection, item.assignee_user_id, receipt[1])
 
+            prior = connection.execute(
+                """SELECT item_id,material_fingerprint FROM workflow.action_items
+                WHERE assignee_user_id=%s AND creation_rule_version=%s
+                  AND source_domain=%s AND source_record_id=%s
+                ORDER BY created_at DESC,item_id DESC LIMIT 1""",
+                (item.assignee_user_id, creation_rule_version, item.source_domain, item.source_record_id),
+            ).fetchone()
+            if prior and prior[1] == material_fingerprint:
+                connection.execute(
+                    "INSERT INTO workflow.creation_receipts(actor_user_id,idempotency_key,command_digest,item_id) VALUES(%s,%s,%s,%s)",
+                    (item.assignee_user_id, idempotency_key, command_digest, prior[0]),
+                )
+                return self._get(connection, item.assignee_user_id, prior[0])
+            terminal = connection.execute(
+                """SELECT item_id FROM workflow.action_items
+                WHERE assignee_user_id=%s AND creation_rule_version=%s
+                  AND source_domain=%s AND source_record_id=%s
+                  AND status IN ('completed','dismissed')
+                ORDER BY updated_at DESC,item_id DESC LIMIT 1""",
+                (item.assignee_user_id, creation_rule_version, item.source_domain, item.source_record_id),
+            ).fetchone()
+            recurrence_of = terminal[0] if terminal else None
             inserted = connection.execute(
                 """
                 INSERT INTO workflow.action_items(
                   item_id,version,item_type,source_domain,source_record_id,source_version,
-                  trigger_fingerprint,company_id,company_ticker,company_name,assignee_user_id,
+                  trigger_fingerprint,material_fingerprint,creation_rule_version,trigger_kind,
+                  company_id,company_ticker,company_name,assignee_user_id,
                   reason,status,system_priority,effective_priority,safety_floor,safety_locked,
                   priority_rule_ids,priority_policy_version,priority_reason,created_at,updated_at,
                   due_at,defer_until,recurrence_of
                 ) VALUES(
-                  %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,
+                  %s,%s,%s,%s,%s,
+                  %s,%s,%s,%s,%s,
+                  %s,%s,%s,%s,%s,
+                  %s,%s,%s,%s,%s,
+                  %s::jsonb,%s,%s,
                   %s::timestamptz,%s::timestamptz,%s::timestamptz,%s::timestamptz,%s
                 ) ON CONFLICT(trigger_fingerprint) DO NOTHING RETURNING item_id
                 """,
                 (
                     item.item_id, item.version, item.item_type.value, item.source_domain,
-                    item.source_record_id, item.source_version, fingerprint, item.company_id,
+                    item.source_record_id, item.source_version, fingerprint, material_fingerprint,
+                    creation_rule_version, trigger_kind, item.company_id,
                     item.company_ticker, item.company_name, item.assignee_user_id, item.reason,
                     item.status.value, item.priority.system_priority.value,
                     item.priority.effective_priority.value,
                     item.priority.safety_floor.value if item.priority.safety_floor else None,
                     item.priority.safety_locked, json.dumps(item.priority.rule_ids),
                     item.priority.policy_version, item.priority.reason, item.created_at,
-                    item.updated_at, item.due_at, item.defer_until, item.recurrence_of,
+                    item.updated_at, item.due_at, item.defer_until, recurrence_of,
                 ),
             ).fetchone()
             created = inserted is not None
@@ -171,8 +207,8 @@ class PostgresWorkflowStore:
                     (uuid.uuid4(), item_id, item.assignee_user_id, item.status.value, item.reason, item.created_at),
                 )
             connection.execute(
-                "INSERT INTO workflow.creation_receipts(idempotency_key,command_digest,item_id) VALUES(%s,%s,%s)",
-                (idempotency_key, command_digest, item_id),
+                "INSERT INTO workflow.creation_receipts(actor_user_id,idempotency_key,command_digest,item_id) VALUES(%s,%s,%s,%s)",
+                (item.assignee_user_id, idempotency_key, command_digest, item_id),
             )
             return self._get(connection, item.assignee_user_id, item_id)
 
@@ -220,7 +256,11 @@ class PostgresWorkflowStore:
         binding = self._query_binding(query)
         if query.cursor:
             cursor = self._decode_cursor(query.cursor)
-            if cursor.get("v") != 1 or cursor.get("binding") != binding:
+            required = {
+                "v", "binding", "as_of", "primary", "primary_null",
+                "due", "due_null", "created", "item_id",
+            }
+            if not required.issubset(cursor) or cursor.get("v") != 1 or cursor.get("binding") != binding:
                 raise ValueError("invalid_cursor")
             as_of = cursor["as_of"]
         else:
@@ -243,9 +283,6 @@ class PostgresWorkflowStore:
         last_primary = last_due = last_created = last_item_id = None
         last_primary_null = last_due_null = False
         if cursor is not None:
-            required = {"primary", "primary_null", "due", "due_null", "created", "item_id"}
-            if not required.issubset(cursor):
-                raise ValueError("invalid_cursor")
             last_primary = cursor["primary"]
             last_primary_null = bool(cursor["primary_null"])
             last_due = cursor["due"]
@@ -280,7 +317,9 @@ class PostgresWorkflowStore:
                     AND (%(company_id)s::text IS NULL OR company_id=%(company_id)s::text)
                     AND (%(item_type)s::text IS NULL OR item_type=%(item_type)s::text)
                     AND (%(status)s::text IS NULL OR status=%(status)s::text)
-                    AND (%(priority)s::text IS NULL OR effective_priority=%(priority)s::text)
+                    AND (%(priority)s::text IS NULL
+                      OR (%(priority)s::text='urgent' AND effective_priority IN ('critical','high'))
+                      OR effective_priority=%(priority)s::text)
                     AND (%(created_from)s::text IS NULL OR created_at >= %(created_from)s::timestamptz)
                     AND (%(created_to)s::text IS NULL OR created_at <= %(created_to)s::timestamptz)
                     AND (%(due_from)s::text IS NULL OR due_at >= %(due_from)s::timestamptz)
@@ -342,6 +381,7 @@ class PostgresWorkflowStore:
         self,
         current: ActionItem,
         *,
+        expected_version: int,
         target_status: ActionItemStatus,
         reason: str,
         defer_until: str | None,
@@ -350,10 +390,12 @@ class PostgresWorkflowStore:
         occurred_at: str,
     ) -> ActionItem:
         with self._connection() as connection:
-            connection.execute("SELECT pg_advisory_xact_lock(%s)", (self._lock_key(idempotency_key),))
+            connection.execute("SELECT pg_advisory_xact_lock(%s)", (
+                self._lock_key(f"{current.assignee_user_id}:{idempotency_key}"),
+            ))
             receipt = connection.execute(
-                "SELECT command_digest,item_id FROM workflow.transition_receipts WHERE idempotency_key=%s",
-                (idempotency_key,),
+                "SELECT command_digest,item_id FROM workflow.transition_receipts WHERE actor_user_id=%s AND idempotency_key=%s",
+                (current.assignee_user_id, idempotency_key),
             ).fetchone()
             if receipt:
                 if receipt[0] != command_digest:
@@ -365,13 +407,13 @@ class PostgresWorkflowStore:
             ).fetchone()
             if locked is None:
                 raise LookupError("action_item_not_found")
-            if locked[0] != current.version:
+            if locked[0] != expected_version:
                 raise ValueError("version_conflict")
-            new_version = current.version + 1
+            new_version = expected_version + 1
             connection.execute(
-                """UPDATE workflow.action_items SET version=%s,status=%s,reason=%s,
+                """UPDATE workflow.action_items SET version=%s,status=%s,
                 defer_until=%s::timestamptz,updated_at=%s::timestamptz WHERE item_id=%s""",
-                (new_version, target_status.value, reason, defer_until, occurred_at, current.item_id),
+                (new_version, target_status.value, defer_until, occurred_at, current.item_id),
             )
             connection.execute(
                 """INSERT INTO workflow.audit_events(
@@ -382,8 +424,8 @@ class PostgresWorkflowStore:
             )
             connection.execute(
                 """INSERT INTO workflow.transition_receipts(
-                idempotency_key,command_digest,item_id,item_version) VALUES(%s,%s,%s,%s)""",
-                (idempotency_key, command_digest, current.item_id, new_version),
+                actor_user_id,idempotency_key,command_digest,item_id,item_version) VALUES(%s,%s,%s,%s,%s)""",
+                (current.assignee_user_id, idempotency_key, command_digest, current.item_id, new_version),
             )
             return self._get(connection, current.assignee_user_id, current.item_id)
 

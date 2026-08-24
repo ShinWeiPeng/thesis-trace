@@ -50,5 +50,33 @@ it("submits only transition intent and reloads the server projection", async () 
   expect(api.transitionActionItem).toHaveBeenCalledWith("action-1", expect.objectContaining({
     expected_version: 1, target_status: "completed", reason: "Reviewed against the filing",
   }));
+  expect(api.queryInbox).toHaveBeenCalledTimes(2);
   expect((await screen.findAllByText("已完成"))[0]).toBeVisible();
+});
+
+it("uses summary cards and controls as server query inputs", async () => {
+  const user = userEvent.setup(); const api = client();
+  render(<ActionInboxRoutes client={api} initialPath="/actions" />);
+  await screen.findByText("緊急 1");
+
+  await user.click(screen.getByRole("button", { name: "緊急 1" }));
+  expect(api.queryInbox).toHaveBeenLastCalledWith(expect.objectContaining({ priority: "urgent" }));
+
+  await user.selectOptions(screen.getByLabelText("排序"), "created_at");
+  expect(api.queryInbox).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "created_at" }));
+});
+
+it("restores the complete query, cursor, and scroll position after data renders", async () => {
+  const api = client(); const scroll = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  const returned = new URLSearchParams({ item_type: "anomaly_review", created_from: "2026-08-01T00:00:00Z",
+    due_to: "2026-08-31T23:59:59Z", cursor: "signed-cursor", scroll: "120" }).toString();
+  render(<ActionInboxRoutes client={api} initialPath={`/actions/action-1?return=${encodeURIComponent(returned)}`} />);
+
+  await screen.findByRole("heading", { name: "TT · Thesis Trace" });
+  expect(api.queryInbox).toHaveBeenCalledWith(expect.objectContaining({
+    item_type: "anomaly_review", created_from: "2026-08-01T00:00:00Z",
+    due_to: "2026-08-31T23:59:59Z", cursor: "signed-cursor",
+  }));
+  expect(scroll).toHaveBeenCalledWith({ top: 120 });
+  scroll.mockRestore();
 });

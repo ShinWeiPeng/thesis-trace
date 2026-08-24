@@ -16,6 +16,9 @@ class ActionItemStorePort(Protocol):
         item: ActionItem,
         *,
         fingerprint: str,
+        material_fingerprint: str,
+        creation_rule_version: str,
+        trigger_kind: str,
         idempotency_key: str,
         command_digest: str,
     ) -> ActionItem: ...
@@ -28,6 +31,7 @@ class ActionItemStorePort(Protocol):
         self,
         current: ActionItem,
         *,
+        expected_version: int,
         target_status: ActionItemStatus,
         reason: str,
         defer_until: str | None,

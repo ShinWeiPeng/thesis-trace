@@ -28,6 +28,20 @@ test.beforeEach(async ({ page }) => {
       items: [action], next_cursor: null, as_of: "2026-08-24T00:00:00Z",
     } });
   });
+  await page.route("**/api/companies", (route) => route.fulfill({ json: [
+    { company_id: "company-1", ticker: "TT", name: "Thesis Trace", version: 1 },
+  ] }));
+  await page.route("**/api/anomaly-assessments/assessment-1", (route) => route.fulfill({ json: {
+    assessment_id: "assessment-1", evidence_id: "evidence-1", evidence_version: 2,
+    failure_code: null, requested_at: "2026-08-24T00:00:00Z", source_snapshot_ids: ["snapshot-1"],
+    status: "succeeded", version: 2, trace: { anomaly_class: "would_be_hard", clue_route: null,
+      clue_score: null, policy_version: "anomaly-policy-v1", source_tiers: ["A"],
+      gates: [{ gate: "predeclared_invalidation", passed: true, code: "passed" }] },
+  } }));
+  await page.route("**/api/evidence/evidence-1", (route) => route.fulfill({ json: {
+    evidence_id: "evidence-1", version: 2, status: "succeeded", source_snapshot_id: "snapshot-1",
+  } }));
+  await page.route("**/api/evidence/evidence-1/stage", (route) => route.fulfill({ status: 404, json: { detail: "missing" } }));
 });
 
 test("signed-query inbox keeps list context and transitions responsively", async ({ page, isMobile }) => {
@@ -48,5 +62,10 @@ test("signed-query inbox keeps list context and transitions responsively", async
   expect(transitionBody).toMatchObject({ expected_version: 1, target_status: "completed", reason: "Reviewed against primary evidence" });
   expect(transitionBody).not.toHaveProperty("priority");
   expect(transitionBody).not.toHaveProperty("assignee_user_id");
+  await page.getByRole("link", { name: "開啟公司脈絡" }).click();
+  await expect(page).toHaveURL(/\/companies\/company-1/);
+  await expect(page.locator("select").filter({ has: page.getByRole("option", { name: "TT · Thesis Trace" }) })).toHaveValue("company-1");
+  await expect(page.getByText("← 返回原待辦與清單位置")).toBeVisible();
+  await expect(page.getByText("Shadow Hard 候選").first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

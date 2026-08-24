@@ -49,6 +49,16 @@ def _digest(parts: tuple[object, ...]) -> str:
     return sha256(canonical.encode()).hexdigest()
 
 
+def _aware_datetime(value: str, error_code: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(error_code) from error
+    if parsed.utcoffset() is None:
+        raise ValueError(error_code)
+    return parsed
+
+
 class WorkflowService:
     POLICY_VERSION = "action-priority-v1"
     CREATION_RULE_VERSION = "manual-anomaly-review-v1"
@@ -107,16 +117,20 @@ class WorkflowService:
         ):
             raise ValueError("invalid_source")
         if command.due_at is not None:
-            try:
-                datetime.fromisoformat(command.due_at)
-            except ValueError as error:
-                raise ValueError("invalid_due_at") from error
+            _aware_datetime(command.due_at, "invalid_due_at")
         priority = self._priority(source.required_handling)
         fingerprint = _digest((
             self.CREATION_RULE_VERSION,
             source.source_domain,
             source.source_record_id,
             source.source_version,
+            source.trigger_kind,
+            source.required_handling,
+        ))
+        material_fingerprint = _digest((
+            self.CREATION_RULE_VERSION,
+            source.source_domain,
+            source.source_record_id,
             source.trigger_kind,
             source.required_handling,
         ))
@@ -145,6 +159,9 @@ class WorkflowService:
         return self._project(self._store.create(
             item,
             fingerprint=fingerprint,
+            material_fingerprint=material_fingerprint,
+            creation_rule_version=self.CREATION_RULE_VERSION,
+            trigger_kind=source.trigger_kind,
             idempotency_key=command.idempotency_key,
             command_digest=command_digest,
         ))
@@ -163,37 +180,23 @@ class WorkflowService:
             raise ValueError("invalid_query")
         if query.status is not None and query.status not in {value.value for value in ActionItemStatus}:
             raise ValueError("invalid_query")
-        if query.priority is not None and query.priority not in {value.value for value in ActionPriority}:
+        if query.priority is not None and query.priority not in ({value.value for value in ActionPriority} | {"urgent"}):
             raise ValueError("invalid_query")
         for value in (query.created_from, query.created_to, query.due_from, query.due_to):
             if value is not None:
-                try:
-                    datetime.fromisoformat(value)
-                except ValueError as error:
-                    raise ValueError("invalid_query") from error
+                _aware_datetime(value, "invalid_query")
         page = self._store.query(query)
         return replace(page, items=tuple(self._project(item) for item in page.items))
 
     def transition(self, command: TransitionActionItemCommand) -> ActionItem:
-        if not command.actor.may_transition or not command.reason.strip():
+        if not command.actor.may_transition:
             raise PermissionError("forbidden")
-        current = self._store.get(command.actor.actor_id, command.item_id)
-        if current.version != command.expected_version:
-            raise ValueError("version_conflict")
-        allowed = self._allowed(current)
-        if command.target_status not in allowed:
-            if not (
-                current.priority.safety_locked
-                and command.target_status is ActionItemStatus.COMPLETED
-                and command.underlying_resolved
-                and current.status in {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
-            ):
-                raise ValueError("invalid_transition")
-        if command.target_status is ActionItemStatus.DEFERRED:
-            if command.defer_until is None or datetime.fromisoformat(command.defer_until) <= datetime.fromisoformat(command.server_time):
-                raise ValueError("invalid_transition")
-        elif command.defer_until is not None:
+        if not command.reason.strip() or not command.idempotency_key.strip():
             raise ValueError("invalid_transition")
+        server_time = _aware_datetime(command.server_time, "invalid_transition")
+        parsed_defer_until = None
+        if command.defer_until is not None:
+            parsed_defer_until = _aware_datetime(command.defer_until, "invalid_transition")
         command_digest = _digest((
             command.item_id,
             command.expected_version,
@@ -202,8 +205,27 @@ class WorkflowService:
             command.defer_until or "",
             command.underlying_resolved,
         ))
+        current = self._store.get(command.actor.actor_id, command.item_id)
+        # Preserve exact retry replay: a stale expected version must reach the
+        # store receipt check before optimistic concurrency is rejected.
+        if current.version == command.expected_version:
+            allowed = self._allowed(current)
+            if command.target_status not in allowed:
+                if not (
+                    current.priority.safety_locked
+                    and command.target_status is ActionItemStatus.COMPLETED
+                    and command.underlying_resolved
+                    and current.status in {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
+                ):
+                    raise ValueError("invalid_transition")
+            if command.target_status is ActionItemStatus.DEFERRED:
+                if parsed_defer_until is None or parsed_defer_until <= server_time:
+                    raise ValueError("invalid_transition")
+            elif parsed_defer_until is not None:
+                raise ValueError("invalid_transition")
         updated = self._store.transition(
             current,
+            expected_version=command.expected_version,
             target_status=command.target_status,
             reason=command.reason.strip(),
             defer_until=command.defer_until,

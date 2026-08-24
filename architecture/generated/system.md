@@ -117,7 +117,7 @@ flowchart TD
 | `workflow_domain` | L1 | domain | `thesis_trace_application` | implemented | Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries. |
 | `notification_domain` | L1 | domain | `thesis_trace_application` | planned | Own notification classification |
 | `fastapi_entrypoint` | L3+ | adapter | `-` | implemented | Translate versioned JSON HTTP requests into application commands and queries. |
-| `postgres_workflow_adapter` | L3+ | adapter | `-` | implemented | Persist Workflow Action Items, priority evaluations, and append-only audit using PostgreSQL. |
+| `postgres_workflow_adapter` | L3+ | adapter | `-` | implemented | Persist Workflow Action Items, exact/material fingerprints, recurrence, actor-scoped receipts, priority evaluations, and append-only audit using PostgreSQL. |
 | `postgres_research_adapter` | L3+ | adapter | `-` | implemented | Implement atomic Research persistence and leased collector work using PostgreSQL. |
 | `restricted_source_fetch_adapter` | L3+ | adapter | `-` | implemented | Fetch approved HTTPS sources through bounded DNS and transport policy. |
 | `runtime_configuration_adapter` | L3+ | adapter | `-` | implemented | Resolve mandatory runtime configuration and file-referenced secrets fail closed. |
@@ -308,9 +308,9 @@ flowchart TD
 - **輸出 Ports:** `workflow.action_item_store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** Persist Action Items, priority evaluations, and append-only audit through a demand-owned port. (`-`)
+- **副作用:** Persist Action Items, exact and material trigger fingerprints, recurrence links, actor-scoped idempotency receipts, priority evaluations, and append-only audit through a demand-owned port. (`-`)
 - **異常:** 無
-- **不變條件:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.
+- **不變條件:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.; Version-only source changes with identical material handling reuse the existing item; materially new work links the most relevant terminal item.; Exact transition retries replay their committed result before stale-version rejection.
 - **程式入口:** [`WorkflowService`](../../backend/src/thesis_trace/modules/workflow/service.py) (service)
 - **公開 Symbols:** [`ActionItem`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionInboxPage`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`CreateActionItemCommand`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`TransitionActionItemCommand`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionInboxQuery`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionItemStorePort`](../../backend/src/thesis_trace/modules/workflow/ports.py) (port)<br>[`WorkflowService`](../../backend/src/thesis_trace/modules/workflow/service.py) (service)
 
@@ -346,7 +346,7 @@ flowchart TD
 
 ### `postgres_workflow_adapter`
 
-- **目的:** Persist Workflow Action Items, priority evaluations, and append-only audit using PostgreSQL.
+- **目的:** Persist Workflow Action Items, exact/material fingerprints, recurrence, actor-scoped receipts, priority evaluations, and append-only audit using PostgreSQL.
 - **父模組:** `-`
 - **實作狀態:** `implemented`
 - **輸入 Ports:** 無
@@ -355,7 +355,7 @@ flowchart TD
 - **擁有狀態:** 無
 - **副作用:** Execute bounded RLS-protected Workflow transactions and repeatable-read inbox queries. (`-`)
 - **異常:** 無
-- **不變條件:** Workflow audit is append-only.; Summary counts and page rows use one authorization scope and query snapshot.; The adapter never reads or writes Research tables to derive Workflow policy.
+- **不變條件:** Workflow audit is append-only.; Creation reasons remain aggregate facts while transition reasons are append-only audit facts.; Idempotency receipts are isolated by actor RLS and cannot collide across assignees.; Summary counts and page rows use one authorization scope and query snapshot.; The adapter never reads or writes Research tables to derive Workflow policy.
 - **程式入口:** [`PostgresWorkflowStore`](../../backend/src/thesis_trace/adapters/postgres_workflow/adapter.py) (adapter)
 - **公開 Symbols:** [`PostgresWorkflowStore`](../../backend/src/thesis_trace/adapters/postgres_workflow/adapter.py) (adapter)
 
@@ -635,7 +635,7 @@ flowchart TD
 | `workflow.query_action_inbox` | `workflow_domain` | input | query | sync | Return authorized counts and page rows from the same repeatable-read query snapshot.: Workflow actor scope, normalized filters/search/sort, page size, and opaque cursor. | `ActionInboxQuery`, `ActionInboxPage` |
 | `workflow.query_action_item` | `workflow_domain` | input | query | sync | Return one current assignee-scoped Action Item aggregate.: Workflow actor and Action Item identity. | `ActionItem` |
 | `workflow.transition_action_item` | `workflow_domain` | input | command | sync | Apply the versioned Action Item state machine and atomically append its audit fact.: Workflow actor, item/version, target state, reason, optional defer time, idempotency, and Server time. | `TransitionActionItemCommand`, `ActionItem` |
-| `workflow.action_item_store` | `workflow_domain` | output | dependency | sync | Atomically persist and query Action Item aggregates, priority history, idempotency receipts, and append-only audit under assignee RLS.: Workflow semantic values without SQL, ORM, Access, Research, or wire representations. | `ActionItemStorePort` |
+| `workflow.action_item_store` | `workflow_domain` | output | dependency | sync | Atomically persist and query Action Item aggregates, exact/material fingerprints, terminal recurrence links, priority history, actor-scoped idempotency receipts, and append-only audit under assignee RLS.: Workflow semantic values including creation-rule and trigger identity, without SQL, ORM, Access, Research, or wire representations. | `ActionItemStorePort` |
 
 ## Event 契約
 

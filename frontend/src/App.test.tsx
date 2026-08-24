@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
-import type { EvidenceClient } from "./api/evidenceClient";
+import { ApiError, type EvidenceClient } from "./api/evidenceClient";
 import type { WorkflowClient } from "./workflow/client";
 const company = { company_id: "2330", ticker: "2330", name: "台積電", version: 1 };
 it("selects a server company and shows its server receipt", async () => {
@@ -108,4 +108,25 @@ it("creates a pending shadow assessment and renders a server would-be-Hard trace
   await user.click(screen.getByRole("button", { name: "重新整理評估" }));
   expect(await screen.findAllByText("已由新版取代")).toHaveLength(2);
   expect(screen.queryByText("Shadow Hard 候選")).not.toBeInTheDocument();
+});
+
+it("restores the server-backed company and anomaly context from an Action Item route", async () => {
+  const linked = { assessment_id: "a-1", evidence_id: "e-1", evidence_version: 2, failure_code: null,
+    requested_at: "2026-08-21T10:00:00Z", source_snapshot_ids: ["snapshot-1"], status: "succeeded" as const,
+    version: 2, trace: { anomaly_class: "would_be_hard" as const, clue_route: null, clue_score: null,
+      policy_version: "anomaly-policy-v1", source_tiers: ["A" as const],
+      gates: [{ gate: "predeclared_invalidation", passed: true, code: "passed" }] } };
+  const client: EvidenceClient = {
+    listCompanies: vi.fn().mockResolvedValue([company]), createCompany: vi.fn(), submitEvidenceUrl: vi.fn(),
+    getEvidenceIntake: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 2, status: "succeeded", source_snapshot_id: "snapshot-1" }),
+    getEvidenceStage: vi.fn().mockRejectedValue(new ApiError("missing", "missing", 404)),
+    confirmEvidenceStage: vi.fn(), requestAnomalyAssessment: vi.fn(), getAnomalyAssessment: vi.fn().mockResolvedValue(linked),
+  };
+
+  render(<App client={client} initialCompanyId="2330" actionReturnHref="/actions/action-1?return=search%3DTT" actionSource={{ domain: "anomaly_assessment", recordId: "a-1", version: 2 }} />);
+
+  expect(await screen.findByText(/返回原待辦與清單位置/)).toHaveAttribute("href", "/actions/action-1?return=search%3DTT");
+  expect(await screen.findAllByText("Shadow Hard 候選")).toHaveLength(2);
+  expect(client.getAnomalyAssessment).toHaveBeenCalledWith("a-1");
+  expect(client.getEvidenceIntake).toHaveBeenCalledWith("e-1");
 });

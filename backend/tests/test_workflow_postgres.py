@@ -35,7 +35,7 @@ def workflow() -> tuple[WorkflowService, PostgresWorkflowStore]:
     service = WorkflowService(
         store,
         clock=lambda: "2026-08-24T00:00:00+00:00",
-        id_generator=iter(("item-1", "item-2", "item-3")).__next__,
+        id_generator=iter(("item-1", "item-2", "item-3", "item-4")).__next__,
     )
     return service, store
 
@@ -74,11 +74,51 @@ def test_postgres_create_query_transition_and_audit_are_consistent(
     ))
     assert completed.version == 2
     assert completed.status is ActionItemStatus.COMPLETED
+    assert completed.reason == "Review A"
     assert store.count_audit_events(first.item_id) == 2
     assert store.count_priority_evaluations(first.item_id) == 1
 
+    replay = service.transition(TransitionActionItemCommand(
+        actor(), first.item_id, first.version, ActionItemStatus.COMPLETED,
+        "Reviewed", None, "transition-1", "2026-08-24T00:01:00+00:00", False,
+    ))
+    assert replay == completed
+    assert store.count_audit_events(first.item_id) == 2
+    with pytest.raises(ValueError, match="version_conflict"):
+        service.transition(TransitionActionItemCommand(
+            actor(), first.item_id, first.version, ActionItemStatus.COMPLETED,
+            "Reviewed", None, "transition-stale", "2026-08-24T00:02:00+00:00", False,
+        ))
+    assert store.count_audit_events(first.item_id) == 2
+
+    version_only = service.create(CreateActionItemCommand(
+        actor(), ActionSourceRef(
+            "anomaly_assessment", "assessment-1", 2, actor().actor_id,
+            "aaa", "AAA", "Company aaa", "manual-anomaly-review-v1", "would_be_hard",
+        ), "Version only", None, "create-version-only",
+    ))
+    assert version_only.item_id == first.item_id
+
+    recurrence = service.create(CreateActionItemCommand(
+        actor(), ActionSourceRef(
+            "anomaly_assessment", "assessment-1", 3, actor().actor_id,
+            "aaa", "AAA", "Company aaa", "manual-anomaly-review-v1", "human_review",
+        ), "Material recurrence", None, "create-recurrence",
+    ))
+    assert recurrence.item_id != first.item_id
+    assert recurrence.recurrence_of == first.item_id
+
+    url = os.environ["THESIS_TRACE_TEST_DATABASE_URL"]
+    with psycopg.connect(url) as connection:
+        connection.execute(
+            "UPDATE workflow.action_items SET system_priority='critical',effective_priority='critical' WHERE item_id=%s",
+            (second.item_id,),
+        )
+    urgent = service.query(ActionInboxQuery(actor(), priority="urgent", open_only=True))
+    assert {candidate.priority.effective_priority.value for candidate in urgent.items} == {"critical", "high"}
+
     open_page = service.query(ActionInboxQuery(actor(), open_only=True))
-    assert open_page.summary.all_open == open_page.total_count == 1
+    assert open_page.summary.all_open == open_page.total_count == 2
 
 
 def test_workflow_rls_hides_other_assignees(
