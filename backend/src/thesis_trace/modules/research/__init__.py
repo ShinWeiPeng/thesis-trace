@@ -239,6 +239,10 @@ class ResearchAnomalyResult:
     requested_at: str
     trace: ResearchAnomalyTrace | None
     failure_code: str | None
+    actor_id: str = ""
+    company_id: str = ""
+    company_ticker: str = ""
+    company_name: str = ""
 
 
 class ResearchAnomalyFacade:
@@ -295,6 +299,10 @@ class ResearchAnomalyFacade:
             requested_at=record.requested_at,
             trace=trace,
             failure_code=record.failure_code,
+            actor_id=record.actor_id,
+            company_id=record.company_id,
+            company_ticker=record.company_ticker,
+            company_name=record.company_name,
         )
 
     def request(

@@ -205,6 +205,7 @@ def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: Postg
         (5, "source_normalization_policy_version"),
         (6, "owner_confirmed_evidence_stage"),
         (7, "shadow_first_anomaly_assessment"),
+        (8, "anomaly_review_action_inbox"),
     ]
 
 
@@ -326,6 +327,10 @@ def test_anomaly_request_job_and_result_are_atomic_version_bound_and_shadow_only
     assert result.trace is not None
     assert result.trace.anomaly_class is AnomalyClass.WOULD_BE_HARD
     assert store.count_audit_events(requested.assessment_id) == 2
+    contextual = service.get(assessment_id=requested.assessment_id, may_read=True)
+    assert (contextual.actor_id, contextual.company_id, contextual.company_ticker, contextual.company_name) == (
+        "owner-1", "2330", "2330", "台積電",
+    )
 
     role_name = "thesis_trace_anomaly_rls_integration"
     with psycopg.connect(os.environ["THESIS_TRACE_TEST_DATABASE_URL"], autocommit=True) as connection:

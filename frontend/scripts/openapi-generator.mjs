@@ -36,11 +36,23 @@ export function generateClient(document, hash) {
     const success = Object.entries(operation.responses ?? {}).find(([code]) => /^2/.test(code))?.[1];
     const responseSchema = success?.content?.["application/json"]?.schema;
     const pathParams = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
-    const params = ["baseUrl: string", ...pathParams.map((name) => `${name}: string`), ...(bodySchema ? [`body: ${schemaType(bodySchema)}`] : []), "fetcher: typeof fetch = fetch"];
+    const queryParams = (operation.parameters ?? []).filter((parameter) => parameter.in === "query");
+    const querySchema = queryParams.length ? {
+      type: "object",
+      properties: Object.fromEntries(queryParams.map((parameter) => [parameter.name, parameter.schema ?? {}])),
+      required: queryParams.filter((parameter) => parameter.required).map((parameter) => parameter.name),
+    } : null;
+    const params = ["baseUrl: string", ...pathParams.map((name) => `${name}: string`), ...(bodySchema ? [`body: ${schemaType(bodySchema)}`] : []), ...(querySchema ? [`query: ${schemaType(querySchema)} = {}`] : []), "fetcher: typeof fetch = fetch"];
     let url = path.replace(/^\/api/, "");
     for (const name of pathParams) url = url.replace(`{${name}}`, `\${encodeURIComponent(${name})}`);
     const init = method === "get" ? "" : `, { method: "${method.toUpperCase()}", headers: { "Content-Type": "application/json" }${bodySchema ? ", body: JSON.stringify(body)" : ""} }`;
-    lines.push(`export function ${operation.operationId}(${params.join(", ")}): Promise<${schemaType(responseSchema)}> {`, `  return request(fetcher, \`\${baseUrl}${url}\`${init});`, "}", "");
+    const queryLines = querySchema ? [
+      "  const queryString = new URLSearchParams();",
+      ...queryParams.map((parameter) => `  if (query.${parameter.name} !== undefined && query.${parameter.name} !== null) queryString.set(${JSON.stringify(parameter.name)}, String(query.${parameter.name}));`),
+      '  const suffix = queryString.size ? `?${queryString}` : "";',
+    ] : [];
+    const suffix = querySchema ? "\${suffix}" : "";
+    lines.push(`export function ${operation.operationId}(${params.join(", ")}): Promise<${schemaType(responseSchema)}> {`, ...queryLines, `  return request(fetcher, \`\${baseUrl}${url}${suffix}\`${init});`, "}", "");
   }
   return lines.join("\n");
 }

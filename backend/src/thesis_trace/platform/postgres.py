@@ -228,6 +228,93 @@ CREATE POLICY anomaly_evidence_ai_worker_read ON research.evidence_intakes FOR S
 CREATE INDEX anomaly_job_due_idx ON research.anomaly_analysis_jobs(state,available_at);
 """
 
+MIGRATION_0008 = """
+CREATE SCHEMA workflow;
+CREATE TABLE workflow.action_items (
+  item_id text PRIMARY KEY,
+  version integer NOT NULL CHECK(version >= 1),
+  item_type text NOT NULL CHECK(item_type IN ('anomaly_review')),
+  source_domain text NOT NULL,
+  source_record_id text NOT NULL,
+  source_version integer NOT NULL CHECK(source_version >= 1),
+  trigger_fingerprint text NOT NULL UNIQUE,
+  company_id text NOT NULL,
+  company_ticker text NOT NULL,
+  company_name text NOT NULL,
+  assignee_user_id text NOT NULL,
+  reason text NOT NULL CHECK(length(btrim(reason)) > 0),
+  status text NOT NULL CHECK(status IN ('pending','in_progress','deferred','completed','dismissed')),
+  system_priority text NOT NULL CHECK(system_priority IN ('critical','high','normal','low')),
+  effective_priority text NOT NULL CHECK(effective_priority IN ('critical','high','normal','low')),
+  safety_floor text CHECK(safety_floor IN ('critical','high','normal','low')),
+  safety_locked boolean NOT NULL,
+  priority_rule_ids jsonb NOT NULL,
+  priority_policy_version text NOT NULL,
+  priority_reason text NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL,
+  due_at timestamptz,
+  defer_until timestamptz,
+  recurrence_of text REFERENCES workflow.action_items(item_id)
+);
+CREATE TABLE workflow.action_priority_evaluations (
+  item_id text NOT NULL REFERENCES workflow.action_items(item_id),
+  evaluation_version integer NOT NULL,
+  system_priority text NOT NULL,
+  effective_priority text NOT NULL,
+  safety_floor text,
+  safety_locked boolean NOT NULL,
+  rule_ids jsonb NOT NULL,
+  policy_version text NOT NULL,
+  reason text NOT NULL,
+  evaluated_at timestamptz NOT NULL,
+  PRIMARY KEY(item_id,evaluation_version)
+);
+CREATE TABLE workflow.audit_events (
+  event_id uuid PRIMARY KEY,
+  item_id text NOT NULL REFERENCES workflow.action_items(item_id),
+  item_version integer NOT NULL,
+  actor_user_id text NOT NULL,
+  action text NOT NULL,
+  from_status text,
+  to_status text NOT NULL,
+  reason text NOT NULL,
+  occurred_at timestamptz NOT NULL
+);
+CREATE TABLE workflow.creation_receipts (
+  idempotency_key text PRIMARY KEY,
+  command_digest text NOT NULL,
+  item_id text NOT NULL REFERENCES workflow.action_items(item_id)
+);
+CREATE TABLE workflow.transition_receipts (
+  idempotency_key text PRIMARY KEY,
+  command_digest text NOT NULL,
+  item_id text NOT NULL REFERENCES workflow.action_items(item_id),
+  item_version integer NOT NULL
+);
+CREATE INDEX workflow_inbox_assignee_idx ON workflow.action_items(assignee_user_id,status,effective_priority,due_at,created_at,item_id);
+CREATE INDEX workflow_search_idx ON workflow.action_items(assignee_user_id,company_ticker,company_name);
+ALTER TABLE workflow.action_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow.action_items FORCE ROW LEVEL SECURITY;
+CREATE POLICY workflow_item_scope ON workflow.action_items
+  USING (assignee_user_id=current_setting('app.user_id',true))
+  WITH CHECK (assignee_user_id=current_setting('app.user_id',true));
+ALTER TABLE workflow.action_priority_evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow.action_priority_evaluations FORCE ROW LEVEL SECURITY;
+CREATE POLICY workflow_priority_scope ON workflow.action_priority_evaluations
+  USING (EXISTS (SELECT 1 FROM workflow.action_items i WHERE i.item_id=action_priority_evaluations.item_id))
+  WITH CHECK (EXISTS (SELECT 1 FROM workflow.action_items i WHERE i.item_id=action_priority_evaluations.item_id));
+ALTER TABLE workflow.audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow.audit_events FORCE ROW LEVEL SECURITY;
+CREATE POLICY workflow_audit_scope ON workflow.audit_events
+  USING (EXISTS (SELECT 1 FROM workflow.action_items i WHERE i.item_id=audit_events.item_id))
+  WITH CHECK (EXISTS (SELECT 1 FROM workflow.action_items i WHERE i.item_id=audit_events.item_id));
+CREATE OR REPLACE FUNCTION workflow.reject_audit_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'append_only_audit'; END $$;
+CREATE TRIGGER workflow_audit_append_only BEFORE UPDATE OR DELETE ON workflow.audit_events
+  FOR EACH ROW EXECUTE FUNCTION workflow.reject_audit_mutation();
+"""
+
 MIGRATIONS: tuple[tuple[int, str, str], ...] = (
     (1, "wave0_company_evidence", MIGRATION_0001),
     (2, "access_identity_session_confirmation", MIGRATION_0002),
@@ -236,6 +323,7 @@ MIGRATIONS: tuple[tuple[int, str, str], ...] = (
     (5, "source_normalization_policy_version", MIGRATION_0005),
     (6, "owner_confirmed_evidence_stage", MIGRATION_0006),
     (7, "shadow_first_anomaly_assessment", MIGRATION_0007),
+    (8, "anomaly_review_action_inbox", MIGRATION_0008),
 )
 
 
@@ -261,6 +349,11 @@ def database_security_context(context: SecurityContext) -> Iterator[None]:
         yield
     finally:
         _REQUEST_SECURITY_CONTEXT.reset(token)
+
+
+def current_database_security_context() -> SecurityContext | None:
+    """Return the request-bound context for composition-injected database adapters."""
+    return _REQUEST_SECURITY_CONTEXT.get()
 
 
 @contextmanager
@@ -539,6 +632,9 @@ class PostgresEvidenceStore:
             requested_at=requested_at,
             trace=trace,
             failure_code=None if row[10] is None else str(row[10]),
+            company_id="" if len(row) < 12 else str(row[11]),
+            company_ticker="" if len(row) < 13 else str(row[12]),
+            company_name="" if len(row) < 14 else str(row[13]),
         )
 
     @staticmethod
@@ -546,6 +642,15 @@ class PostgresEvidenceStore:
         return """SELECT assessment_id,version,evidence_id,evidence_version,actor_id,
         source_snapshot_ids,status,reason,requested_at,trace,failure_code
         FROM research.anomaly_assessments"""
+
+    @staticmethod
+    def _anomaly_context_select() -> str:
+        return """SELECT a.assessment_id,a.version,a.evidence_id,a.evidence_version,a.actor_id,
+        a.source_snapshot_ids,a.status,a.reason,a.requested_at,a.trace,a.failure_code,
+        c.company_id,c.ticker,c.name
+        FROM research.anomaly_assessments a
+        JOIN research.evidence_intakes e ON e.evidence_id=a.evidence_id
+        JOIN research.companies c ON c.company_id=e.company_id"""
 
     def commit_confirmation(
         self,
@@ -871,7 +976,7 @@ class PostgresEvidenceStore:
     def get_anomaly_assessment(self, assessment_id: str) -> AnomalyAssessmentRecord | None:
         with self._connection() as connection:
             row = connection.execute(
-                f"{self._anomaly_select()} WHERE assessment_id=%s::uuid",
+                f"{self._anomaly_context_select()} WHERE a.assessment_id=%s::uuid",
                 (assessment_id,),
             ).fetchone()
         return None if row is None else self._anomaly_record(row)

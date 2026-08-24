@@ -3,6 +3,8 @@ import { accessClient, type AccessClient, type AccountAction } from "./client";
 import type { AccountSummary, ConfirmationChallenge, SessionProfile } from "./contracts";
 import type { Role } from "../generated/api";
 import EvidenceWorkspace from "../App";
+import { ActionInboxRoutes } from "../workflow/routes";
+import { workflowClient, type WorkflowClient } from "../workflow/client";
 
 const Unavailable = () => <main className="access-page unavailable"><h1>資源無法使用</h1><p>此資源不存在或你目前沒有存取權限。</p></main>;
 type Pending = { challenge: ConfirmationChallenge; action: AccountAction; targetId: string; payload: Record<string, unknown> };
@@ -26,11 +28,11 @@ function AdminAccounts({ client, detailId, owner }: { client: AccessClient; deta
   return <main className="access-page"><h1>帳號管理</h1>{error&&<p role="alert">{error}</p>}{owner&&<section><h2>建立帳號</h2>{identityFields}<button onClick={()=>preview("create_account","new_account",1,{role:"learner",...identity})}>預覽建立帳號</button></section>}<ul>{accounts.map(v=><li key={v.user_id}><a href={`/admin/accounts/${v.user_id}`}>{v.masked_identity}</a> · {v.role}</li>)}</ul>{pending&&<ConfirmationDialog pending={pending} onClose={()=>setPending(null)} onConfirm={confirm}/>}</main>;
 }
 
-export function AccessApp({ client=accessClient, initialPath }: { client?:AccessClient; initialPath?:string }) {
+export function AccessApp({ client=accessClient, workflow=workflowClient, initialPath }: { client?:AccessClient; workflow?:WorkflowClient; initialPath?:string }) {
   const [profile,setProfile]=useState<SessionProfile|null>(null); const [denied,setDenied]=useState(false); const path=initialPath??location.pathname;
   useEffect(()=>{let active=true;client.getSession().then(v=>active&&setProfile(v)).catch(()=>active&&setDenied(true));return()=>{active=false}},[client]);
   if(denied)return <Unavailable/>; if(!profile)return <main className="access-page">載入工作階段…</main>;
-  const adminRoute=path.startsWith("/admin/accounts"); const researchRoute=path==="/"||path.startsWith("/companies")||path.startsWith("/evidence");
-  const content=profile.kind==="admin"&&researchRoute?<Unavailable/>:adminRoute&&profile.kind==="learner"?<Unavailable/>:adminRoute?<AdminAccounts client={client} detailId={path.split("/")[3]} owner={profile.kind==="owner"}/>:path==="/profile"?<main className="access-page"><h1>{profile.kind[0].toUpperCase()+profile.kind.slice(1)} 個人資料</h1><p>{profile.display_name}</p></main>:<EvidenceWorkspace canConfirmStage={profile.kind==="owner"}/>;
-  return <div className="access-shell">{profile.kind==="owner"&&profile.is_recovery_session&&<aside className="recovery-banner" role="alert">緊急復原工作階段啟用中。{profile.recovery_task_url&&<a href={profile.recovery_task_url}>查看停用任務</a>}</aside>}<nav className="access-nav"><a href="/profile">個人資料</a>{profile.kind!=="learner"&&<a href="/admin/accounts">帳號管理</a>}{profile.kind!=="admin"&&<a href="/">公司研究</a>}<button onClick={async()=>{await client.logout();setProfile(null);setDenied(true)}}>登出</button></nav>{content}</div>;
+  const adminRoute=path.startsWith("/admin/accounts"); const actionRoute=path.startsWith("/actions"); const researchRoute=path==="/"||path.startsWith("/companies")||path.startsWith("/evidence");
+  const content=profile.kind==="admin"&&(researchRoute||actionRoute)?<Unavailable/>:actionRoute?<ActionInboxRoutes client={workflow} initialPath={initialPath}/>:adminRoute&&profile.kind==="learner"?<Unavailable/>:adminRoute?<AdminAccounts client={client} detailId={path.split("/")[3]} owner={profile.kind==="owner"}/>:path==="/profile"?<main className="access-page"><h1>{profile.kind[0].toUpperCase()+profile.kind.slice(1)} 個人資料</h1><p>{profile.display_name}</p></main>:<EvidenceWorkspace canConfirmStage={profile.kind==="owner"} canRequestAnomaly={profile.kind==="owner"} canCreateActions={profile.kind==="owner"} workflow={workflow}/>;
+  return <div className="access-shell">{profile.kind==="owner"&&profile.is_recovery_session&&<aside className="recovery-banner" role="alert">緊急復原工作階段啟用中。{profile.recovery_task_url&&<a href={profile.recovery_task_url}>查看停用任務</a>}</aside>}<nav className="access-nav"><a href="/profile">個人資料</a>{profile.kind!=="learner"&&<a href="/admin/accounts">帳號管理</a>}{profile.kind!=="admin"&&<><a href="/">公司研究</a><a href="/actions">Action Inbox</a></>}<button onClick={async()=>{await client.logout();setProfile(null);setDenied(true)}}>登出</button></nav>{content}</div>;
 }

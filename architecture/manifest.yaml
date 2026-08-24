@@ -121,12 +121,17 @@ modules:
     - application.request_anomaly_assessment
     - application.query_anomaly_assessment
     - application.process_anomaly_job
+    - application.create_anomaly_review_action
+    - application.query_action_inbox
+    - application.query_action_item
+    - application.transition_action_item
     output_ports:
     - application.events
     - application.recommendation_provider
     - application.recommendation_critic
     emitted_events:
     - application.evidence_submission_completed
+    - application.action_item_operation_failed
     owned_state: []
     side_effects:
     - description: Coordinate child commands and map child events.
@@ -192,6 +197,27 @@ modules:
   - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
     symbol: AnomalyTraceResult
     kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: ActionInboxFlow
+    kind: orchestrator
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: CreateAnomalyReviewActionRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: QueryActionInboxRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: QueryActionItemRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: TransitionActionItemRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: ActionItemResult
+    kind: contract
+  - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+    symbol: ActionInboxResult
+    kind: contract
   - path: backend/src/thesis_trace/application/ai_ports.py
     symbol: RecommendationProviderPort
     kind: port
@@ -225,7 +251,9 @@ modules:
   - evidence_collection
   - evidence_stage
   - anomaly_assessment
+  - workflow_domain
   - postgres_research_adapter
+  - postgres_workflow_adapter
   - restricted_source_fetch_adapter
   - runtime_configuration_adapter
   - postgres_access_adapter
@@ -788,7 +816,7 @@ modules:
 - id: workflow_domain
   level: L1
   role: domain
-  implementation_status: planned
+  implementation_status: implemented
   paths:
   - backend/src/thesis_trace/modules/workflow
   parent: thesis_trace_application
@@ -796,34 +824,54 @@ modules:
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/modules/workflow/contracts.py
+  - backend/src/thesis_trace/modules/workflow/ports.py
   description:
-    purpose: Own actionable work items
-    priority: null
-    safety locks: null
-    assignment: null
-    and recurrence.: null
+    purpose: Own actionable work items, deterministic priority and safety floors,
+      assignment, lifecycle, recurrence, and consistent inbox queries.
     diagram_summaries:
       zh-TW: 管理人工行動收件匣
-    input_ports: []
-    output_ports: []
+    input_ports:
+    - workflow.create_action_item
+    - workflow.query_action_inbox
+    - workflow.query_action_item
+    - workflow.transition_action_item
+    output_ports:
+    - workflow.action_item_store
     emitted_events: []
     owned_state: []
-    side_effects: []
-    errors:
-    - id: workflow_domain-error-1
-      condition: Reject unsafe or unauthorized transitions.
-      event: application.evidence_submission_completed
-      handling: Reject unsafe or unauthorized transitions.
+    side_effects:
+    - description: Persist Action Items, priority evaluations, and append-only audit through a demand-owned port.
+    errors: []
     invariants:
     - System priority and safety floors are server-owned.
+    - Terminal Action Items never reopen or rewrite source records.
+    - Assignees derive only from Server-owned identity and source ownership.
   entrypoints:
   - path: backend/src/thesis_trace/modules/workflow/service.py
-    symbol: workflow_domain_contract
-    kind: boundary
+    symbol: WorkflowService
+    kind: service
   public_symbols:
+  - path: backend/src/thesis_trace/modules/workflow/contracts.py
+    symbol: ActionItem
+    kind: contract
+  - path: backend/src/thesis_trace/modules/workflow/contracts.py
+    symbol: ActionInboxPage
+    kind: contract
+  - path: backend/src/thesis_trace/modules/workflow/contracts.py
+    symbol: CreateActionItemCommand
+    kind: contract
+  - path: backend/src/thesis_trace/modules/workflow/contracts.py
+    symbol: TransitionActionItemCommand
+    kind: contract
+  - path: backend/src/thesis_trace/modules/workflow/contracts.py
+    symbol: ActionInboxQuery
+    kind: contract
+  - path: backend/src/thesis_trace/modules/workflow/ports.py
+    symbol: ActionItemStorePort
+    kind: port
   - path: backend/src/thesis_trace/modules/workflow/service.py
-    symbol: workflow_domain_contract
-    kind: boundary
+    symbol: WorkflowService
+    kind: service
 - id: notification_domain
   level: L1
   role: domain
@@ -876,6 +924,10 @@ modules:
   - application.query_evidence_stage
   - application.request_anomaly_assessment
   - application.query_anomaly_assessment
+  - application.create_anomaly_review_action
+  - application.query_action_inbox
+  - application.query_action_item
+  - application.transition_action_item
   public_headers:
   - backend/src/thesis_trace/api.py
   description:
@@ -903,6 +955,42 @@ modules:
   public_symbols:
   - path: backend/src/thesis_trace/api.py
     symbol: EvidenceApi
+    kind: adapter
+- id: postgres_workflow_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/adapters/postgres_workflow
+  parent: null
+  depends_on:
+  - workflow_domain
+  implements_ports:
+  - workflow.action_item_store
+  public_headers:
+  - backend/src/thesis_trace/adapters/postgres_workflow/adapter.py
+  description:
+    purpose: Persist Workflow Action Items, priority evaluations, and append-only audit using PostgreSQL.
+    diagram_summaries:
+      zh-TW: 保存待辦、優先級與稽核紀錄
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Execute bounded RLS-protected Workflow transactions and repeatable-read inbox queries.
+    errors: []
+    invariants:
+    - Workflow audit is append-only.
+    - Summary counts and page rows use one authorization scope and query snapshot.
+    - The adapter never reads or writes Research tables to derive Workflow policy.
+  entrypoints:
+  - path: backend/src/thesis_trace/adapters/postgres_workflow/adapter.py
+    symbol: PostgresWorkflowStore
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/adapters/postgres_workflow/adapter.py
+    symbol: PostgresWorkflowStore
     kind: adapter
 - id: postgres_research_adapter
   level: L3+
@@ -1286,13 +1374,34 @@ modules:
     invariants: [Owner-only fields never enter Learner or Admin payloads or DOM, Challenge tokens never enter URL or browser persistence, Forbidden and absent deep links render identically.]
   entrypoints: [{path: frontend/src/access/routes.tsx, symbol: AccessRoutes, kind: router}]
   public_symbols: [{path: frontend/src/access/contracts.ts, symbol: SessionProfile, kind: view-contract}]
+- id: react_workflow_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [frontend/src/workflow]
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers: [frontend/src/workflow/routes.tsx]
+  description:
+    purpose: Present the Server-authoritative Action Inbox, responsive detail route, and company-context link through generated contracts.
+    diagram_summaries: {zh-TW: 呈現響應式行動收件匣}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Submit Action Item intent and restore list query state from the URL without persistent domain caching.}]
+    errors: []
+    invariants: [The browser never computes priority safety or assignee, Selected item and list query are route-addressable, Narrow layout requires no horizontal scrolling for primary actions.]
+  entrypoints: [{path: frontend/src/workflow/routes.tsx, symbol: ActionInboxRoutes, kind: router}]
+  public_symbols: [{path: frontend/src/workflow/client.ts, symbol: WorkflowClient, kind: view-contract}]
 - id: postgres_migration_entrypoint
   level: L3+
   role: adapter
   implementation_status: implemented
   paths: [infra/postgres/run-production-migrations.py]
   parent: null
-  depends_on: [postgres_research_adapter, postgres_access_adapter]
+  depends_on: [postgres_research_adapter, postgres_access_adapter, postgres_workflow_adapter]
   implements_ports: []
   public_headers: []
   description:
@@ -1439,6 +1548,67 @@ ports:
     - {code: fail_closed, condition: Provider, schema, citation, critic, or policy validation cannot produce a complete valid candidate.}
   symbols:
   - AnomalyJobProcessor
+- id: application.create_anomaly_review_action
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Resolve one immutable actionable anomaly version and synchronously create or return its Server-authoritative Action Item.
+    data: Authenticated Owner, assessment identity/version, optional due time, reason, and idempotency key; assignee, priority, safety, Company, and trigger facts remain Server-owned.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor is not the active Owner bound to the source.}
+    - {code: resource_unavailable, condition: Assessment, Evidence, Company, or exact version is absent, unauthorized, or not actionable.}
+    - {code: version_conflict, condition: Expected assessment version or retry data is stale or mismatched.}
+  symbols: [CreateAnomalyReviewActionRequest, ActionItemResult]
+- id: application.query_action_inbox
+  owner: thesis_trace_application
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Query one role-safe Action Inbox summary and page from a single Server snapshot.
+    data: Authenticated actor, Server-whitelisted filters/search/sort, page size, and opaque cursor.
+    timing: sync
+    immediate_rejections:
+    - {code: invalid_query, condition: Filter, sort, page size, or cursor is invalid or scope-mismatched.}
+    - {code: resource_unavailable, condition: Actor has no Workflow scope.}
+  symbols: [QueryActionInboxRequest, ActionInboxResult]
+- id: application.query_action_item
+  owner: thesis_trace_application
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Return one assignee-scoped Action Item detail and current legal operations.
+    data: Authenticated actor and opaque Action Item identity.
+    timing: sync
+    immediate_rejections:
+    - {code: resource_unavailable, condition: Item is absent or outside the actor scope.}
+  symbols: [QueryActionItemRequest, ActionItemResult]
+- id: application.transition_action_item
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/flows/anomaly_assessment.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Revalidate assignee authority and request one versioned Server-time Action Item transition.
+    data: Actor, item/expected version, target status, reason, optional future defer time, and idempotency key.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor is not the legal assignee.}
+    - {code: invalid_transition, condition: Target, reason, defer time, or safety verification is invalid.}
+    - {code: version_conflict, condition: Expected item version or retry data is stale or mismatched.}
+  symbols: [TransitionActionItemRequest, ActionItemResult]
 - id: application.recommendation_provider
   owner: thesis_trace_application
   direction: output
@@ -1929,6 +2099,77 @@ ports:
     immediate_rejections: []
   symbols:
   - EvidenceRecord
+- id: workflow.create_action_item
+  owner: workflow_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/workflow/contracts.py
+  implemented_by: []
+  description:
+    purpose: Apply deterministic fingerprint, assignment, priority, and safety policy then atomically create or return an Action Item.
+    data: Workflow-local actor and immutable Server-mapped source context without Access, Research, wire, or storage representations.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor capabilities or source-owner binding is invalid.}
+    - {code: invalid_source, condition: Source context, reason, due time, or creation rule is incomplete.}
+    - {code: conflict, condition: Idempotency retry data disagrees with the committed command.}
+  symbols: [CreateActionItemCommand, ActionItem]
+- id: workflow.query_action_inbox
+  owner: workflow_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/workflow/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return authorized counts and page rows from the same repeatable-read query snapshot.
+    data: Workflow actor scope, normalized filters/search/sort, page size, and opaque cursor.
+    timing: sync
+    immediate_rejections:
+    - {code: invalid_query, condition: Query values or cursor bindings are invalid.}
+  symbols: [ActionInboxQuery, ActionInboxPage]
+- id: workflow.query_action_item
+  owner: workflow_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/workflow/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return one current assignee-scoped Action Item aggregate.
+    data: Workflow actor and Action Item identity.
+    timing: sync
+    immediate_rejections:
+    - {code: resource_unavailable, condition: Item is absent or outside the actor scope.}
+  symbols: [ActionItem]
+- id: workflow.transition_action_item
+  owner: workflow_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/workflow/contracts.py
+  implemented_by: []
+  description:
+    purpose: Apply the versioned Action Item state machine and atomically append its audit fact.
+    data: Workflow actor, item/version, target state, reason, optional defer time, idempotency, and Server time.
+    timing: sync
+    immediate_rejections:
+    - {code: forbidden, condition: Actor is not the assignee.}
+    - {code: invalid_transition, condition: State transition, reason, time, or safety condition fails.}
+    - {code: version_conflict, condition: Expected version is stale.}
+  symbols: [TransitionActionItemCommand, ActionItem]
+- id: workflow.action_item_store
+  owner: workflow_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/workflow/ports.py
+  implemented_by:
+  - postgres_workflow_adapter
+  description:
+    purpose: Atomically persist and query Action Item aggregates, priority history, idempotency receipts, and append-only audit under assignee RLS.
+    data: Workflow semantic values without SQL, ORM, Access, Research, or wire representations.
+    timing: sync
+    immediate_rejections:
+    - {code: conflict, condition: Fingerprint, idempotency, or expected-version constraint fails.}
+    - {code: resource_unavailable, condition: Authorization scope or persistence is unavailable.}
+  symbols: [ActionItemStorePort]
 events:
 - id: platform.migration_failed
   owner: postgres_migration_entrypoint
@@ -2190,6 +2431,18 @@ events:
     payload_fields: [{name: challenge_id, type: ChallengeId, meaning: Consumed challenge identity.}, {name: action_type, type: ConsequentialActionType, meaning: Confirmed action category.}]
     intended_consumers: [thesis_trace_application]
   idempotency: Challenge ID and command idempotency key prevent repeated mutation.
+- id: application.action_item_operation_failed
+  owner: thesis_trace_application
+  output_port: application.events
+  delivery: at-most-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload]
+  lifecycle: [received, validated, processing, succeeded, failed]
+  description:
+    purpose: Report a stable non-disclosing rejection or execution failure category for an Action Item application operation.
+    emitted_when: Authorization, source resolution, Workflow validation, query, or transaction fails and no success state is presented.
+    payload_fields:
+    - {name: code, type: string, meaning: Stable non-secret failure category.}
+    intended_consumers: [fastapi_entrypoint]
 - id: application.evidence_submission_completed
   owner: thesis_trace_application
   output_port: application.events
@@ -2217,6 +2470,465 @@ events:
     intended_consumers:
     - fastapi_entrypoint
 types:
+- id: actionitemstatus
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionItemStatus, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Server-owned Action Item lifecycle state governed by ALG-0017.
+  lifetime: One aggregate version and durable stream lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: []
+  fields: []
+  values: [pending, in_progress, deferred, completed, dismissed]
+- id: actionpriority
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionPriority, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Ordered critical, high, normal, or low Workflow priority.
+  lifetime: One immutable priority evaluation and aggregate version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: []
+  fields: []
+  values: [critical, high, normal, low]
+- id: actionitemtype
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionItemType, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Versioned actionable trigger class; the first implemented class is anomaly review.
+  lifetime: Durable Action Item lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: []
+  fields: []
+  values: [anomaly_review]
+- id: workflowactorcontext
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: WorkflowActorContext, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Workflow-local actor identity and capabilities mapped by L0 without importing Access types.
+  lifetime: One Workflow command or query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain]
+  references: []
+  fields:
+  - {name: actor_id, type: str, role: domain-identity, meaning: Stable internal user identity.}
+  - {name: may_create, type: bool, role: policy, meaning: Server-derived creation capability.}
+  - {name: may_read, type: bool, role: policy, meaning: Server-derived inbox read capability.}
+  - {name: may_transition, type: bool, role: policy, meaning: Server-derived transition capability.}
+- id: actionsourceref
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionSourceRef, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable Server-mapped source and Company context used for creation fingerprint, routing, and traceability.
+  lifetime: One creation command and durable Action Item lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: []
+  fields:
+  - {name: source_domain, type: str, role: metadata, meaning: Owning source domain identifier.}
+  - {name: source_record_id, type: str, role: domain-identity, meaning: Immutable anomaly assessment identity.}
+  - {name: source_version, type: int, role: contract-control, meaning: Exact immutable assessment version.}
+  - {name: source_owner_id, type: str, role: domain-identity, meaning: Active Owner bound to the source.}
+  - {name: company_id, type: str, role: domain-identity, meaning: Server-resolved Company identity.}
+  - {name: company_ticker, type: str, role: metadata, meaning: Server-resolved ticker shown in the inbox.}
+  - {name: company_name, type: str, role: metadata, meaning: Server-resolved Company name.}
+  - {name: trigger_kind, type: str, role: policy, meaning: Versioned creation trigger identity.}
+  - {name: required_handling, type: str, role: policy, meaning: Server-normalized anomaly class or human-review route.}
+- id: createactionitemcommand
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: CreateActionItemCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Authorized intent to create or return one traceable anomaly-review Action Item without authority fields from the client.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: [workflowactorcontext, actionsourceref]
+  fields:
+  - {name: actor, type: WorkflowActorContext, role: policy, meaning: Server-mapped Workflow actor.}
+  - {name: source, type: ActionSourceRef, role: domain-value, meaning: Immutable Server source context.}
+  - {name: reason, type: str, role: metadata, meaning: Nonblank user tracking rationale.}
+  - {name: due_at, type: 'str | None', role: metadata, meaning: Optional future due time.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+- id: transitionactionitemcommand
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: TransitionActionItemCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Versioned assignee intent presented to the ALG-0017 state machine.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: [workflowactorcontext, actionitemstatus]
+  fields:
+  - {name: actor, type: WorkflowActorContext, role: policy, meaning: Server-mapped Workflow actor.}
+  - {name: item_id, type: str, role: domain-identity, meaning: Target Action Item.}
+  - {name: expected_version, type: int, role: contract-control, meaning: Optimistic item version.}
+  - {name: target_status, type: ActionItemStatus, role: policy, meaning: Requested lifecycle state.}
+  - {name: reason, type: str, role: metadata, meaning: Required transition rationale.}
+  - {name: defer_until, type: 'str | None', role: metadata, meaning: Required future Server-comparable time for deferred.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+  - {name: server_time, type: str, role: metadata, meaning: Trusted Server observation time.}
+  - {name: underlying_resolved, type: bool, role: policy, meaning: Server verification required for safety completion.}
+- id: actionpriorityevaluation
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionPriorityEvaluation, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable ALG-0016 system, floor, effective priority, rules, version, and explanation.
+  lifetime: Durable evaluation version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: [actionpriority]
+  fields:
+  - {name: system_priority, type: ActionPriority, role: policy, meaning: Deterministic policy result.}
+  - {name: effective_priority, type: ActionPriority, role: policy, meaning: Priority after allowed override and floor.}
+  - {name: safety_floor, type: 'ActionPriority | None', role: policy, meaning: Immutable minimum when locked.}
+  - {name: safety_locked, type: bool, role: policy, meaning: Whether unsafe transitions and priority lowering are forbidden.}
+  - {name: rule_ids, type: 'tuple[str, ...]', role: policy, meaning: Stable matching rule identities.}
+  - {name: policy_version, type: str, role: policy, meaning: Exact priority rule-set version.}
+  - {name: reason, type: str, role: metadata, meaning: Display-safe Server explanation.}
+- id: actionitem
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionItem, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Versioned Server-authoritative Action Item projection with immutable source trace and current legal operations.
+  lifetime: Durable aggregate stream and one query projection.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter, thesis_trace_application]
+  references: [actionitemstatus, actionitemtype, actionpriorityevaluation]
+  fields:
+  - {name: item_id, type: str, role: domain-identity, meaning: Stable Action Item identity.}
+  - {name: version, type: int, role: contract-control, meaning: Optimistic aggregate version.}
+  - {name: item_type, type: ActionItemType, role: policy, meaning: Actionable trigger class.}
+  - {name: source_domain, type: str, role: metadata, meaning: Source owner domain.}
+  - {name: source_record_id, type: str, role: domain-identity, meaning: Source record identity.}
+  - {name: source_version, type: int, role: contract-control, meaning: Immutable source version.}
+  - {name: company_id, type: str, role: domain-identity, meaning: Related Company identity.}
+  - {name: company_ticker, type: str, role: metadata, meaning: Server-resolved ticker.}
+  - {name: company_name, type: str, role: metadata, meaning: Server-resolved Company name.}
+  - {name: assignee_user_id, type: str, role: domain-identity, meaning: Sole legal assignee.}
+  - {name: reason, type: str, role: metadata, meaning: Creation rationale.}
+  - {name: status, type: ActionItemStatus, role: policy, meaning: Current lifecycle state.}
+  - {name: priority, type: ActionPriorityEvaluation, role: policy, meaning: Current immutable priority evaluation.}
+  - {name: created_at, type: str, role: metadata, meaning: Server creation time.}
+  - {name: updated_at, type: str, role: metadata, meaning: Last committed change time.}
+  - {name: due_at, type: 'str | None', role: metadata, meaning: Optional due time.}
+  - {name: defer_until, type: 'str | None', role: metadata, meaning: Optional deferred wake time.}
+  - {name: recurrence_of, type: 'str | None', role: domain-identity, meaning: Most relevant prior terminal item.}
+  - {name: allowed_transitions, type: 'tuple[ActionItemStatus, ...]', role: policy, meaning: Current Server-authoritative legal operations.}
+- id: actioninboxsummary
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionInboxSummary, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Urgent, due-today, deferred, and all-open counts from one authorized base relation.
+  lifetime: One repeatable-read query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: urgent, type: int, role: domain-value, meaning: Open critical/high count.}
+  - {name: due_today, type: int, role: domain-value, meaning: Open items due on the Server date.}
+  - {name: deferred, type: int, role: domain-value, meaning: Deferred item count.}
+  - {name: all_open, type: int, role: domain-value, meaning: Pending, in-progress, and deferred total.}
+- id: actioninboxquery
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionInboxQuery, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Server-whitelisted inbox filters, ordering, page size, and cursor under one actor scope.
+  lifetime: One synchronous query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: [workflowactorcontext]
+  fields:
+  - {name: actor, type: WorkflowActorContext, role: policy, meaning: Authorized assignee scope.}
+  - {name: search, type: 'str | None', role: metadata, meaning: Bounded case-insensitive search text.}
+  - {name: company_id, type: 'str | None', role: domain-identity, meaning: Optional Company filter.}
+  - {name: item_type, type: 'str | None', role: policy, meaning: Optional item type filter.}
+  - {name: status, type: 'str | None', role: policy, meaning: Optional status filter.}
+  - {name: priority, type: 'str | None', role: policy, meaning: Optional effective-priority filter.}
+  - {name: open_only, type: bool, role: policy, meaning: Whether terminal states are excluded.}
+  - {name: sort, type: str, role: policy, meaning: Whitelisted sort field.}
+  - {name: direction, type: str, role: policy, meaning: Ascending or descending direction.}
+  - {name: page_size, type: int, role: contract-control, meaning: Bounded 1 through 100 page size.}
+  - {name: cursor, type: 'str | None', role: contract-control, meaning: Opaque authenticated continuation cursor.}
+- id: actioninboxpage
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionInboxPage, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Summary, total, items, continuation cursor, and as-of from the same Server snapshot.
+  lifetime: One synchronous query result.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, thesis_trace_application]
+  references: [actioninboxsummary, actionitem]
+  fields:
+  - {name: summary, type: ActionInboxSummary, role: domain-value, meaning: Counts before pagination.}
+  - {name: total_count, type: int, role: domain-value, meaning: Filtered total before pagination.}
+  - {name: items, type: 'tuple[ActionItem, ...]', role: domain-value, meaning: Ordered current page.}
+  - {name: next_cursor, type: 'str | None', role: contract-control, meaning: Opaque continuation cursor.}
+  - {name: as_of, type: str, role: metadata, meaning: Server query snapshot time.}
+- id: actionitemstoreport
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/ports.py, symbol: ActionItemStorePort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Workflow-owned atomic create, transition, detail, and consistent inbox persistence demand.
+  lifetime: API process binding with transaction-scoped operations.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [workflow_domain, postgres_workflow_adapter]
+  references: [createactionitemcommand, transitionactionitemcommand, actionpriorityevaluation, actionitem, actioninboxquery, actioninboxpage]
+  fields: []
+- id: workflowservice
+  owner: workflow_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/workflow/service.py, symbol: WorkflowService, kind: class}
+  visibility: module-public
+  semantic_kind: policy
+  description: Apply accepted Workflow algorithms and delegate atomic persistence through the domain-owned port.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, thesis_trace_application]
+  references: [actionitemstoreport, createactionitemcommand, transitionactionitemcommand, actionpriorityevaluation, actionitem, actioninboxquery, actioninboxpage]
+  fields: []
+- id: createanomalyreviewactionrequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: CreateAnomalyReviewActionRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: HTTP-to-L0 anomaly review tracking intent without Workflow authority fields.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: assessment_id, type: str, role: domain-identity, meaning: Source anomaly assessment.}
+  - {name: expected_assessment_version, type: int, role: contract-control, meaning: Exact immutable source version.}
+  - {name: reason, type: str, role: metadata, meaning: Nonblank tracking rationale.}
+  - {name: due_at, type: 'str | None', role: metadata, meaning: Optional due time.}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Stable retry identity.}
+- id: queryactioninboxrequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: QueryActionInboxRequest, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Application-level inbox query primitives mapped into Workflow policy.
+  lifetime: One synchronous query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: []
+- id: queryactionitemrequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: QueryActionItemRequest, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Application request for one role-safe Action Item detail.
+  lifetime: One synchronous query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: [{name: item_id, type: str, role: domain-identity, meaning: Target Action Item identity.}]
+- id: transitionactionitemrequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: TransitionActionItemRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Application-level versioned Action Item transition intent.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: []
+- id: actionitemresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: ActionItemResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: API-safe primitive projection copied from the Workflow aggregate at L0.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: []
+- id: actioninboxresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: ActionInboxResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: API-safe summary, page, cursor, and as-of copied from Workflow at L0.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [actionitemresult]
+  fields: []
+- id: actioninboxflow
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/flows/anomaly_assessment.py, symbol: ActionInboxFlow, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 orchestration that resolves immutable Research anomaly context and maps it into Workflow commands and results.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, fastapi_entrypoint]
+  references: [authenticatedactor, role, researchanomalyfacade, workflowservice, workflowactorcontext, actionsourceref, createactionitemcommand, transitionactionitemcommand, actioninboxquery, createanomalyreviewactionrequest, queryactioninboxrequest, queryactionitemrequest, transitionactionitemrequest, actionitemresult, actioninboxresult]
+  fields: []
+- id: actionitemcreatebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ActionItemCreateBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP anomaly-review Action Item creation body without assignee, priority, safety, or source-fact authority.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: actionitemtransitionbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ActionItemTransitionBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP versioned transition body.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: actioninboxsummaryresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ActionInboxSummaryResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: HTTP summary counts returned from one Workflow snapshot.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint, react_workflow_adapter]
+  references: []
+  fields: []
+- id: actionitemresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ActionItemResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: HTTP role-safe Action Item projection with Server priority and legal operations.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint, react_workflow_adapter]
+  references: []
+  fields: []
+- id: actioninboxresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ActionInboxResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: HTTP summary, page, cursor, and as-of contract generated for React.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint, react_workflow_adapter]
+  references: [actioninboxsummaryresponse, actionitemresponse]
+  fields: []
+- id: postgresworkflowstore
+  owner: postgres_workflow_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/postgres_workflow/adapter.py, symbol: PostgresWorkflowStore, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: PostgreSQL implementation of the Workflow-owned atomic store and repeatable-read query port.
+  lifetime: API process lifetime with operation-scoped connections.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [actionitemstoreport, createactionitemcommand, transitionactionitemcommand, actionpriorityevaluation, actionitem, actioninboxquery, actioninboxpage]
+  fields: []
+- id: workflowclient
+  owner: react_workflow_adapter
+  language: typescript
+  declaration: {path: frontend/src/workflow/client.ts, symbol: WorkflowClient, kind: interface}
+  visibility: private
+  semantic_kind: port
+  description: Browser-local generated-OpenAPI transport facade for Action Inbox operations.
+  lifetime: Browser page lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_workflow_adapter]
+  references: []
+  fields: []
+- id: actioninboxquerywire
+  owner: react_workflow_adapter
+  language: typescript
+  declaration: {path: frontend/src/workflow/client.ts, symbol: ActionInboxQuery, kind: alias}
+  target: 'NonNullable<Parameters<typeof query_action_inbox_api_action_items_get>[1]>'
+  visibility: module-public
+  semantic_kind: wire-representation
+  description: Generated-operation query parameter shape reused by the browser Workflow adapter without redefining Server wire fields.
+  lifetime: One browser request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_workflow_adapter]
+  references: []
+  fields: []
 - id: dimensionfactsbody
   owner: fastapi_entrypoint
   language: python
@@ -3275,6 +3987,7 @@ types:
   - cloudflarejwtverifier
   - postgresaccessadapter
   - cloudflareidentityadapter
+  - postgresworkflowstore
   fields:
   - name: store
     type: PostgresEvidenceStore
@@ -3292,6 +4005,10 @@ types:
     type: CloudflareIdentityAdapter
     role: runtime-state
     meaning: Process-scoped full Cloudflare identity verification adapter.
+  - name: workflow_store
+    type: PostgresWorkflowStore
+    role: runtime-state
+    meaning: Process-scoped Workflow persistence binding retaining the cursor signing key.
 - id: collectorruntime
   owner: backend_composition
   language: python
@@ -4921,6 +5638,39 @@ boundary_mappings:
   state_objects: []
   allowed_edges: [thesis_trace_application->thesis_domain, thesis_trace_application->research_domain]
   forbidden_edges: [thesis_domain->research_domain, research_domain->thesis_domain, anomaly_assessment->thesis_domain]
+- id: anomaly-assessment-to-action-source
+  interaction: Resolve an immutable authorized anomaly, Evidence, and Company projection into Workflow-local source primitives for a manual review item.
+  producer: research_domain
+  consumer: workflow_domain
+  parent: thesis_trace_application
+  producer_contract: researchanomalyresult
+  consumer_contract: actionsourceref
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->research_domain, thesis_trace_application->workflow_domain]
+  forbidden_edges: [research_domain->workflow_domain, workflow_domain->research_domain, postgres_research_adapter->workflow_domain]
+- id: authenticated-owner-to-workflow-actor
+  interaction: Map a revalidated Access actor into Workflow-local create, read, and transition capabilities without exposing Access contracts to Workflow.
+  producer: access_domain
+  consumer: workflow_domain
+  parent: thesis_trace_application
+  producer_contract: authenticatedactor
+  consumer_contract: workflowactorcontext
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->access_domain, thesis_trace_application->workflow_domain]
+  forbidden_edges: [access_domain->workflow_domain, workflow_domain->access_domain, fastapi_entrypoint->workflow_domain]
+- id: action-item-to-application-result
+  interaction: Map Workflow-owned Action Item summaries, rows, detail, and allowed transitions into application-owned primitives before HTTP presentation.
+  producer: workflow_domain
+  consumer: thesis_trace_application
+  parent: thesis_trace_application
+  producer_contract: actioninboxpage
+  consumer_contract: actioninboxresult
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->workflow_domain, fastapi_entrypoint->thesis_trace_application]
+  forbidden_edges: [react_workflow_adapter->workflow_domain, react_workflow_adapter->postgres_workflow_adapter, fastapi_entrypoint->workflow_domain, fastapi_entrypoint->postgres_workflow_adapter]
 flows:
 - id: production_database_migration
   owner: backend_composition
@@ -5205,6 +5955,108 @@ flows:
     result: Owner and Learner observe pending or immutable Soft/would-be-Hard status with exact source and version trace while formal Hard remains disabled.
     events: []
   errors: []
+- id: owner_anomaly_review_action
+  owner: thesis_trace_application
+  description: Resolve one immutable actionable anomaly version and synchronously create or return a traceable Workflow Action Item.
+  trigger:
+    kind: command
+    ref: application.create_anomaly_review_action
+    description: An authenticated Owner explicitly tracks one succeeded human-review anomaly assessment.
+  steps:
+  - id: owner_anomaly_review_action.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate the actor and require active Owner Workflow creation authority.
+    receives: [application.create_anomaly_review_action]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_anomaly_review_action.resolve
+    order: 2
+    module: research_domain
+    action: Query the exact immutable anomaly, Evidence, Company, source owner, class, and route without granting Workflow direct Research access.
+    receives: [application.query_anomaly_assessment]
+    emits: []
+    state_changes: []
+    side_effects: [One role-safe Research query.]
+  - id: owner_anomaly_review_action.evaluate
+    order: 3
+    module: workflow_domain
+    action: Apply accepted fingerprint, assignment, priority, safety, and transition policy to Server-mapped primitives.
+    receives: [workflow.create_action_item]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_anomaly_review_action.commit
+    order: 4
+    module: workflow_domain
+    action: Atomically create or reread the idempotent Action Item, initial priority evaluation, and append-only audit.
+    receives: [workflow.action_item_store]
+    emits: []
+    state_changes: [One pending Action Item version exists for the accepted fingerprint.]
+    side_effects: [One PostgreSQL transaction under assignee RLS.]
+  - id: owner_anomaly_review_action.present
+    order: 5
+    module: thesis_trace_application
+    action: Return the committed item, Server priority, source trace, and legal operations to the generated responsive client.
+    receives: [workflow.action_item_store]
+    emits: []
+    state_changes: []
+    side_effects: [Generated HTTPS response; browser keeps only URL and volatile view state.]
+  success:
+    result: The Owner receives one traceable high-priority unlocked shadow-anomaly review item and duplicate retries return the same identity.
+    events: []
+  errors:
+  - condition: Actor, source, version, actionability, ownership, idempotency, or persistence validation fails.
+    event: application.action_item_operation_failed
+    handling: Commit no partial Workflow state and return a stable non-disclosing response.
+- id: owner_action_inbox
+  owner: thesis_trace_application
+  description: Query, open, and transition assignee-scoped Action Items while preserving responsive route and list-query context.
+  trigger:
+    kind: condition
+    ref: authenticated_action_inbox_requested
+    description: An authenticated Owner opens or restores the Action Inbox route.
+  steps:
+  - id: owner_action_inbox.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate the session and map only the actor's Workflow scope.
+    receives: [application.query_action_inbox, application.query_action_item, application.transition_action_item]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_action_inbox.query
+    order: 2
+    module: workflow_domain
+    action: Apply one authorization/filter relation and return summary counts and ordered page rows from one repeatable-read as-of.
+    receives: [workflow.query_action_inbox, workflow.query_action_item, workflow.action_item_store]
+    emits: []
+    state_changes: []
+    side_effects: [One PostgreSQL repeatable-read transaction.]
+  - id: owner_action_inbox.transition
+    order: 3
+    module: workflow_domain
+    action: When requested, validate assignee, expected version, reason, Server time, defer bound, and safety state then atomically append the next item/audit version.
+    receives: [workflow.transition_action_item, workflow.action_item_store]
+    emits: []
+    state_changes: [A legal transition appends one new current item version and audit fact.]
+    side_effects: [One PostgreSQL transaction.]
+  - id: owner_action_inbox.present
+    order: 4
+    module: thesis_trace_application
+    action: Render the same item and query in side detail on wide screens or full detail on narrow screens and expose a Company context link.
+    receives: [workflow.action_item_store]
+    emits: []
+    state_changes: []
+    side_effects: [Generated HTTPS response and route navigation only.]
+  success:
+    result: Authorized summary, list, detail, transition result, cursor, and as-of remain Server-authoritative and route-restorable.
+    events: []
+  errors:
+  - condition: Query, cursor, item, authority, transition, time, or expected version is invalid.
+    event: application.action_item_operation_failed
+    handling: Write nothing for rejected transitions, discard optimistic UI state, and reload the current Server projection.
 adr_exceptions:
 - rule_id: DEP001
   scope: backend_composition->thesis_trace_application
@@ -5311,6 +6163,29 @@ workloads:
     kind: command
   data:
     volume: one bounded immutable Evidence snapshot set, one provider candidate, one critic verdict, and one deterministic trace per assessment
+  budgets: []
+- id: owner_anomaly_review_action_workload
+  flow: owner_anomaly_review_action
+  steps:
+  - owner_anomaly_review_action.authorize
+  - owner_anomaly_review_action.resolve
+  - owner_anomaly_review_action.evaluate
+  - owner_anomaly_review_action.commit
+  - owner_anomaly_review_action.present
+  timing_class: best-effort
+  activation: {kind: command}
+  data: {volume: one immutable anomaly assessment, one Company context, one Action Item, one priority evaluation, and one audit fact}
+  budgets: []
+- id: owner_action_inbox_workload
+  flow: owner_action_inbox
+  steps:
+  - owner_action_inbox.authorize
+  - owner_action_inbox.query
+  - owner_action_inbox.transition
+  - owner_action_inbox.present
+  timing_class: best-effort
+  activation: {kind: query}
+  data: {volume: one bounded page of at most 100 Action Items plus summary counts and optional one-item transition}
   budgets: []
 execution_profiles:
 - id: linux_server_functional
@@ -5460,6 +6335,33 @@ execution_mappings:
   serialization: leased per assessment concurrency key with stale input revalidation before result commit
   reentrant: false
   activation: durable anomaly-analysis-v1 job availability
+  wcet: not established
+- id: anomaly_review_action_api_mapping
+  profile: linux_server_functional
+  workload: owner_anomaly_review_action_workload
+  steps:
+  - owner_anomaly_review_action.authorize
+  - owner_anomaly_review_action.resolve
+  - owner_anomaly_review_action.evaluate
+  - owner_anomaly_review_action.commit
+  - owner_anomaly_review_action.present
+  units: [api_process]
+  serialization: one synchronous Research query followed by one Workflow transaction per idempotency key
+  reentrant: false
+  activation: authenticated HTTP command
+  wcet: not established
+- id: action_inbox_api_mapping
+  profile: linux_server_functional
+  workload: owner_action_inbox_workload
+  steps:
+  - owner_action_inbox.authorize
+  - owner_action_inbox.query
+  - owner_action_inbox.transition
+  - owner_action_inbox.present
+  units: [api_process]
+  serialization: repeatable-read per inbox query and optimistic transaction per Action Item transition
+  reentrant: false
+  activation: authenticated HTTP query or command
   wcet: not established
 execution_channels:
 - id: collection_job_channel

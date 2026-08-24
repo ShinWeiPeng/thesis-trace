@@ -145,3 +145,6 @@ class AnomalyAssessmentRecord:
     requested_at: str
     trace: AnomalyDecisionTrace | None = None
     failure_code: str | None = None
+    company_id: str = ""
+    company_ticker: str = ""
+    company_name: str = ""

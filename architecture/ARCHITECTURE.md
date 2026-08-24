@@ -56,7 +56,7 @@ flowchart TD
 
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **子功能:** `access_domain`, `research_domain`, `thesis_domain`, `portfolio_domain`, `recommendation_domain`, `workflow_domain`, `notification_domain`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment)
+- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox)
 - **保護理由:** Sibling domains communicate only through this parent; Domain state remains child-owned.; Reject unauthenticated or unauthorized commands → Reject unauthenticated or unauthorized commands; Propagate child admission failures. → Propagate child admission failures.
 
 ### `backend_composition`
@@ -70,14 +70,14 @@ flowchart TD
 
 - **目的:** Own authenticated actor identity and application authorization decisions.
 - **子功能:** `identity_registry`, `session_management`, `account_administration`, `confirmation_challenge`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment)
+- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox)
 - **保護理由:** Provider identity never collapses by email alone; JWT subject and provider discriminator resolve through a preapproved mapping.; Unknown provider, identity, session, role, or challenge fails closed without existence disclosure.; Authorization fails closed.; Reject absent → Reject absent; expired → expired; or unauthorized identities. → or unauthorized identities.
 
 ### `research_domain`
 
 - **目的:** Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts.
 - **子功能:** `evidence_intake`, `evidence_collection`, `evidence_stage`, `anomaly_assessment`
-- **相關 Flows:** [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake)
+- **相關 Flows:** [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action)
 - **保護理由:** State commits before success events; Evidence streams are serialized; Source records are immutable.; Reject invalid URLs or stale company versions → Reject invalid URLs or stale company versions; Record safe retry and terminal failures. → Record safe retry and terminal failures.
 
 ### `evidence_intake`
@@ -131,10 +131,10 @@ flowchart TD
 
 ### `workflow_domain`
 
-- **目的:** Own actionable work items
+- **目的:** Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries.
 - **子功能:** 無
-- **相關 Flows:** 無
-- **保護理由:** System priority and safety floors are server-owned.; Reject unsafe or unauthorized transitions. → Reject unsafe or unauthorized transitions.
+- **相關 Flows:** [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox)
+- **保護理由:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.
 
 ### `notification_domain`
 
@@ -181,7 +181,7 @@ flowchart TD
 - [`thesis_domain`](generated/thesis_domain.md) — Own Thesis lifecycle
 - [`portfolio_domain`](generated/portfolio_domain.md) — Own holdings
 - [`recommendation_domain`](generated/recommendation_domain.md) — Own immutable recommendations
-- [`workflow_domain`](generated/workflow_domain.md) — Own actionable work items
+- [`workflow_domain`](generated/workflow_domain.md) — Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries.
 - [`notification_domain`](generated/notification_domain.md) — Own notification classification
 
 ## 端到端 Flows
@@ -194,6 +194,8 @@ flowchart TD
 - [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake) — Admit an Owner Evidence URL and expose durable lifecycle state.
 - [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage) — Confirm Owner-authored dimension facts and synchronously expose the atomically committed deterministic E0-E6 stage.
 - [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment) — Admit version-bound anomaly work, process it in the isolated AI worker, and expose only a committed fail-closed Research result.
+- [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action) — Resolve one immutable actionable anomaly version and synchronously create or return a traceable Workflow Action Item.
+- [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox) — Query, open, and transition assignee-scoped Action Items while preserving responsive route and list-query context.
 
 ## 完整技術參考
 
@@ -215,6 +217,7 @@ flowchart TD
     n_workflow_domain["workflow_domain (L1)<br/>管理人工行動收件匣"]
     n_notification_domain["notification_domain (L1)<br/>管理通知分類與安全內容"]
     n_fastapi_entrypoint["fastapi_entrypoint (L3+)<br/>轉換 HTTP 與應用契約"]
+    n_postgres_workflow_adapter["postgres_workflow_adapter (L3+)<br/>保存待辦、優先級與稽核紀錄"]
     n_postgres_research_adapter["postgres_research_adapter (L3+)<br/>實作研究交易與持久工作租約"]
     n_restricted_source_fetch_adapter["restricted_source_fetch_adapter (L3+)<br/>依限制政策擷取外部 HTTPS 來源"]
     n_runtime_configuration_adapter["runtime_configuration_adapter (L3+)<br/>解析必要設定與檔案引用祕密"]
@@ -228,6 +231,7 @@ flowchart TD
     n_cloudflare_identity_adapter["cloudflare_identity_adapter (L3+)<br/>驗證完整 Access 身分與提供者"]
     n_postgres_access_adapter["postgres_access_adapter (L3+)<br/>保存 Access 狀態並設定 RLS 安全脈絡"]
     n_react_access_adapter["react_access_adapter (L3+)<br/>呈現角色隔離的 Access 介面"]
+    n_react_workflow_adapter["react_workflow_adapter (L3+)<br/>呈現響應式行動收件匣"]
     n_postgres_migration_entrypoint["postgres_migration_entrypoint (L3+)<br/>以獨立資料庫擁有者執行單次遷移"]
     n_thesis_trace_application -.->|depends| n_access_domain
     n_thesis_trace_application -.->|depends| n_research_domain
@@ -243,7 +247,9 @@ flowchart TD
     n_backend_composition -.->|depends| n_evidence_collection
     n_backend_composition -.->|depends| n_evidence_stage
     n_backend_composition -.->|depends| n_anomaly_assessment
+    n_backend_composition -.->|depends| n_workflow_domain
     n_backend_composition -.->|depends| n_postgres_research_adapter
+    n_backend_composition -.->|depends| n_postgres_workflow_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
     n_backend_composition -.->|depends| n_postgres_access_adapter
@@ -270,6 +276,7 @@ flowchart TD
     n_thesis_trace_application -->|owns| n_workflow_domain
     n_thesis_trace_application -->|owns| n_notification_domain
     n_fastapi_entrypoint -.->|depends| n_thesis_trace_application
+    n_postgres_workflow_adapter -.->|depends| n_workflow_domain
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
     n_postgres_research_adapter -.->|depends| n_evidence_stage
@@ -288,10 +295,40 @@ flowchart TD
     n_postgres_access_adapter -.->|depends| n_access_domain
     n_postgres_migration_entrypoint -.->|depends| n_postgres_research_adapter
     n_postgres_migration_entrypoint -.->|depends| n_postgres_access_adapter
+    n_postgres_migration_entrypoint -.->|depends| n_postgres_workflow_adapter
 ```
 
 ## Type Catalog
 
+- `actionitemstatus` — `workflow_domain` / `policy` / `module-public`
+- `actionpriority` — `workflow_domain` / `policy` / `module-public`
+- `actionitemtype` — `workflow_domain` / `policy` / `module-public`
+- `workflowactorcontext` — `workflow_domain` / `domain-value` / `module-public`
+- `actionsourceref` — `workflow_domain` / `domain-value` / `module-public`
+- `createactionitemcommand` — `workflow_domain` / `command` / `module-public`
+- `transitionactionitemcommand` — `workflow_domain` / `command` / `module-public`
+- `actionpriorityevaluation` — `workflow_domain` / `domain-value` / `module-public`
+- `actionitem` — `workflow_domain` / `domain-value` / `module-public`
+- `actioninboxsummary` — `workflow_domain` / `query` / `module-public`
+- `actioninboxquery` — `workflow_domain` / `query` / `module-public`
+- `actioninboxpage` — `workflow_domain` / `query` / `module-public`
+- `actionitemstoreport` — `workflow_domain` / `port` / `module-public`
+- `workflowservice` — `workflow_domain` / `policy` / `module-public`
+- `createanomalyreviewactionrequest` — `thesis_trace_application` / `command` / `module-public`
+- `queryactioninboxrequest` — `thesis_trace_application` / `query` / `module-public`
+- `queryactionitemrequest` — `thesis_trace_application` / `query` / `module-public`
+- `transitionactionitemrequest` — `thesis_trace_application` / `command` / `module-public`
+- `actionitemresult` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `actioninboxresult` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `actioninboxflow` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `actionitemcreatebody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `actionitemtransitionbody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `actioninboxsummaryresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `actionitemresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `actioninboxresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `postgresworkflowstore` — `postgres_workflow_adapter` / `adapter-binding` / `module-public`
+- `workflowclient` — `react_workflow_adapter` / `port` / `private`
+- `actioninboxquerywire` — `react_workflow_adapter` / `wire-representation` / `module-public`
 - `dimensionfactsbody` — `fastapi_entrypoint` / `wire-representation` / `private`
 - `evidencestageconfirmationbody` — `fastapi_entrypoint` / `wire-representation` / `private`
 - `gateresultresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
@@ -469,6 +506,9 @@ flowchart TD
 - `source-snapshot-to-confirmed-stage` / `research_domain` / `evidence_collection` to `evidence_stage`
 - `source-snapshot-to-anomaly-assessment` / `research_domain` / `evidence_collection` to `anomaly_assessment`
 - `thesis-invalidation-to-anomaly-assessment` / `thesis_trace_application` / `thesis_domain` to `research_domain`
+- `anomaly-assessment-to-action-source` / `thesis_trace_application` / `research_domain` to `workflow_domain`
+- `authenticated-owner-to-workflow-actor` / `thesis_trace_application` / `access_domain` to `workflow_domain`
+- `action-item-to-application-result` / `thesis_trace_application` / `workflow_domain` to `thesis_trace_application`
 
 ## Adoption Readiness
 

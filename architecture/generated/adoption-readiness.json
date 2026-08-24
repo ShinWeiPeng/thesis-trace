@@ -43,6 +43,8 @@
           "backend/src/thesis_trace/adapters/openai_recommendation/adapter.py",
           "backend/src/thesis_trace/adapters/postgres_access/__init__.py",
           "backend/src/thesis_trace/adapters/postgres_access/adapter.py",
+          "backend/src/thesis_trace/adapters/postgres_workflow/__init__.py",
+          "backend/src/thesis_trace/adapters/postgres_workflow/adapter.py",
           "backend/src/thesis_trace/api.py",
           "backend/src/thesis_trace/application/__init__.py",
           "backend/src/thesis_trace/application/ai_ports.py",
@@ -105,6 +107,8 @@
           "backend/src/thesis_trace/modules/thesis/__init__.py",
           "backend/src/thesis_trace/modules/thesis/service.py",
           "backend/src/thesis_trace/modules/workflow/__init__.py",
+          "backend/src/thesis_trace/modules/workflow/contracts.py",
+          "backend/src/thesis_trace/modules/workflow/ports.py",
           "backend/src/thesis_trace/modules/workflow/service.py",
           "backend/src/thesis_trace/platform/postgres.py",
           "backend/src/thesis_trace/platform/runtime.py",
@@ -112,17 +116,20 @@
           "infra/postgres/run-production-migrations.py"
         ],
         "mode": "python-ast",
-        "type_count": 158
+        "type_count": 185
       },
       "typescript": {
         "analyzed_files": [
           "frontend/src/access/client.ts",
           "frontend/src/access/contracts.ts",
           "frontend/src/access/routes.test.tsx",
-          "frontend/src/access/routes.tsx"
+          "frontend/src/access/routes.tsx",
+          "frontend/src/workflow/client.ts",
+          "frontend/src/workflow/routes.test.tsx",
+          "frontend/src/workflow/routes.tsx"
         ],
         "mode": "typescript-compiler-api",
-        "type_count": 4
+        "type_count": 6
       }
     },
     "diagnostics": [

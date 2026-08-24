@@ -16,10 +16,17 @@ from thesis_trace.application.flows.evidence_stage import (
     QueryEvidenceStageRequest,
 )
 from thesis_trace.application.flows.anomaly_assessment import (
+    ActionInboxFlow,
+    ActionInboxResult,
+    ActionItemResult,
     AnomalyAssessmentFlow,
     AnomalyAssessmentResult,
     AnomalySourceInput,
     RequestAnomalyAssessment,
+    CreateAnomalyReviewActionRequest,
+    QueryActionInboxRequest,
+    QueryActionItemRequest,
+    TransitionActionItemRequest,
 )
 from thesis_trace.modules.access.contracts import AuthenticatedActor
 from thesis_trace.modules.access.contracts import Role
@@ -131,6 +138,66 @@ class AnomalyAssessmentResponse(BaseModel):
     requested_at: str
     trace: AnomalyTraceResponse | None
     failure_code: str | None
+
+
+class ActionItemCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    assessment_id: str = Field(min_length=1)
+    expected_assessment_version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=2000)
+    due_at: str | None = None
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ActionItemTransitionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    target_status: Literal["pending", "in_progress", "deferred", "completed", "dismissed"]
+    reason: str = Field(min_length=1, max_length=2000)
+    defer_until: str | None = None
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ActionInboxSummaryResponse(BaseModel):
+    urgent: int
+    due_today: int
+    deferred: int
+    all_open: int
+
+
+class ActionItemResponse(BaseModel):
+    item_id: str
+    version: int
+    item_type: Literal["anomaly_review"]
+    source_domain: str
+    source_record_id: str
+    source_version: int
+    company_id: str
+    company_ticker: str
+    company_name: str
+    reason: str
+    status: Literal["pending", "in_progress", "deferred", "completed", "dismissed"]
+    system_priority: Literal["critical", "high", "normal", "low"]
+    effective_priority: Literal["critical", "high", "normal", "low"]
+    safety_floor: Literal["critical", "high", "normal", "low"] | None
+    safety_locked: bool
+    priority_rule_ids: list[str]
+    priority_policy_version: str
+    priority_reason: str
+    created_at: str
+    updated_at: str
+    due_at: str | None
+    defer_until: str | None
+    recurrence_of: str | None
+    allowed_transitions: list[Literal["pending", "in_progress", "deferred", "completed", "dismissed"]]
+
+
+class ActionInboxResponse(BaseModel):
+    summary: ActionInboxSummaryResponse
+    total_count: int
+    items: list[ActionItemResponse]
+    next_cursor: str | None
+    as_of: str
 
 
 class OwnerSessionResponse(BaseModel):
@@ -309,10 +376,12 @@ class EvidenceApi:
         flow: EvidenceIntakeFlow,
         stage_flow: EvidenceStageFlow | None = None,
         anomaly_flow: AnomalyAssessmentFlow | None = None,
+        action_inbox_flow: ActionInboxFlow | None = None,
     ) -> None:
         self._flow = flow
         self._stage_flow = stage_flow
         self._anomaly_flow = anomaly_flow
+        self._action_inbox_flow = action_inbox_flow
 
     def create_company(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -461,6 +530,57 @@ class EvidenceApi:
             raise LookupError("resource_unavailable")
         return self._anomaly_response(self._anomaly_flow.get(actor, assessment_id))
 
+    @staticmethod
+    def _action_item_response(item: ActionItemResult) -> dict[str, Any]:
+        return {
+            "item_id": item.item_id, "version": item.version, "item_type": item.item_type,
+            "source_domain": item.source_domain, "source_record_id": item.source_record_id,
+            "source_version": item.source_version, "company_id": item.company_id,
+            "company_ticker": item.company_ticker, "company_name": item.company_name,
+            "reason": item.reason, "status": item.status,
+            "system_priority": item.system_priority, "effective_priority": item.effective_priority,
+            "safety_floor": item.safety_floor, "safety_locked": item.safety_locked,
+            "priority_rule_ids": list(item.priority_rule_ids),
+            "priority_policy_version": item.priority_policy_version,
+            "priority_reason": item.priority_reason, "created_at": item.created_at,
+            "updated_at": item.updated_at, "due_at": item.due_at,
+            "defer_until": item.defer_until, "recurrence_of": item.recurrence_of,
+            "allowed_transitions": list(item.allowed_transitions),
+        }
+
+    def create_anomaly_review_action(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        if self._action_inbox_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._action_item_response(self._action_inbox_flow.create(
+            actor, CreateAnomalyReviewActionRequest(**body)
+        ))
+
+    def query_action_inbox(self, actor: AuthenticatedActor, request: QueryActionInboxRequest) -> dict[str, Any]:
+        if self._action_inbox_flow is None:
+            raise LookupError("resource_unavailable")
+        page: ActionInboxResult = self._action_inbox_flow.query(actor, request)
+        return {
+            "summary": {"urgent": page.urgent, "due_today": page.due_today,
+                        "deferred": page.deferred, "all_open": page.all_open},
+            "total_count": page.total_count,
+            "items": [self._action_item_response(item) for item in page.items],
+            "next_cursor": page.next_cursor, "as_of": page.as_of,
+        }
+
+    def get_action_item(self, actor: AuthenticatedActor, item_id: str) -> dict[str, Any]:
+        if self._action_inbox_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._action_item_response(
+            self._action_inbox_flow.get(actor, QueryActionItemRequest(item_id))
+        )
+
+    def transition_action_item(self, actor: AuthenticatedActor, item_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        if self._action_inbox_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._action_item_response(self._action_inbox_flow.transition(
+            actor, TransitionActionItemRequest(item_id=item_id, **body)
+        ))
+
 
 def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: AccessApiPort | None = None) -> Any:
     """Create the delivery adapter; import FastAPI only in installed runtimes."""
@@ -564,6 +684,67 @@ def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: Access
             return api.get_anomaly_assessment(actor, assessment_id)
         except (PermissionError, LookupError) as error:
             raise HTTPException(status_code=404, detail="resource_unavailable") from error
+
+    @app.post(
+        "/api/action-items/anomaly-reviews", status_code=201,
+        response_model=ActionItemResponse,
+    )
+    async def create_anomaly_review_action(
+        body: ActionItemCreateBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.create_anomaly_review_action(actor, body.model_dump())
+        except PermissionError as error:
+            raise HTTPException(status_code=403, detail="forbidden") from error
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+        except ValueError as error:
+            code = 409 if str(error) in {"version_conflict", "idempotency_conflict"} else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
+
+    @app.get("/api/action-items", response_model=ActionInboxResponse)
+    async def query_action_inbox(
+        search: str | None = None, company_id: str | None = None,
+        item_type: str | None = None, status: str | None = None,
+        priority: str | None = None, created_from: str | None = None,
+        created_to: str | None = None, due_from: str | None = None,
+        due_to: str | None = None, open_only: bool = True,
+        sort: str = "effective_priority", direction: str = "desc",
+        page_size: int = 25, cursor: str | None = None,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.query_action_inbox(actor, QueryActionInboxRequest(
+                search, company_id, item_type, status, priority, created_from, created_to,
+                due_from, due_to, open_only, sort, direction, page_size, cursor,
+            ))
+        except PermissionError as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/action-items/{item_id}", response_model=ActionItemResponse)
+    async def get_action_item(
+        item_id: str, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.get_action_item(actor, item_id)
+        except (PermissionError, LookupError) as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+
+    @app.post("/api/action-items/{item_id}/transitions", response_model=ActionItemResponse)
+    async def transition_action_item(
+        item_id: str, body: ActionItemTransitionBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.transition_action_item(actor, item_id, body.model_dump())
+        except (PermissionError, LookupError) as error:
+            raise HTTPException(status_code=404, detail="resource_unavailable") from error
+        except ValueError as error:
+            code = 409 if str(error) in {"version_conflict", "idempotency_conflict"} else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
 
     if access_api is not None:
         from fastapi.exceptions import RequestValidationError

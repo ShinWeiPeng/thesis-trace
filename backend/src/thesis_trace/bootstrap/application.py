@@ -14,7 +14,9 @@ from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
 from thesis_trace.application.flows.evidence_stage import EvidenceStageFlow
 from thesis_trace.application.flows.anomaly_assessment import AnomalyAssessmentFlow
 from thesis_trace.application.flows.anomaly_assessment import AnomalyJobProcessor
+from thesis_trace.application.flows.anomaly_assessment import ActionInboxFlow
 from thesis_trace.adapters.openai_recommendation.adapter import OpenAIRecommendationAdapter
+from thesis_trace.adapters.postgres_workflow.adapter import PostgresWorkflowStore
 from thesis_trace.modules.access.contracts import AuthenticatedActor, SecurityContext
 from thesis_trace.modules.access.jwt_verifier import AccessJwtConfiguration, CloudflareJwtVerifier, JwtVerificationError
 from thesis_trace.modules.access.jwt_verifier import derive_identity_facts
@@ -24,7 +26,12 @@ from thesis_trace.modules.access.recovery_policy import RecoveryPolicyConfigurat
 from thesis_trace.modules.access.confirmation_challenge.service import ConfirmationService
 from thesis_trace.modules.access.orchestration import AccountActionService
 from thesis_trace.modules.access.identity_registry.contracts import ProviderIdentity
-from thesis_trace.platform.postgres import PostgresEvidenceStore, database_security_context, verify_schema_compatibility
+from thesis_trace.platform.postgres import (
+    PostgresEvidenceStore,
+    current_database_security_context,
+    database_security_context,
+    verify_schema_compatibility,
+)
 from thesis_trace.platform.runtime import required_secret_provider, required_setting
 from thesis_trace.platform.source_fetch import RestrictedHttpSourceFetcher
 from thesis_trace.modules.research.evidence_collection.service import EvidenceCollector
@@ -32,6 +39,7 @@ from thesis_trace.modules.research.evidence_stage.service import EvidenceStageSe
 from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAssessmentService
 from thesis_trace.modules.research.anomaly_assessment.contracts import AnomalyAnalysisVersions
 from thesis_trace.modules.research import ResearchAnomalyFacade, ResearchStageFacade
+from thesis_trace.modules.workflow.service import WorkflowService
 
 
 @dataclass(slots=True)
@@ -42,6 +50,7 @@ class ApiRuntime:
     verifier: CloudflareJwtVerifier
     access_store: PostgresAccessAdapter
     identity_adapter: CloudflareIdentityAdapter
+    workflow_store: PostgresWorkflowStore
 
 
 @dataclass(slots=True)
@@ -191,6 +200,10 @@ def compose_application(role: str = "api") -> object:
         verifier=verifier,
         access_store=access_store,
         identity_adapter=identity_adapter,
+        workflow_store=PostgresWorkflowStore(
+            database_url_provider,
+            security_context_provider=current_database_security_context,
+        ),
     )
     flow = EvidenceIntakeFlow(store=store, id_generator=lambda: str(uuid.uuid4()))
     stage_flow = EvidenceStageFlow(
@@ -198,17 +211,28 @@ def compose_application(role: str = "api") -> object:
             EvidenceStageService(store=store, clock=lambda: datetime.now(timezone.utc).isoformat())
         )
     )
-    anomaly_flow = AnomalyAssessmentFlow(
-        research=ResearchAnomalyFacade(
-            AnomalyAssessmentService(
-                store=store,
-                clock=lambda: datetime.now(timezone.utc).isoformat(),
-                versions=_anomaly_analysis_versions(),
-            )
+    research_anomaly = ResearchAnomalyFacade(
+        AnomalyAssessmentService(
+            store=store,
+            clock=lambda: datetime.now(timezone.utc).isoformat(),
+            versions=_anomaly_analysis_versions(),
         )
     )
+    anomaly_flow = AnomalyAssessmentFlow(research=research_anomaly)
+    action_inbox_flow = ActionInboxFlow(
+        research=research_anomaly,
+        workflow=WorkflowService(
+            runtime.workflow_store,
+            clock=lambda: datetime.now(timezone.utc).isoformat(),
+            id_generator=lambda: str(uuid.uuid4()),
+        ),
+        clock=lambda: datetime.now(timezone.utc).isoformat(),
+    )
     app = create_fastapi_app(
-        EvidenceApi(flow=flow, stage_flow=stage_flow, anomaly_flow=anomaly_flow), authenticated_actor,
+        EvidenceApi(
+            flow=flow, stage_flow=stage_flow, anomaly_flow=anomaly_flow,
+            action_inbox_flow=action_inbox_flow,
+        ), authenticated_actor,
         AccessApi(access_store, sessions, account_actions),
     )
     app.state.thesis_trace_runtime = runtime

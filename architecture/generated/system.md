@@ -18,6 +18,7 @@ flowchart TD
     n_workflow_domain["workflow_domain (L1)<br/>管理人工行動收件匣"]
     n_notification_domain["notification_domain (L1)<br/>管理通知分類與安全內容"]
     n_fastapi_entrypoint["fastapi_entrypoint (L3+)<br/>轉換 HTTP 與應用契約"]
+    n_postgres_workflow_adapter["postgres_workflow_adapter (L3+)<br/>保存待辦、優先級與稽核紀錄"]
     n_postgres_research_adapter["postgres_research_adapter (L3+)<br/>實作研究交易與持久工作租約"]
     n_restricted_source_fetch_adapter["restricted_source_fetch_adapter (L3+)<br/>依限制政策擷取外部 HTTPS 來源"]
     n_runtime_configuration_adapter["runtime_configuration_adapter (L3+)<br/>解析必要設定與檔案引用祕密"]
@@ -31,6 +32,7 @@ flowchart TD
     n_cloudflare_identity_adapter["cloudflare_identity_adapter (L3+)<br/>驗證完整 Access 身分與提供者"]
     n_postgres_access_adapter["postgres_access_adapter (L3+)<br/>保存 Access 狀態並設定 RLS 安全脈絡"]
     n_react_access_adapter["react_access_adapter (L3+)<br/>呈現角色隔離的 Access 介面"]
+    n_react_workflow_adapter["react_workflow_adapter (L3+)<br/>呈現響應式行動收件匣"]
     n_postgres_migration_entrypoint["postgres_migration_entrypoint (L3+)<br/>以獨立資料庫擁有者執行單次遷移"]
     n_thesis_trace_application -.->|depends| n_access_domain
     n_thesis_trace_application -.->|depends| n_research_domain
@@ -46,7 +48,9 @@ flowchart TD
     n_backend_composition -.->|depends| n_evidence_collection
     n_backend_composition -.->|depends| n_evidence_stage
     n_backend_composition -.->|depends| n_anomaly_assessment
+    n_backend_composition -.->|depends| n_workflow_domain
     n_backend_composition -.->|depends| n_postgres_research_adapter
+    n_backend_composition -.->|depends| n_postgres_workflow_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
     n_backend_composition -.->|depends| n_postgres_access_adapter
@@ -73,6 +77,7 @@ flowchart TD
     n_thesis_trace_application -->|owns| n_workflow_domain
     n_thesis_trace_application -->|owns| n_notification_domain
     n_fastapi_entrypoint -.->|depends| n_thesis_trace_application
+    n_postgres_workflow_adapter -.->|depends| n_workflow_domain
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
     n_postgres_research_adapter -.->|depends| n_evidence_stage
@@ -91,6 +96,7 @@ flowchart TD
     n_postgres_access_adapter -.->|depends| n_access_domain
     n_postgres_migration_entrypoint -.->|depends| n_postgres_research_adapter
     n_postgres_migration_entrypoint -.->|depends| n_postgres_access_adapter
+    n_postgres_migration_entrypoint -.->|depends| n_postgres_workflow_adapter
 ```
 
 ## 模組
@@ -108,9 +114,10 @@ flowchart TD
 | `thesis_domain` | L1 | domain | `thesis_trace_application` | planned | Own Thesis lifecycle |
 | `portfolio_domain` | L1 | domain | `thesis_trace_application` | planned | Own holdings |
 | `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own immutable recommendations |
-| `workflow_domain` | L1 | domain | `thesis_trace_application` | planned | Own actionable work items |
+| `workflow_domain` | L1 | domain | `thesis_trace_application` | implemented | Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries. |
 | `notification_domain` | L1 | domain | `thesis_trace_application` | planned | Own notification classification |
 | `fastapi_entrypoint` | L3+ | adapter | `-` | implemented | Translate versioned JSON HTTP requests into application commands and queries. |
+| `postgres_workflow_adapter` | L3+ | adapter | `-` | implemented | Persist Workflow Action Items, priority evaluations, and append-only audit using PostgreSQL. |
 | `postgres_research_adapter` | L3+ | adapter | `-` | implemented | Implement atomic Research persistence and leased collector work using PostgreSQL. |
 | `restricted_source_fetch_adapter` | L3+ | adapter | `-` | implemented | Fetch approved HTTPS sources through bounded DNS and transport policy. |
 | `runtime_configuration_adapter` | L3+ | adapter | `-` | implemented | Resolve mandatory runtime configuration and file-referenced secrets fail closed. |
@@ -124,6 +131,7 @@ flowchart TD
 | `cloudflare_identity_adapter` | L3+ | adapter | `-` | implemented | Verify full Cloudflare Access JWT and map get-identity provider discriminator facts into semantic identity. |
 | `postgres_access_adapter` | L3+ | adapter | `-` | implemented | Persist Access aggregates and bind request security context to PostgreSQL RLS transactions. |
 | `react_access_adapter` | L3+ | adapter | `-` | implemented | Present role-filtered session, account, workspace, denial, and volatile confirmation UI through generated contracts. |
+| `react_workflow_adapter` | L3+ | adapter | `-` | implemented | Present the Server-authoritative Action Inbox, responsive detail route, and company-context link through generated contracts. |
 | `postgres_migration_entrypoint` | L3+ | adapter | `-` | implemented | Run forward-only schema migration and least-privilege grants once under the database-owner migration credential. |
 
 ### `thesis_trace_application`
@@ -131,15 +139,15 @@ flowchart TD
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **父模組:** `-`
 - **實作狀態:** `implemented`
-- **輸入 Ports:** `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`, `application.request_anomaly_assessment`, `application.query_anomaly_assessment`, `application.process_anomaly_job`
+- **輸入 Ports:** `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`, `application.request_anomaly_assessment`, `application.query_anomaly_assessment`, `application.process_anomaly_job`, `application.create_anomaly_review_action`, `application.query_action_inbox`, `application.query_action_item`, `application.transition_action_item`
 - **輸出 Ports:** `application.events`, `application.recommendation_provider`, `application.recommendation_critic`
-- **輸出 Events:** `application.evidence_submission_completed`
+- **輸出 Events:** `application.evidence_submission_completed`, `application.action_item_operation_failed`
 - **擁有狀態:** 無
 - **副作用:** Coordinate child commands and map child events. (`-`)
 - **異常:** `thesis_trace_application-error-1`: Reject unauthenticated or unauthorized commands → `application.evidence_submission_completed` → Reject unauthenticated or unauthorized commands; `thesis_trace_application-error-2`: Propagate child admission failures. → `application.evidence_submission_completed` → Propagate child admission failures.
 - **不變條件:** Sibling domains communicate only through this parent; Domain state remains child-owned.
 - **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)
-- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`AnomalyAssessmentFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`AnomalyJobProcessor`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`RequestAnomalyAssessment`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalySourceInput`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyAssessmentResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyGateResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyTraceResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`RecommendationProviderPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationCriticPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationProviderRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`RecommendationCriticRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`AnalysisSource`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`ValidatedAnomalyCandidate`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)
+- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`AnomalyAssessmentFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`AnomalyJobProcessor`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`RequestAnomalyAssessment`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalySourceInput`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyAssessmentResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyGateResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyTraceResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`CreateAnomalyReviewActionRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionInboxRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`TransitionActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionItemResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`RecommendationProviderPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationCriticPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationProviderRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`RecommendationCriticRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`AnalysisSource`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`ValidatedAnomalyCandidate`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)
 
 ### `backend_composition`
 
@@ -293,18 +301,18 @@ flowchart TD
 
 ### `workflow_domain`
 
-- **目的:** Own actionable work items
+- **目的:** Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries.
 - **父模組:** `thesis_trace_application`
-- **實作狀態:** `planned`
-- **輸入 Ports:** 無
-- **輸出 Ports:** 無
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `workflow.create_action_item`, `workflow.query_action_inbox`, `workflow.query_action_item`, `workflow.transition_action_item`
+- **輸出 Ports:** `workflow.action_item_store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** 無
-- **異常:** `workflow_domain-error-1`: Reject unsafe or unauthorized transitions. → `application.evidence_submission_completed` → Reject unsafe or unauthorized transitions.
-- **不變條件:** System priority and safety floors are server-owned.
-- **程式入口:** [`workflow_domain_contract`](../../backend/src/thesis_trace/modules/workflow/service.py) (boundary)
-- **公開 Symbols:** [`workflow_domain_contract`](../../backend/src/thesis_trace/modules/workflow/service.py) (boundary)
+- **副作用:** Persist Action Items, priority evaluations, and append-only audit through a demand-owned port. (`-`)
+- **異常:** 無
+- **不變條件:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.
+- **程式入口:** [`WorkflowService`](../../backend/src/thesis_trace/modules/workflow/service.py) (service)
+- **公開 Symbols:** [`ActionItem`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionInboxPage`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`CreateActionItemCommand`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`TransitionActionItemCommand`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionInboxQuery`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionItemStorePort`](../../backend/src/thesis_trace/modules/workflow/ports.py) (port)<br>[`WorkflowService`](../../backend/src/thesis_trace/modules/workflow/service.py) (service)
 
 ### `notification_domain`
 
@@ -335,6 +343,21 @@ flowchart TD
 - **不變條件:** Client values never become server authority.
 - **程式入口:** [`create_fastapi_app`](../../backend/src/thesis_trace/api.py) (factory)
 - **公開 Symbols:** [`EvidenceApi`](../../backend/src/thesis_trace/api.py) (adapter)
+
+### `postgres_workflow_adapter`
+
+- **目的:** Persist Workflow Action Items, priority evaluations, and append-only audit using PostgreSQL.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Execute bounded RLS-protected Workflow transactions and repeatable-read inbox queries. (`-`)
+- **異常:** 無
+- **不變條件:** Workflow audit is append-only.; Summary counts and page rows use one authorization scope and query snapshot.; The adapter never reads or writes Research tables to derive Workflow policy.
+- **程式入口:** [`PostgresWorkflowStore`](../../backend/src/thesis_trace/adapters/postgres_workflow/adapter.py) (adapter)
+- **公開 Symbols:** [`PostgresWorkflowStore`](../../backend/src/thesis_trace/adapters/postgres_workflow/adapter.py) (adapter)
 
 ### `postgres_research_adapter`
 
@@ -531,6 +554,21 @@ flowchart TD
 - **程式入口:** [`AccessRoutes`](../../frontend/src/access/routes.tsx) (router)
 - **公開 Symbols:** [`SessionProfile`](../../frontend/src/access/contracts.ts) (view-contract)
 
+### `react_workflow_adapter`
+
+- **目的:** Present the Server-authoritative Action Inbox, responsive detail route, and company-context link through generated contracts.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Submit Action Item intent and restore list query state from the URL without persistent domain caching. (`-`)
+- **異常:** 無
+- **不變條件:** The browser never computes priority safety or assignee; Selected item and list query are route-addressable; Narrow layout requires no horizontal scrolling for primary actions.
+- **程式入口:** [`ActionInboxRoutes`](../../frontend/src/workflow/routes.tsx) (router)
+- **公開 Symbols:** [`WorkflowClient`](../../frontend/src/workflow/client.ts) (view-contract)
+
 ### `postgres_migration_entrypoint`
 
 - **目的:** Run forward-only schema migration and least-privilege grants once under the database-owner migration credential.
@@ -557,6 +595,10 @@ flowchart TD
 | `application.request_anomaly_assessment` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner request for a version-bound anomaly assessment.: Actor, Evidence and immutable snapshot identities, expected Evidence version, reason, and idempotency key; source characteristics and all policy values remain Server-owned. | `RequestAnomalyAssessment`, `AnomalyAssessmentResult` |
 | `application.query_anomaly_assessment` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative anomaly assessment projection and trace.: Authenticated actor and assessment identity. | `AnomalyAssessmentResult` |
 | `application.process_anomaly_job` | `thesis_trace_application` | input | command | async | Process one leased anomaly job through provider, strict validator, critic, Research policy, and atomic result commit.: Opaque lease, assessment/input versions, correlation metadata, and exact build/model/prompt/schema/critic/policy tuple. | `AnomalyJobProcessor` |
+| `application.create_anomaly_review_action` | `thesis_trace_application` | input | command | sync | Resolve one immutable actionable anomaly version and synchronously create or return its Server-authoritative Action Item.: Authenticated Owner, assessment identity/version, optional due time, reason, and idempotency key; assignee, priority, safety, Company, and trigger facts remain Server-owned. | `CreateAnomalyReviewActionRequest`, `ActionItemResult` |
+| `application.query_action_inbox` | `thesis_trace_application` | input | query | sync | Query one role-safe Action Inbox summary and page from a single Server snapshot.: Authenticated actor, Server-whitelisted filters/search/sort, page size, and opaque cursor. | `QueryActionInboxRequest`, `ActionInboxResult` |
+| `application.query_action_item` | `thesis_trace_application` | input | query | sync | Return one assignee-scoped Action Item detail and current legal operations.: Authenticated actor and opaque Action Item identity. | `QueryActionItemRequest`, `ActionItemResult` |
+| `application.transition_action_item` | `thesis_trace_application` | input | command | sync | Revalidate assignee authority and request one versioned Server-time Action Item transition.: Actor, item/expected version, target status, reason, optional future defer time, and idempotency key. | `TransitionActionItemRequest`, `ActionItemResult` |
 | `application.recommendation_provider` | `thesis_trace_application` | output | dependency | async | Request one provider-neutral source-bound structured analysis candidate from an immutable snapshot.: Exact snapshot/version tuple and bounded schema/model/prompt identifiers; output remains untrusted bytes until validation. | `RecommendationProviderPort`, `RecommendationProviderRequest` |
 | `application.recommendation_critic` | `thesis_trace_application` | output | dependency | async | Independently verify availability, citation support, subject, time, invalidation, B independence, and newer-A conflict for one candidate.: Immutable source snapshot and candidate; output is an exact structured PASS or non-PASS result. | `RecommendationCriticPort`, `RecommendationCriticRequest` |
 | `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible evidence submission results.: Record identity | `SubmitEvidenceRequest` |
@@ -589,6 +631,11 @@ flowchart TD
 | `research.clock` | `research_domain` | output | dependency | sync | Supply observed and retrieved times.: Time value with provenance. | `EvidenceRecord` |
 | `research.ids` | `research_domain` | output | dependency | sync | Generate persistent semantic identifiers.: Opaque unique identifier. | `EvidenceRecord` |
 | `research.events` | `research_domain` | output | event | async | Publish committed evidence lifecycle transitions.: Persistent event envelope and semantic payload. | `EvidenceRecord` |
+| `workflow.create_action_item` | `workflow_domain` | input | command | sync | Apply deterministic fingerprint, assignment, priority, and safety policy then atomically create or return an Action Item.: Workflow-local actor and immutable Server-mapped source context without Access, Research, wire, or storage representations. | `CreateActionItemCommand`, `ActionItem` |
+| `workflow.query_action_inbox` | `workflow_domain` | input | query | sync | Return authorized counts and page rows from the same repeatable-read query snapshot.: Workflow actor scope, normalized filters/search/sort, page size, and opaque cursor. | `ActionInboxQuery`, `ActionInboxPage` |
+| `workflow.query_action_item` | `workflow_domain` | input | query | sync | Return one current assignee-scoped Action Item aggregate.: Workflow actor and Action Item identity. | `ActionItem` |
+| `workflow.transition_action_item` | `workflow_domain` | input | command | sync | Apply the versioned Action Item state machine and atomically append its audit fact.: Workflow actor, item/version, target state, reason, optional defer time, idempotency, and Server time. | `TransitionActionItemCommand`, `ActionItem` |
+| `workflow.action_item_store` | `workflow_domain` | output | dependency | sync | Atomically persist and query Action Item aggregates, priority history, idempotency receipts, and append-only audit under assignee RLS.: Workflow semantic values without SQL, ORM, Access, Research, or wire representations. | `ActionItemStorePort` |
 
 ## Event 契約
 
@@ -608,12 +655,42 @@ flowchart TD
 | `access.account_changed` | `access_domain` | at-least-once | Consequential mutation, confirmation consumption, and audit commit atomically. | Report a committed identity, role, or account lifecycle change. | `session_management`, `thesis_trace_application` |
 | `access.confirmation_issued` | `access_domain` | at-most-once | Challenge bindings and expiry commit. | Record issuance of a short-lived challenge without publishing its token. | `thesis_trace_application` |
 | `access.confirmation_consumed` | `access_domain` | at-least-once | Challenge, reason, mutation, and append-only audit commit. | Report atomic challenge consumption and consequential mutation. | `thesis_trace_application` |
+| `application.action_item_operation_failed` | `thesis_trace_application` | at-most-once | Authorization, source resolution, Workflow validation, query, or transaction fails and no success state is presented. | Report a stable non-disclosing rejection or execution failure category for an Action Item application operation. | `fastapi_entrypoint` |
 | `application.evidence_submission_completed` | `thesis_trace_application` | at-most-once | A Research lifecycle event has been mapped after commit. | Notify delivery adapters that current evidence status can be queried. | `fastapi_entrypoint` |
 
 ## Type Catalog
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
+| `actionitemstatus` | `workflow_domain` | `ActionItemStatus` (enum, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | policy | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `actionpriority` | `workflow_domain` | `ActionPriority` (enum, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | policy | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `actionitemtype` | `workflow_domain` | `ActionItemType` (enum, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | policy | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `workflowactorcontext` | `workflow_domain` | `WorkflowActorContext` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain` | 無 |
+| `actionsourceref` | `workflow_domain` | `ActionSourceRef` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `createactionitemcommand` | `workflow_domain` | `CreateActionItemCommand` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | command | `workflow_domain`, `postgres_workflow_adapter` | `workflowactorcontext`, `actionsourceref` |
+| `transitionactionitemcommand` | `workflow_domain` | `TransitionActionItemCommand` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | command | `workflow_domain`, `postgres_workflow_adapter` | `workflowactorcontext`, `actionitemstatus` |
+| `actionpriorityevaluation` | `workflow_domain` | `ActionPriorityEvaluation` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain`, `postgres_workflow_adapter` | `actionpriority` |
+| `actionitem` | `workflow_domain` | `ActionItem` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain`, `postgres_workflow_adapter`, `thesis_trace_application` | `actionitemstatus`, `actionitemtype`, `actionpriorityevaluation` |
+| `actioninboxsummary` | `workflow_domain` | `ActionInboxSummary` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | query | `workflow_domain`, `thesis_trace_application` | 無 |
+| `actioninboxquery` | `workflow_domain` | `ActionInboxQuery` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | query | `workflow_domain`, `postgres_workflow_adapter` | `workflowactorcontext` |
+| `actioninboxpage` | `workflow_domain` | `ActionInboxPage` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | query | `workflow_domain`, `thesis_trace_application` | `actioninboxsummary`, `actionitem` |
+| `actionitemstoreport` | `workflow_domain` | `ActionItemStorePort` (protocol, `backend/src/thesis_trace/modules/workflow/ports.py`) | module-public | port | `workflow_domain`, `postgres_workflow_adapter` | `createactionitemcommand`, `transitionactionitemcommand`, `actionpriorityevaluation`, `actionitem`, `actioninboxquery`, `actioninboxpage` |
+| `workflowservice` | `workflow_domain` | `WorkflowService` (class, `backend/src/thesis_trace/modules/workflow/service.py`) | module-public | policy | `backend_composition`, `thesis_trace_application` | `actionitemstoreport`, `createactionitemcommand`, `transitionactionitemcommand`, `actionpriorityevaluation`, `actionitem`, `actioninboxquery`, `actioninboxpage` |
+| `createanomalyreviewactionrequest` | `thesis_trace_application` | `CreateAnomalyReviewActionRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `queryactioninboxrequest` | `thesis_trace_application` | `QueryActionInboxRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | query | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `queryactionitemrequest` | `thesis_trace_application` | `QueryActionItemRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | query | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `transitionactionitemrequest` | `thesis_trace_application` | `TransitionActionItemRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `actionitemresult` | `thesis_trace_application` | `ActionItemResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `actioninboxresult` | `thesis_trace_application` | `ActionInboxResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | `actionitemresult` |
+| `actioninboxflow` | `thesis_trace_application` | `ActionInboxFlow` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | `authenticatedactor`, `role`, `researchanomalyfacade`, `workflowservice`, `workflowactorcontext`, `actionsourceref`, `createactionitemcommand`, `transitionactionitemcommand`, `actioninboxquery`, `createanomalyreviewactionrequest`, `queryactioninboxrequest`, `queryactionitemrequest`, `transitionactionitemrequest`, `actionitemresult`, `actioninboxresult` |
+| `actionitemcreatebody` | `fastapi_entrypoint` | `ActionItemCreateBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `actionitemtransitionbody` | `fastapi_entrypoint` | `ActionItemTransitionBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `actioninboxsummaryresponse` | `fastapi_entrypoint` | `ActionInboxSummaryResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_workflow_adapter` | 無 |
+| `actionitemresponse` | `fastapi_entrypoint` | `ActionItemResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_workflow_adapter` | 無 |
+| `actioninboxresponse` | `fastapi_entrypoint` | `ActionInboxResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_workflow_adapter` | `actioninboxsummaryresponse`, `actionitemresponse` |
+| `postgresworkflowstore` | `postgres_workflow_adapter` | `PostgresWorkflowStore` (class, `backend/src/thesis_trace/adapters/postgres_workflow/adapter.py`) | module-public | adapter-binding | `backend_composition` | `actionitemstoreport`, `createactionitemcommand`, `transitionactionitemcommand`, `actionpriorityevaluation`, `actionitem`, `actioninboxquery`, `actioninboxpage` |
+| `workflowclient` | `react_workflow_adapter` | `WorkflowClient` (interface, `frontend/src/workflow/client.ts`) | private | port | `react_workflow_adapter` | 無 |
+| `actioninboxquerywire` | `react_workflow_adapter` | `ActionInboxQuery` (alias, `frontend/src/workflow/client.ts`) | module-public | wire-representation | `react_workflow_adapter` | 無 |
 | `dimensionfactsbody` | `fastapi_entrypoint` | `DimensionFactsBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
 | `evidencestageconfirmationbody` | `fastapi_entrypoint` | `EvidenceStageConfirmationBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `dimensionfactsbody` |
 | `gateresultresponse` | `fastapi_entrypoint` | `GateResultResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
@@ -663,7 +740,7 @@ flowchart TD
 | `secretprovider` | `runtime_configuration_adapter` | `SecretProvider` (protocol, `backend/src/thesis_trace/platform/runtime.py`) | module-public | port | `backend_composition`, `postgres_research_adapter` | 無 |
 | `filesecretprovider` | `runtime_configuration_adapter` | `FileSecretProvider` (class, `backend/src/thesis_trace/platform/runtime.py`) | private | adapter-binding | `runtime_configuration_adapter` | `secretprovider` |
 | `postgresunavailable` | `postgres_research_adapter` | `PostgresUnavailable` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | domain-value | `backend_composition` | 無 |
-| `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter` |
+| `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter`, `postgresworkflowstore` |
 | `collectorruntime` | `backend_composition` | `CollectorRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `evidencecollector` |
 | `anomalyprocessor` | `backend_composition` | `AnomalyProcessor` (protocol, `backend/src/thesis_trace/bootstrap/application.py`) | private | port | `backend_composition` | 無 |
 | `aiworkerruntime` | `backend_composition` | `AiWorkerRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `anomalyprocessor` |
@@ -795,3 +872,6 @@ flowchart TD
 | `source-snapshot-to-confirmed-stage`: Validate an immutable collected source snapshot as the provenance target of one confirmed fact and stage version. | `evidence_collection` | `evidence_stage` | `research_domain` | `collectedsourcesnapshot` | `evidencestagerecord` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->evidence_stage` | `evidence_collection->evidence_stage`, `evidence_stage->evidence_collection` |
 | `source-snapshot-to-anomaly-assessment`: Resolve immutable snapshot identities into Server-owned publisher characteristics, source category, and lineage components and bind them to one anomaly assessment. | `evidence_collection` | `anomaly_assessment` | `research_domain` | `collectedsourcesnapshot` | `sourcecharacteristicsnapshot` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->anomaly_assessment` | `evidence_collection->anomaly_assessment`, `anomaly_assessment->evidence_collection` |
 | `thesis-invalidation-to-anomaly-assessment`: Map a future Server-owned immutable predeclared Thesis invalidation projection into Research assessment primitives without accepting client or AI authority. | `thesis_domain` | `research_domain` | `thesis_trace_application` | `-` | `-` | `thesis_trace_application` | 無 | `thesis_trace_application->thesis_domain`, `thesis_trace_application->research_domain` | `thesis_domain->research_domain`, `research_domain->thesis_domain`, `anomaly_assessment->thesis_domain` |
+| `anomaly-assessment-to-action-source`: Resolve an immutable authorized anomaly, Evidence, and Company projection into Workflow-local source primitives for a manual review item. | `research_domain` | `workflow_domain` | `thesis_trace_application` | `researchanomalyresult` | `actionsourceref` | `thesis_trace_application` | 無 | `thesis_trace_application->research_domain`, `thesis_trace_application->workflow_domain` | `research_domain->workflow_domain`, `workflow_domain->research_domain`, `postgres_research_adapter->workflow_domain` |
+| `authenticated-owner-to-workflow-actor`: Map a revalidated Access actor into Workflow-local create, read, and transition capabilities without exposing Access contracts to Workflow. | `access_domain` | `workflow_domain` | `thesis_trace_application` | `authenticatedactor` | `workflowactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->workflow_domain` | `access_domain->workflow_domain`, `workflow_domain->access_domain`, `fastapi_entrypoint->workflow_domain` |
+| `action-item-to-application-result`: Map Workflow-owned Action Item summaries, rows, detail, and allowed transitions into application-owned primitives before HTTP presentation. | `workflow_domain` | `thesis_trace_application` | `thesis_trace_application` | `actioninboxpage` | `actioninboxresult` | `thesis_trace_application` | 無 | `thesis_trace_application->workflow_domain`, `fastapi_entrypoint->thesis_trace_application` | `react_workflow_adapter->workflow_domain`, `react_workflow_adapter->postgres_workflow_adapter`, `fastapi_entrypoint->workflow_domain`, `fastapi_entrypoint->postgres_workflow_adapter` |

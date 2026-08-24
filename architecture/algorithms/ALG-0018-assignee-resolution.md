@@ -1,12 +1,12 @@
 # ALG-0018: Action-item assignee resolution
 ## Metadata
-- Status: proposed
+- Status: accepted
 - Owner module: workflow
 - Product feature: Automatic private Action Item ownership
 - Flow IDs: action-item-creation-flow
-- Related ADRs: none
-- Source paths: planned workflow ownership policy
-- Test and benchmark paths: planned workflow/access integration tests
+- Related ADRs: ADR-0006
+- Source paths: `backend/src/thesis_trace/application/flows/anomaly_assessment.py`, `backend/src/thesis_trace/modules/workflow/service.py`
+- Test and benchmark paths: `backend/tests/test_action_inbox_flow.py`, `backend/tests/test_workflow_postgres.py`
 - Supersedes: none
 ## Problem and observable success
 Assign each item to the one authorized user without accepting client/AI choice.
@@ -19,7 +19,7 @@ Candidates: caller-selected assignee; deterministic ownership mapping. Mapping i
 ## Selected method and reasons for rejecting alternatives
 Resolve from server-owned source semantics and active identities in one transaction.
 ## Exact behavior, formula or pseudocode, boundaries, and tie-breaking
-Personal source→source owner if active/authorized; Learner-derived personal work→Learner; operational→exactly one primary Admin. Zero or multiple legal candidates yields no item exposure, stores exception, and alerts via available operational channel. Admin replacement reassigns only open operational items.
+Personal source→source owner if active/authorized; Learner-derived personal work→Learner; operational→exactly one primary Admin. For `manual-anomaly-review-v1`, the only legal assignee is the active Owner bound to the immutable anomaly request and current source ownership; the bounded command rejects when the actor/source binding does not match. Zero or multiple legal candidates yields no item exposure, stores exception, and alerts via available operational channel. Admin replacement reassigns only open operational items.
 ## Parameters, calibration, versioning, and compatibility
 Item classification and role policy are versioned.
 ## Time and space complexity and resource budgets
@@ -31,4 +31,6 @@ Role/status matrix, absent/multiple Admin, suspension and reassignment transacti
 ## Risks and monitoring
 Misclassified source ownership could disclose data; alert every unassigned exception.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-24
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

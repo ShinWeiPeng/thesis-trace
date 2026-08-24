@@ -80,6 +80,17 @@ def main() -> None:
         assert not admin.execute(
             "SELECT has_table_privilege('thesis_trace_ai_worker','research.anomaly_assessments','INSERT,DELETE')"
         ).fetchone()[0]
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','workflow.action_items','SELECT,INSERT,UPDATE')"
+        ).fetchone()[0]
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','workflow.action_items','DELETE')"
+        ).fetchone()[0]
+        for role in ("thesis_trace_collector", "thesis_trace_ai_worker"):
+            assert not admin.execute(
+                "SELECT has_table_privilege(%s,'workflow.action_items','SELECT,INSERT,UPDATE,DELETE')",
+                (role,),
+            ).fetchone()[0]
         source_id = uuid.uuid4()
         admin.execute("BEGIN")
         try:

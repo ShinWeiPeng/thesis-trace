@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type { EvidenceClient } from "./api/evidenceClient";
+import type { WorkflowClient } from "./workflow/client";
 const company = { company_id: "2330", ticker: "2330", name: "台積電", version: 1 };
 it("selects a server company and shows its server receipt", async () => {
   const user = userEvent.setup(); const client: EvidenceClient = { listCompanies: vi.fn().mockResolvedValue([company]), createCompany: vi.fn(), submitEvidenceUrl: vi.fn().mockResolvedValue({ evidence_id: "e-1", version: 1, status: "received", company, submittedUrl: "https://example.com/a" }), getEvidenceIntake: vi.fn(), getEvidenceStage: vi.fn(), confirmEvidenceStage: vi.fn(), requestAnomalyAssessment: vi.fn(), getAnomalyAssessment: vi.fn() };
@@ -70,7 +71,19 @@ it("creates a pending shadow assessment and renders a server would-be-Hard trace
     requestAnomalyAssessment: vi.fn().mockResolvedValue(pending),
     getAnomalyAssessment: vi.fn().mockResolvedValueOnce(completed).mockResolvedValueOnce(superseded),
   };
-  render(<App client={client} />);
+  const workflow: WorkflowClient = {
+    createAnomalyReview: vi.fn().mockResolvedValue({
+      item_id: "action-1", version: 1, item_type: "anomaly_review", source_domain: "anomaly_assessment",
+      source_record_id: "a-1", source_version: 2, company_id: "2330", company_ticker: "2330",
+      company_name: "台積電", reason: "追蹤並人工審查此 anomaly", status: "pending", system_priority: "high",
+      effective_priority: "high", safety_floor: null, safety_locked: false, priority_rule_ids: ["shadow"],
+      priority_policy_version: "action-priority-v1", priority_reason: "review", created_at: "2026-08-24T00:00:00Z",
+      updated_at: "2026-08-24T00:00:00Z", due_at: null, defer_until: null, recurrence_of: null,
+      allowed_transitions: ["in_progress"],
+    }),
+    queryInbox: vi.fn(), getActionItem: vi.fn(), transitionActionItem: vi.fn(),
+  };
+  render(<App client={client} workflow={workflow} />);
   await screen.findByRole("option", { name: "2330 · 台積電" });
   await user.type(screen.getByLabelText("Evidence URL"), "https://example.com/a");
   await user.click(screen.getByRole("button", { name: "提交 Evidence" }));
@@ -87,6 +100,11 @@ it("creates a pending shadow assessment and renders a server would-be-Hard trace
   await user.click(screen.getByRole("button", { name: "重新整理評估" }));
   expect(await screen.findAllByText("Shadow Hard 候選")).toHaveLength(2);
   expect(screen.getByText(/正式 Hard 通知仍停用/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "建立審查待辦" }));
+  expect(workflow.createAnomalyReview).toHaveBeenCalledWith(expect.objectContaining({
+    assessment_id: "a-1", expected_assessment_version: 2,
+  }));
+  expect(await screen.findByRole("link", { name: "開啟已建立待辦" })).toHaveAttribute("href", "/actions/action-1");
   await user.click(screen.getByRole("button", { name: "重新整理評估" }));
   expect(await screen.findAllByText("已由新版取代")).toHaveLength(2);
   expect(screen.queryByText("Shadow Hard 候選")).not.toBeInTheDocument();
