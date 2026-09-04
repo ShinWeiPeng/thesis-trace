@@ -11,13 +11,13 @@ SPEC-0001 confirms the product behavior, but each record remains `proposed` unti
 | [ALG-0005](ALG-0005-anomaly-policy.md) | Hard/Soft anomaly policy | anomaly_assessment | Required |
 | [ALG-0006](ALG-0006-provider-failover.md) | AI provider retry and failover | recommendation | Required |
 | [ALG-0007](ALG-0007-ai-output-validation.md) | AI output validation | thesis_trace_application | Required |
-| [ALG-0008](ALG-0008-valuation-benchmarks.md) | Valuation benchmark calculation | portfolio | Required |
-| [ALG-0009](ALG-0009-valuation-validity.md) | Valuation validity and abstention | portfolio | Required |
-| [ALG-0010](ALG-0010-return-calculation.md) | Target price and return calculation | portfolio | Required |
-| [ALG-0011](ALG-0011-exposure-aggregation.md) | Portfolio exposure aggregation | portfolio | Required |
-| [ALG-0012](ALG-0012-dca-selection.md) | DCA multiplier selection | portfolio | Required |
+| [ALG-0008](ALG-0008-valuation-benchmarks.md) | Valuation benchmark calculation | thesis_domain | Required |
+| [ALG-0009](ALG-0009-valuation-validity.md) | Valuation validity and abstention | thesis_domain | Required |
+| [ALG-0010](ALG-0010-return-calculation.md) | Target price and return calculation | thesis_domain | Required |
+| [ALG-0011](ALG-0011-exposure-aggregation.md) | Portfolio exposure aggregation | portfolio_domain | Required |
+| [ALG-0012](ALG-0012-dca-selection.md) | DCA multiplier selection | portfolio_domain | Required |
 | [ALG-0013](ALG-0013-research-lifecycle.md) | Research lifecycle state machines | thesis | Required |
-| [ALG-0014](ALG-0014-trade-processing.md) | Trade normalization and allocation | portfolio | Required |
+| [ALG-0014](ALG-0014-trade-processing.md) | Trade normalization and allocation | portfolio_domain | Required |
 | [ALG-0015](ALG-0015-action-item-dedup.md) | Action-item creation and recurrence | workflow | Required |
 | [ALG-0016](ALG-0016-action-priority.md) | Priority and safety lock | workflow | Required |
 | [ALG-0017](ALG-0017-action-transitions.md) | Action-item transitions | workflow | Required |

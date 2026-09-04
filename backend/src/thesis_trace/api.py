@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated, Any, Literal, Protocol, Union
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from starlette.requests import Request
 from starlette.responses import Response
 
-from thesis_trace.application.contracts import CreateCompanyCommand, ListCompaniesQuery, SubmitEvidenceRequest
+from thesis_trace.application.contracts import (
+    CreateCompanyCommand,
+    ListCompaniesQuery,
+    PortfolioFlow,
+    SubmitEvidenceRequest,
+    ThesisLifecycleFlow,
+    ValuationFlow,
+)
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
 from thesis_trace.application.flows.evidence_stage import (
     ConfirmEvidenceStageRequest,
@@ -200,6 +207,295 @@ class ActionInboxResponse(BaseModel):
     as_of: str
 
 
+class ThesisResearchReferenceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    record_id: str = Field(min_length=1)
+    version: int = Field(ge=1)
+
+
+class ThesisCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    company_version: int = Field(ge=1)
+    title: str = Field(min_length=1, max_length=300)
+    narrative: str = Field(min_length=1, max_length=50000)
+    invalidation_conditions: list[str] = Field(min_length=1, max_length=50)
+    evidence_refs: list[ThesisResearchReferenceBody] = Field(default_factory=list, max_length=200)
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ThesisSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    title: str = Field(min_length=1, max_length=300)
+    narrative: str = Field(min_length=1, max_length=50000)
+    invalidation_conditions: list[str] = Field(min_length=1, max_length=50)
+    evidence_refs: list[ThesisResearchReferenceBody] = Field(default_factory=list, max_length=200)
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ThesisTransitionPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    target_status: Literal["draft", "active", "paused", "invalidated", "closed"]
+
+
+class ThesisTransitionBody(ThesisTransitionPreviewBody):
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    challenge_token: str | None = None
+
+
+class ThesisOutcomeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    observed_at: datetime
+    result: str = Field(min_length=1, max_length=50000)
+    evidence_refs: list[ThesisResearchReferenceBody] = Field(default_factory=list, max_length=200)
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ThesisReflectionDraftBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_draft_version: int = Field(ge=0)
+    field: Literal["original_assumption", "judgment_errors", "missing_evidence", "improvement"]
+    text: str = Field(max_length=50000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ThesisReflectionCompleteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    original_assumption: str = Field(min_length=1, max_length=50000)
+    judgment_errors: str = Field(min_length=1, max_length=50000)
+    missing_evidence: str = Field(min_length=1, max_length=50000)
+    improvement: str = Field(min_length=1, max_length=50000)
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ThesisResponse(BaseModel):
+    thesis_id: str
+    version: int
+    owner_user_id: str
+    company_id: str
+    company_version: int
+    title: str
+    narrative: str
+    status: Literal["draft", "active", "paused", "invalidated", "closed"]
+    cycle: int
+    reflection_pending: bool
+    created_at: str
+    updated_at: str
+    conditions: list[dict[str, Any]]
+    evidence_refs: list[dict[str, Any]]
+    outcome: dict[str, Any] | None
+    reflection: dict[str, Any] | None
+    reflection_draft: dict[str, Any] | None
+    valuation_draft: dict[str, Any] | None
+    valuation_snapshots: list[dict[str, Any]]
+    policy_version: str
+
+
+class ThesisTransitionPreviewResponse(BaseModel):
+    thesis_id: str
+    target_version: int
+    from_status: Literal["draft", "active", "paused", "invalidated", "closed"]
+    to_status: Literal["draft", "active", "paused", "invalidated", "closed"]
+    consequences: list[str]
+    requires_confirmation: bool
+    challenge_token: str | None = None
+    challenge_expires_at: str | None = None
+    impact_summary: dict[str, Any] | None = None
+
+
+class CostProfileSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=0)
+    buy_rate: str = Field(min_length=1)
+    minimum_buy_fee: str = Field(min_length=1)
+    sell_rate: str = Field(min_length=1)
+    minimum_sell_fee: str = Field(min_length=1)
+    tax_rate: str = Field(min_length=1)
+    effective_at: datetime
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class InvestableCashSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    cash: str = Field(min_length=1)
+    as_of: datetime
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class TradeAllocationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_id: str = Field(min_length=1, max_length=200)
+    quantity: int = Field(gt=0)
+
+
+class TradePreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    source_kind: Literal["manual", "csv"]
+    source_row_id: str = Field(min_length=1, max_length=200)
+    broker_reference: str | None = Field(default=None, max_length=200)
+    security_id: str = Field(min_length=1, max_length=100)
+    side: Literal["buy", "sell"]
+    quantity: int = Field(gt=0)
+    price: str = Field(min_length=1)
+    fees: str = Field(min_length=1)
+    tax: str = Field(min_length=1)
+    executed_at: datetime
+    allocations: list[TradeAllocationBody] = Field(min_length=1, max_length=100)
+
+
+class TradeConfirmBody(TradePreviewBody):
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    challenge_token: str = Field(min_length=1)
+
+
+class PortfolioResponse(BaseModel):
+    version: int
+    cost_profile: dict[str, Any] | None
+    cash: str
+    cash_as_of: str | None
+    holdings: list[dict[str, Any]]
+    trades: list[dict[str, Any]]
+    corrections: list[dict[str, Any]]
+    company_actions: list[dict[str, Any]]
+    exposure: dict[str, Any]
+    updated_at: str
+
+
+class TradePreviewResponse(BaseModel):
+    target_version: int
+    fingerprint: str
+    preview_digest: str
+    post_cash: str
+    nav: str
+    feasible: bool
+    reasons: list[str]
+    policy_version: str
+    challenge_token: str
+    challenge_expires_at: str
+    impact_summary: dict[str, Any]
+
+
+class CanonicalCsvPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=2_000_000)
+
+
+class CanonicalCsvPreviewResponse(BaseModel):
+    trades: list[dict[str, Any]]
+    issues: list[dict[str, Any]]
+    policy_version: str
+
+
+class TradeCorrectionPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    original_trade_id: str = Field(min_length=1, max_length=200)
+
+
+class TradeCorrectionConfirmBody(TradeCorrectionPreviewBody):
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    challenge_token: str = Field(min_length=1)
+
+
+class CompanyActionPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    security_id: str = Field(min_length=1, max_length=100)
+    action_kind: Literal["split", "capital_reduction", "stock_dividend"]
+    confirmed_post_action_shares: int = Field(ge=0)
+    cash_in_lieu: str = Field(min_length=1)
+
+
+class CompanyActionConfirmBody(CompanyActionPreviewBody):
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    challenge_token: str = Field(min_length=1)
+
+
+class PortfolioMutationPreviewResponse(BaseModel):
+    target_version: int
+    preview_digest: str
+    post_cash: str
+    original_trade_id: str | None = None
+    allocation: dict[str, Any] | None = None
+    challenge_token: str
+    challenge_expires_at: str
+    impact_summary: dict[str, Any]
+
+
+class ValuationSourceReferenceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    record_id: str = Field(min_length=1, max_length=200)
+    version: int = Field(ge=1)
+    fact_id: str = Field(min_length=1, max_length=200)
+
+
+class ValuationHistorySampleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: ValuationSourceReferenceBody
+
+
+class PeerValuationMemberBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    company_id: str = Field(min_length=1, max_length=100)
+    inclusion_reason: str = Field(min_length=1, max_length=2000)
+    source: ValuationSourceReferenceBody
+
+
+class ValuationDraftSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_thesis_version: int = Field(ge=1)
+    expected_draft_version: int = Field(ge=0)
+    method: Literal["pe", "pb", "abstain"]
+    benchmark_source: Literal["company_history", "peer_group", "abstain"]
+    benchmark_variant: Literal["median", "p75"]
+    company_history_samples: list[ValuationHistorySampleBody] = Field(default_factory=list, max_length=240)
+    peer_members: list[PeerValuationMemberBody] = Field(default_factory=list, max_length=12)
+    source_selection_reason: str = Field(min_length=1, max_length=2000)
+    basis_date: date
+    horizon_months: Literal[6, 12, 24]
+    forecast_source: ValuationSourceReferenceBody | None = None
+    quantity: str | None = Field(default=None, min_length=1)
+    buy_price: str | None = Field(default=None, min_length=1)
+    cash_dividend: str | None = Field(default=None, min_length=1)
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class ValuationPublicationPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_thesis_version: int = Field(ge=1)
+    expected_draft_version: int = Field(ge=1)
+
+
+class ValuationPublicationBody(ValuationPublicationPreviewBody):
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    challenge_token: str = Field(min_length=1)
+
+
+class ValuationPublicationPreviewResponse(BaseModel):
+    target_version: int
+    draft_version: int
+    challenge_token: str
+    challenge_expires_at: str
+    impact_summary: dict[str, Any]
+
+
 class OwnerSessionResponse(BaseModel):
     kind: Literal["owner"]
     user_id: str
@@ -377,11 +673,17 @@ class EvidenceApi:
         stage_flow: EvidenceStageFlow | None = None,
         anomaly_flow: AnomalyAssessmentFlow | None = None,
         action_inbox_flow: ActionInboxFlow | None = None,
+        thesis_flow: ThesisLifecycleFlow | None = None,
+        portfolio_flow: PortfolioFlow | None = None,
+        valuation_flow: ValuationFlow | None = None,
     ) -> None:
         self._flow = flow
         self._stage_flow = stage_flow
         self._anomaly_flow = anomaly_flow
         self._action_inbox_flow = action_inbox_flow
+        self._thesis_flow = thesis_flow
+        self._portfolio_flow = portfolio_flow
+        self._valuation_flow = valuation_flow
 
     def create_company(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -581,6 +883,87 @@ class EvidenceApi:
             actor, TransitionActionItemRequest(item_id=item_id, **body)
         ))
 
+    def _theses(self) -> ThesisLifecycleFlow:
+        if self._thesis_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._thesis_flow
+
+    def create_thesis(self, actor: AuthenticatedActor, company_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().create(actor, {"company_id": company_id, **body})
+
+    def list_theses(self, actor: AuthenticatedActor, company_id: str) -> list[dict[str, Any]]:
+        return self._theses().list_for_company(actor, company_id)
+
+    def get_thesis(self, actor: AuthenticatedActor, thesis_id: str) -> dict[str, Any]:
+        return self._theses().get(actor, thesis_id)
+
+    def save_thesis(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().save(actor, thesis_id, body)
+
+    def preview_thesis_transition(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().preview_transition(actor, thesis_id, body)
+
+    def transition_thesis(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().transition(actor, thesis_id, body)
+
+    def save_thesis_outcome(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().save_outcome(actor, thesis_id, body)
+
+    def autosave_thesis_reflection(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().autosave_reflection(actor, thesis_id, body)
+
+    def complete_thesis_reflection(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._theses().complete_reflection(actor, thesis_id, body)
+
+    def _portfolio(self) -> PortfolioFlow:
+        if self._portfolio_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._portfolio_flow
+
+    def get_portfolio(self, actor: AuthenticatedActor) -> dict[str, Any]:
+        return self._portfolio().get(actor)
+
+    def save_cost_profile(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().save_cost_profile(actor, body)
+
+    def save_investable_cash(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().save_cash(actor, body)
+
+    def preview_portfolio_trade(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().preview_trade(actor, body)
+
+    def preview_portfolio_csv(self, actor: AuthenticatedActor, content: str) -> dict[str, Any]:
+        return self._portfolio().preview_csv(actor, content)
+
+    def confirm_portfolio_trade(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().confirm_trade(actor, body)
+
+    def preview_portfolio_correction(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().preview_correction(actor, body)
+
+    def confirm_portfolio_correction(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().confirm_correction(actor, body)
+
+    def preview_portfolio_company_action(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().preview_company_action(actor, body)
+
+    def confirm_portfolio_company_action(self, actor: AuthenticatedActor, body: dict[str, Any]) -> dict[str, Any]:
+        return self._portfolio().confirm_company_action(actor, body)
+
+    def _valuations(self) -> ValuationFlow:
+        if self._valuation_flow is None:
+            raise LookupError("resource_unavailable")
+        return self._valuation_flow
+
+    def save_valuation_draft(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._valuations().save(actor, thesis_id, body)
+
+    def preview_valuation_publication(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._valuations().preview_publication(actor, thesis_id, body)
+
+    def publish_valuation(self, actor: AuthenticatedActor, thesis_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._valuations().publish(actor, thesis_id, body)
+
 
 def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: AccessApiPort | None = None) -> Any:
     """Create the delivery adapter; import FastAPI only in installed runtimes."""
@@ -745,6 +1128,227 @@ def create_fastapi_app(api: EvidenceApi, actor_provider: Any, access_api: Access
         except ValueError as error:
             code = 409 if str(error) in {"version_conflict", "idempotency_conflict"} else 422
             raise HTTPException(status_code=code, detail=str(error)) from error
+
+    def thesis_error(error: Exception) -> HTTPException:
+        code = str(error)
+        if isinstance(error, (PermissionError, LookupError)):
+            return HTTPException(status_code=404, detail="resource_unavailable")
+        if code in {"version_conflict", "idempotency_conflict", "research_version_conflict"}:
+            return HTTPException(status_code=409, detail=code)
+        return HTTPException(status_code=422, detail=code)
+
+    @app.post("/api/companies/{company_id}/theses", status_code=201, response_model=ThesisResponse)
+    async def create_thesis(
+        company_id: str, body: ThesisCreateBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.create_thesis(actor, company_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.get("/api/companies/{company_id}/theses", response_model=list[ThesisResponse])
+    async def list_theses(
+        company_id: str, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> list[dict[str, Any]]:
+        try:
+            return api.list_theses(actor, company_id)
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.get("/api/theses/{thesis_id}", response_model=ThesisResponse)
+    async def get_thesis(
+        thesis_id: str, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.get_thesis(actor, thesis_id)
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.put("/api/theses/{thesis_id}", response_model=ThesisResponse)
+    async def save_thesis(
+        thesis_id: str, body: ThesisSaveBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.save_thesis(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/theses/{thesis_id}/transition-previews", response_model=ThesisTransitionPreviewResponse)
+    async def preview_thesis_transition(
+        thesis_id: str, body: ThesisTransitionPreviewBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.preview_thesis_transition(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/theses/{thesis_id}/transitions", response_model=ThesisResponse)
+    async def transition_thesis(
+        thesis_id: str, body: ThesisTransitionBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.transition_thesis(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/theses/{thesis_id}/outcomes", response_model=ThesisResponse)
+    async def save_thesis_outcome(
+        thesis_id: str, body: ThesisOutcomeBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            payload = body.model_dump()
+            payload["observed_at"] = body.observed_at.isoformat()
+            return api.save_thesis_outcome(actor, thesis_id, payload)
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.put("/api/theses/{thesis_id}/reflection-draft", response_model=ThesisResponse)
+    async def autosave_thesis_reflection(
+        thesis_id: str, body: ThesisReflectionDraftBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.autosave_thesis_reflection(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/theses/{thesis_id}/reflections", response_model=ThesisResponse)
+    async def complete_thesis_reflection(
+        thesis_id: str, body: ThesisReflectionCompleteBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.complete_thesis_reflection(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.get("/api/portfolio", response_model=PortfolioResponse)
+    async def get_portfolio(
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.get_portfolio(actor)
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.put("/api/theses/{thesis_id}/valuation-draft", response_model=ThesisResponse)
+    async def save_valuation_draft(
+        thesis_id: str, body: ValuationDraftSaveBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.save_valuation_draft(actor, thesis_id, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post(
+        "/api/theses/{thesis_id}/valuation-publication-previews",
+        response_model=ValuationPublicationPreviewResponse,
+    )
+    async def preview_valuation_publication(
+        thesis_id: str, body: ValuationPublicationPreviewBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.preview_valuation_publication(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/theses/{thesis_id}/valuations", response_model=ThesisResponse)
+    async def publish_valuation(
+        thesis_id: str, body: ValuationPublicationBody,
+        actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.publish_valuation(actor, thesis_id, body.model_dump())
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.put("/api/portfolio/cost-profile", response_model=PortfolioResponse)
+    async def save_cost_profile(
+        body: CostProfileSaveBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.save_cost_profile(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.put("/api/portfolio/investable-cash", response_model=PortfolioResponse)
+    async def save_investable_cash(
+        body: InvestableCashSaveBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.save_investable_cash(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/trade-previews", response_model=TradePreviewResponse)
+    async def preview_portfolio_trade(
+        body: TradePreviewBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.preview_portfolio_trade(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/csv-previews", response_model=CanonicalCsvPreviewResponse)
+    async def preview_portfolio_csv(
+        body: CanonicalCsvPreviewBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.preview_portfolio_csv(actor, body.content)
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/trades", response_model=PortfolioResponse)
+    async def confirm_portfolio_trade(
+        body: TradeConfirmBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.confirm_portfolio_trade(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/trade-correction-previews", response_model=PortfolioMutationPreviewResponse)
+    async def preview_portfolio_correction(
+        body: TradeCorrectionPreviewBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.preview_portfolio_correction(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/trade-corrections", response_model=PortfolioResponse)
+    async def confirm_portfolio_correction(
+        body: TradeCorrectionConfirmBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.confirm_portfolio_correction(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/company-action-previews", response_model=PortfolioMutationPreviewResponse)
+    async def preview_portfolio_company_action(
+        body: CompanyActionPreviewBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.preview_portfolio_company_action(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
+
+    @app.post("/api/portfolio/company-actions", response_model=PortfolioResponse)
+    async def confirm_portfolio_company_action(
+        body: CompanyActionConfirmBody, actor: AuthenticatedActor = Depends(actor_provider),
+    ) -> dict[str, Any]:
+        try:
+            return api.confirm_portfolio_company_action(actor, body.model_dump(mode="json"))
+        except (PermissionError, LookupError, ValueError) as error:
+            raise thesis_error(error) from error
 
     if access_api is not None:
         from fastapi.exceptions import RequestValidationError

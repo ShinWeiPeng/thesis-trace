@@ -6,7 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "thesis-trace-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["fastapi==0.141.1", "uvicorn==0.35.0", "psycopg[binary]==3.2.10", "PyJWT[crypto]==2.10.1"]
+dependencies = [
+  "alembic==1.19.1",
+  "fastapi==0.141.1",
+  "psycopg[binary]==3.2.10",
+  "PyJWT[crypto]==2.10.1",
+  "SQLAlchemy==2.0.52",
+  "uvicorn==0.35.0",
+]
 
 [project.optional-dependencies]
 test = ["pytest==9.1.1", "httpx==0.28.1"]

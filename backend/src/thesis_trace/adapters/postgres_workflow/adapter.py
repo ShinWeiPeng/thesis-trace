@@ -21,7 +21,8 @@ from thesis_trace.modules.workflow.contracts import (
     ActionPriority,
     ActionPriorityEvaluation,
 )
-from thesis_trace.platform.postgres import DatabaseUrlProvider, _psycopg
+from thesis_trace.platform.database import DatabaseUrlProvider
+from thesis_trace.platform.postgres import _psycopg
 
 
 _OPEN_STATUSES = ("pending", "in_progress", "deferred")

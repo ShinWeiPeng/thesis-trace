@@ -1,6 +1,6 @@
 # ALG-0021: Draft autosave
 ## Metadata
-- Status: proposed
+- Status: accepted
 - Owner module: thesis
 - Product feature: Long-text draft autosave
 - Flow IDs: draft-autosave-flow
@@ -31,4 +31,6 @@ Fake-timer burst tests, concurrent version conflict, network loss/recovery, idem
 ## Risks and monitoring
 Large drafts/churn; cap payload and monitor save conflicts/failures.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-29
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

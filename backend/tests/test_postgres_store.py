@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+import runpy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from hashlib import sha256
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import psycopg
@@ -24,7 +28,7 @@ from thesis_trace.platform.postgres import (
     bootstrap_schema,
     verify_schema_compatibility,
 )
-from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot
+from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot, ValuationSourceFact
 from thesis_trace.modules.research.evidence_stage.contracts import (
     ConfirmDimensionFactsCommand,
     DimensionFacts,
@@ -206,7 +210,91 @@ def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: Postg
         (6, "owner_confirmed_evidence_stage"),
         (7, "shadow_first_anomaly_assessment"),
         (8, "anomaly_review_action_inbox"),
+        (9, "personal_thesis_lifecycle"),
+        (10, "valuation_portfolio_trade"),
+        (11, "thesis_valuation_publication"),
+        (12, "portfolio_official_security"),
+        (13, "research_valuation_source_facts"),
+        (14, "valuation_forecast_target_date"),
     ]
+
+
+def test_valuation_source_facts_enforce_rls_append_only_runtime_grants(store: PostgresEvidenceStore) -> None:
+    evidence_id = str(uuid.uuid4())
+    store.commit_admission(
+        idempotency_key="valuation-fact-intake",
+        record=EvidenceRecord(evidence_id, 1, "2330", 1, "https://example.com/facts", EvidenceStatus.RECEIVED),
+        audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
+        job=CollectionRequest(evidence_id, 1, "https://example.com/facts", "collect:valuation-facts"),
+        accepted=EvidenceAccepted(evidence_id, 1),
+    )
+    lease = store.claim_collection_job()
+    assert lease is not None
+    assert store.complete_collection(evidence_id, CollectedSourceSnapshot(
+        "https://example.com/facts", "MOPS", "valuation-facts-hash",
+        "2026-08-29T00:00:00+00:00", source_category="A",
+    ), lease.lease_token)
+    record = store.get_record(evidence_id)
+    snapshot_id = store.get_source_snapshot_id(evidence_id)
+    assert record is not None and snapshot_id is not None
+    store.save_valuation_facts(evidence_id, (ValuationSourceFact(
+        "pe-history-1", evidence_id, record.version, snapshot_id, "2330", "pe",
+        "history_multiple", date(2026, 8, 1), Decimal("20"), Decimal("1"),
+    ),))
+
+    url = os.environ["THESIS_TRACE_TEST_DATABASE_URL"]
+    apply_runtime_grants = runpy.run_path(
+        str(Path(__file__).resolve().parents[2] / "infra/postgres/run-production-migrations.py")
+    )["apply_runtime_grants"]
+    with psycopg.connect(url) as connection:
+        for role_name in ("thesis_trace_api", "thesis_trace_collector", "thesis_trace_ai_worker"):
+            connection.execute(
+                f"""DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{role_name}')
+                THEN CREATE ROLE {role_name} NOLOGIN NOBYPASSRLS; END IF; END $$"""
+            )
+        apply_runtime_grants(connection)
+        assert connection.execute(
+            """SELECT relrowsecurity AND relforcerowsecurity FROM pg_class
+            WHERE oid='research.valuation_source_facts'::regclass"""
+        ).fetchone()[0] is True
+        api_privileges = connection.execute(
+            """SELECT has_table_privilege('thesis_trace_api','research.valuation_source_facts','SELECT'),
+            has_table_privilege('thesis_trace_api','research.valuation_source_facts','INSERT'),
+            has_table_privilege('thesis_trace_api','research.valuation_source_facts','UPDATE'),
+            has_table_privilege('thesis_trace_api','research.valuation_source_facts','DELETE')"""
+        ).fetchone()
+        assert api_privileges == (True, False, False, False)
+        collector_privileges = connection.execute(
+            """SELECT has_table_privilege('thesis_trace_collector','research.valuation_source_facts','SELECT'),
+            has_table_privilege('thesis_trace_collector','research.valuation_source_facts','INSERT'),
+            has_table_privilege('thesis_trace_collector','research.valuation_source_facts','UPDATE'),
+            has_table_privilege('thesis_trace_collector','research.valuation_source_facts','DELETE')"""
+        ).fetchone()
+        assert collector_privileges == (True, True, False, False)
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with connection.transaction():
+                connection.execute("SET LOCAL ROLE thesis_trace_api")
+                connection.execute("SELECT set_config('app.role','owner',true)")
+                assert connection.execute("SELECT count(*) FROM research.valuation_source_facts").fetchone()[0] == 1
+                connection.execute("DELETE FROM research.valuation_source_facts")
+        with connection.transaction():
+            connection.execute("SET LOCAL ROLE thesis_trace_collector")
+            connection.execute("SELECT set_config('app.role','collector',true)")
+            connection.execute(
+                """INSERT INTO research.valuation_source_facts(
+                evidence_id,fact_id,evidence_version,source_snapshot_id,company_id,method,fact_kind,
+                observed_on,value,denominator,policy_version)
+                VALUES(%s,'pe-history-2',%s,%s::uuid,'2330','pe','history_multiple',%s,21,1,'valuation-source-fact-v1')""",
+                (evidence_id, record.version, snapshot_id, date(2026, 7, 1)),
+            )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with connection.transaction():
+                connection.execute("SET LOCAL ROLE thesis_trace_collector")
+                connection.execute("SELECT set_config('app.role','collector',true)")
+                connection.execute(
+                    "UPDATE research.valuation_source_facts SET value=22 WHERE evidence_id=%s",
+                    (evidence_id,),
+                )
 
 
 def test_anomaly_request_job_and_result_are_atomic_version_bound_and_shadow_only(

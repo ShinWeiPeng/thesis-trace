@@ -24,6 +24,14 @@ from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAsse
 
 
 @dataclass(frozen=True, slots=True)
+class ResearchRecordReference:
+    record_type: str
+    record_id: str
+    version: int
+    company_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ResearchActorContext:
     actor_id: str
     may_confirm_evidence_stage: bool

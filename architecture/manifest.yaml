@@ -125,6 +125,17 @@ modules:
     - application.query_action_inbox
     - application.query_action_item
     - application.transition_action_item
+    - application.create_personal_thesis
+    - application.query_personal_theses
+    - application.save_personal_thesis
+    - application.transition_personal_thesis
+    - application.save_thesis_outcome
+    - application.autosave_thesis_reflection
+    - application.complete_thesis_reflection
+    - application.save_valuation_draft
+    - application.publish_valuation
+    - application.manage_portfolio
+    - application.confirm_portfolio_trade
     output_ports:
     - application.events
     - application.recommendation_provider
@@ -132,6 +143,7 @@ modules:
     emitted_events:
     - application.evidence_submission_completed
     - application.action_item_operation_failed
+    - application.thesis_operation_failed
     owned_state: []
     side_effects:
     - description: Coordinate child commands and map child events.
@@ -218,6 +230,20 @@ modules:
   - path: backend/src/thesis_trace/application/flows/anomaly_assessment.py
     symbol: ActionInboxResult
     kind: contract
+  - path: backend/src/thesis_trace/application/contracts.py
+    symbol: ThesisLifecycleFlow
+    kind: orchestrator
+  - path: backend/src/thesis_trace/application/contracts.py
+    symbol: ThesisLifecycleRequest
+    kind: contract
+  - path: backend/src/thesis_trace/application/contracts.py
+    symbol: ThesisLifecycleResult
+    kind: contract
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: ValuationFlow, kind: orchestrator}
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: PortfolioFlow, kind: orchestrator}
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisConfirmedTransitionPort, kind: port}
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: ValuationConfirmedPublicationPort, kind: port}
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: PortfolioConfirmedTradePort, kind: port}
   - path: backend/src/thesis_trace/application/ai_ports.py
     symbol: RecommendationProviderPort
     kind: port
@@ -252,8 +278,12 @@ modules:
   - evidence_stage
   - anomaly_assessment
   - workflow_domain
+  - thesis_domain
   - postgres_research_adapter
   - postgres_workflow_adapter
+  - postgres_thesis_adapter
+  - postgres_portfolio_adapter
+  - postgres_atomic_adapter
   - restricted_source_fetch_adapter
   - runtime_configuration_adapter
   - postgres_access_adapter
@@ -457,6 +487,9 @@ modules:
     kind: contract
   - path: backend/src/thesis_trace/modules/research/__init__.py
     symbol: ResearchAnomalyResult
+    kind: contract
+  - path: backend/src/thesis_trace/modules/research/__init__.py
+    symbol: ResearchRecordReference
     kind: contract
   - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
     symbol: EvidenceRecord
@@ -702,7 +735,7 @@ modules:
 - id: thesis_domain
   level: L1
   role: domain
-  implementation_status: planned
+  implementation_status: implemented
   paths:
   - backend/src/thesis_trace/modules/thesis
   parent: thesis_trace_application
@@ -710,37 +743,65 @@ modules:
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/modules/thesis/contracts.py
+  - backend/src/thesis_trace/modules/thesis/ports.py
   description:
-    purpose: Own Thesis lifecycle
-    valuation inputs: null
-    outcomes: null
-    and reflections.: null
+    purpose: Own personal Thesis lifecycle cycles, valuation drafts and immutable publications, invalidation conditions, Evidence links, Outcomes and Reflections.
     diagram_summaries:
       zh-TW: 管理 Thesis 生命週期與反思
-    input_ports: []
-    output_ports: []
+    input_ports:
+    - thesis.create
+    - thesis.query
+    - thesis.save
+    - thesis.transition
+    - thesis.save_outcome
+    - thesis.autosave_reflection
+    - thesis.complete_reflection
+    - thesis.save_valuation_draft
+    - thesis.publish_valuation
+    output_ports:
+    - thesis.lifecycle_store
     emitted_events: []
     owned_state: []
-    side_effects: []
+    side_effects:
+    - description: Persist owner-scoped current state, immutable lifecycle versions, cycles, conditions, links, Outcomes, Reflections, receipts and audit through a demand-owned port.
     errors:
     - id: thesis_domain-error-1
       condition: Reject illegal lifecycle transitions.
-      event: application.evidence_submission_completed
+      event: application.thesis_operation_failed
       handling: Reject illegal lifecycle transitions.
     invariants:
-    - Historical decisions are append-only.
+    - Thesis state is visible and mutable only by its personal owner.
+    - Lifecycle versions, prior cycles, Outcomes, completed Reflections and published invalidation conditions are append-only.
+    - Closing requires current-cycle Outcome and completed Reflection; invalidation never waits for Reflection.
+    - Reopen starts exactly one new cycle and never rewrites a prior cycle.
   entrypoints:
   - path: backend/src/thesis_trace/modules/thesis/service.py
-    symbol: thesis_domain_contract
-    kind: boundary
+    symbol: ThesisService
+    kind: service
   public_symbols:
-  - path: backend/src/thesis_trace/modules/thesis/service.py
-    symbol: thesis_domain_contract
-    kind: boundary
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisRecord, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisStatus, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: CreateThesisCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveThesisCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: TransitionThesisCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveOutcomeCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveReflectionDraftCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: CompleteReflectionCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisInvalidationProjection, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisOutcome, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ReflectionDraftRevision, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisReflection, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisTransitionPreview, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationDraft, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationSnapshot, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveValuationDraftCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: PublishValuationCommand, kind: contract}
+  - {path: backend/src/thesis_trace/modules/thesis/ports.py, symbol: ThesisStorePort, kind: port}
+  - {path: backend/src/thesis_trace/modules/thesis/service.py, symbol: ThesisService, kind: service}
 - id: portfolio_domain
   level: L1
   role: domain
-  implementation_status: planned
+  implementation_status: implemented
   paths:
   - backend/src/thesis_trace/modules/portfolio
   parent: thesis_trace_application
@@ -749,18 +810,15 @@ modules:
   public_headers:
   - backend/src/thesis_trace/modules/portfolio/contracts.py
   description:
-    purpose: Own holdings
-    trades: null
-    allocation: null
-    exposure: null
-    and immutable risk snapshots.: null
+    purpose: Own versioned Cost Profiles, investable cash, canonical Trades, bucket allocations, holdings and deterministic exposure snapshots.
     diagram_summaries:
       zh-TW: 管理投資組合與風險快照
     input_ports: []
-    output_ports: []
+    output_ports: [portfolio.store]
     emitted_events: []
     owned_state: []
-    side_effects: []
+    side_effects:
+    - description: Persist owner-scoped current and append-only Portfolio state through a demand-owned port.
     errors:
     - id: portfolio_domain-error-1
       condition: Reject incomplete or over-allocated trades.
@@ -770,12 +828,13 @@ modules:
     - Risk aggregates all buckets for a security.
   entrypoints:
   - path: backend/src/thesis_trace/modules/portfolio/service.py
-    symbol: portfolio_domain_contract
-    kind: boundary
+    symbol: PortfolioService
+    kind: service
   public_symbols:
-  - path: backend/src/thesis_trace/modules/portfolio/service.py
-    symbol: portfolio_domain_contract
-    kind: boundary
+  - {path: backend/src/thesis_trace/modules/portfolio/service.py, symbol: PortfolioService, kind: service}
+  - {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: PortfolioStorePort, kind: port}
+  - {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioRecord, kind: contract}
+  - {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradePreview, kind: contract}
 - id: recommendation_domain
   level: L1
   role: domain
@@ -907,6 +966,9 @@ modules:
   - path: backend/src/thesis_trace/modules/notification/service.py
     symbol: notification_domain_contract
     kind: boundary
+  - path: backend/src/thesis_trace/application/contracts.py
+    symbol: ThesisConfirmedTransitionPort
+    kind: port
   public_symbols:
   - path: backend/src/thesis_trace/modules/notification/service.py
     symbol: notification_domain_contract
@@ -930,6 +992,17 @@ modules:
   - application.query_action_inbox
   - application.query_action_item
   - application.transition_action_item
+  - application.create_personal_thesis
+  - application.query_personal_theses
+  - application.save_personal_thesis
+  - application.transition_personal_thesis
+  - application.save_thesis_outcome
+  - application.autosave_thesis_reflection
+  - application.complete_thesis_reflection
+  - application.save_valuation_draft
+  - application.publish_valuation
+  - application.manage_portfolio
+  - application.confirm_portfolio_trade
   public_headers:
   - backend/src/thesis_trace/api.py
   description:
@@ -967,6 +1040,7 @@ modules:
   parent: null
   depends_on:
   - workflow_domain
+  - postgres_database_support
   implements_ports:
   - workflow.action_item_store
   public_headers:
@@ -996,6 +1070,141 @@ modules:
   - path: backend/src/thesis_trace/adapters/postgres_workflow/adapter.py
     symbol: PostgresWorkflowStore
     kind: adapter
+- id: postgres_database_support
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/platform/database.py
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers:
+  - backend/src/thesis_trace/platform/database.py
+  description:
+    purpose: Create secret-safe SQLAlchemy 2 engines and bounded PostgreSQL connections for repository adapters.
+    diagram_summaries:
+      zh-TW: 建立不保存資料庫密鑰的連線邊界
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Resolve one database URL only when Psycopg opens a connection.
+    errors: []
+    invariants:
+    - Resolved database URLs are never retained in engine state.
+    - One connection context owns one bounded SQLAlchemy transaction.
+  entrypoints:
+  - {path: backend/src/thesis_trace/platform/database.py, symbol: create_database_engine, kind: adapter}
+  public_symbols:
+  - {path: backend/src/thesis_trace/platform/database.py, symbol: DatabaseUrlProvider, kind: contract}
+  - {path: backend/src/thesis_trace/platform/database.py, symbol: PostgresUnavailable, kind: error}
+- id: postgres_thesis_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/adapters/postgres_thesis
+  parent: null
+  depends_on:
+  - thesis_domain
+  - postgres_database_support
+  implements_ports:
+  - thesis.lifecycle_store
+  public_headers:
+  - backend/src/thesis_trace/adapters/postgres_thesis/adapter.py
+  description:
+    purpose: Persist relational personal Thesis lifecycle state and immutable history in the Thesis-owned PostgreSQL schema under forced RLS through SQLAlchemy 2 and Psycopg.
+    diagram_summaries:
+      zh-TW: 保存個人 Thesis 生命週期與反思
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Execute bounded owner-scoped Thesis transactions and consistent list/detail queries.
+    errors: []
+    invariants:
+    - Only the Thesis schema is read or written for Thesis persistence.
+    - Current rows and immutable version, cycle, Outcome, Reflection and audit rows commit atomically.
+    - Actor-scoped idempotency receipts reject mismatched retries.
+    - Request-scoped SQLAlchemy connections never cross a functional Port or use process-global transaction binding.
+    - General Thesis aggregate persistence uses declared SQLAlchemy Core mappings; bounded JSON is retained only for immutable record and valuation calculation snapshots.
+  entrypoints:
+  - path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py
+    symbol: PostgresThesisStore
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py
+    symbol: PostgresThesisStore
+    kind: adapter
+- id: postgres_portfolio_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths:
+  - backend/src/thesis_trace/adapters/postgres_portfolio
+  parent: null
+  depends_on: [portfolio_domain, postgres_database_support]
+  implements_ports: [portfolio.store]
+  public_headers: [backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py]
+  description:
+    purpose: Persist normalized owner-scoped Portfolio current state, immutable versions, receipts and audit under forced RLS through SQLAlchemy 2 and Psycopg.
+    diagram_summaries: {zh-TW: 保存投資組合、交易與曝險快照}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Execute bounded owner-scoped Portfolio transactions.}]
+    errors: []
+    invariants:
+    - Only the Portfolio schema is read or written by this adapter.
+    - Confirmed trade state, versions, receipts and audit commit atomically.
+    - Current cash, Cost Profile, holdings, Trades, allocations, corrections and company actions use relational owner rows rather than one aggregate JSON document.
+    - General Portfolio persistence uses declared SQLAlchemy Core mappings and the legacy aggregate JSON tables are removed after transactional migration backfill.
+    - Request-scoped SQLAlchemy connections never cross a functional Port or use process-global transaction binding.
+  entrypoints:
+  - {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: PostgresPortfolioStore, kind: adapter}
+  public_symbols:
+  - {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: PostgresPortfolioStore, kind: adapter}
+- id: postgres_atomic_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [backend/src/thesis_trace/adapters/postgres_atomic]
+  parent: null
+  depends_on:
+  - thesis_trace_application
+  - postgres_access_adapter
+  - postgres_research_adapter
+  - postgres_thesis_adapter
+  - postgres_portfolio_adapter
+  implements_ports:
+  - application.thesis_confirmed_transition
+  - application.portfolio_confirmed_trade
+  - application.valuation_confirmed_publication
+  public_headers: [backend/src/thesis_trace/adapters/postgres_atomic/adapter.py]
+  description:
+    purpose: Own transaction-local coordination of confirmation consumption with consequential Thesis and Portfolio mutations.
+    diagram_summaries: {zh-TW: 原子提交確認與研究投資寫入}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Bind concrete PostgreSQL stores to one caller-owned SQLAlchemy transaction.}]
+    errors: []
+    invariants:
+    - Database connections remain inside L3 adapters and never cross a functional port into L0.
+    - Confirmation consumption, domain mutation, receipt, and audit commit or roll back together.
+  entrypoints:
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedThesisTransition, kind: adapter}
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedPortfolioTrade, kind: adapter}
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedValuationPublication, kind: adapter}
+  public_symbols:
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedThesisTransition, kind: adapter}
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedPortfolioTrade, kind: adapter}
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedValuationPublication, kind: adapter}
 - id: postgres_research_adapter
   level: L3+
   role: adapter
@@ -1004,6 +1213,7 @@ modules:
   - backend/src/thesis_trace/platform/postgres.py
   parent: null
   depends_on:
+  - postgres_database_support
   - evidence_intake
   - evidence_collection
   - evidence_stage
@@ -1342,7 +1552,7 @@ modules:
   implementation_status: implemented
   paths: [backend/src/thesis_trace/adapters/postgres_access]
   parent: null
-  depends_on: [identity_registry, session_management, confirmation_challenge, access_domain]
+  depends_on: [identity_registry, session_management, confirmation_challenge, access_domain, postgres_database_support]
   implements_ports: [access.account_repository, access.session_repository, access.challenge_repository, access.security_context]
   public_headers: [backend/src/thesis_trace/adapters/postgres_access/adapter.py]
   description:
@@ -1363,7 +1573,7 @@ modules:
   implementation_status: implemented
   paths: [frontend/src/access]
   parent: null
-  depends_on: []
+  depends_on: [react_workflow_adapter, react_thesis_adapter, react_portfolio_adapter]
   implements_ports: []
   public_headers: [frontend/src/access/routes.tsx]
   description:
@@ -1399,13 +1609,55 @@ modules:
     invariants: [The browser never computes priority safety or assignee, Selected item and list query are route-addressable, Narrow layout requires no horizontal scrolling for primary actions.]
   entrypoints: [{path: frontend/src/workflow/routes.tsx, symbol: ActionInboxRoutes, kind: router}]
   public_symbols: [{path: frontend/src/workflow/client.ts, symbol: WorkflowClient, kind: view-contract}]
+- id: react_thesis_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [frontend/src/thesis]
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers: [frontend/src/thesis/routes.tsx]
+  description:
+    purpose: Present personal Thesis cards, valuation drafts/publications, lifecycle cycles, Outcomes and Reflections through generated Server contracts.
+    diagram_summaries: {zh-TW: 呈現個人 Thesis、結果與反思}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Submit explicit lifecycle intent and autosave eligible long text while keeping route and unsent drafts volatile.}]
+    errors: []
+    invariants: [The browser never computes canonical Thesis state, Company tab and selected Thesis identity remain route-addressable, Autosave conflict stops further writes until explicit user recovery.]
+  entrypoints: [{path: frontend/src/thesis/routes.tsx, symbol: ThesisRoutes, kind: router}]
+  public_symbols: [{path: frontend/src/thesis/client.ts, symbol: ThesisClient, kind: view-contract}]
+- id: react_portfolio_adapter
+  level: L3+
+  role: adapter
+  implementation_status: implemented
+  paths: [frontend/src/portfolio]
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers: [frontend/src/portfolio/routes.tsx]
+  description:
+    purpose: Present Owner-only Cost Profile, cash, server trade preview/confirmation, holdings and exposure.
+    diagram_summaries: {zh-TW: 呈現投資組合與交易確認}
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects: [{description: Submit Owner intent and retain exact challenge only in volatile dialog memory.}]
+    errors: []
+    invariants: [The browser never computes holdings or exposure authority, Learner and Admin receive no Portfolio route, Confirmed Trades require a fresh Server preview and reason.]
+  entrypoints: [{path: frontend/src/portfolio/routes.tsx, symbol: PortfolioRoutes, kind: router}]
+  public_symbols: [{path: frontend/src/portfolio/client.ts, symbol: PortfolioClient, kind: view-contract}]
 - id: postgres_migration_entrypoint
   level: L3+
   role: adapter
   implementation_status: implemented
   paths: [infra/postgres/run-production-migrations.py]
   parent: null
-  depends_on: [postgres_research_adapter, postgres_access_adapter, postgres_workflow_adapter]
+  depends_on: [postgres_research_adapter, postgres_access_adapter, postgres_workflow_adapter, postgres_thesis_adapter, postgres_portfolio_adapter, postgres_database_support]
   implements_ports: []
   public_headers: []
   description:
@@ -1613,6 +1865,198 @@ ports:
     - {code: invalid_transition, condition: Target, reason, defer time, or safety verification is invalid.}
     - {code: version_conflict, condition: Expected item version or retry data is stale or mismatched.}
   symbols: [TransitionActionItemRequest, ActionItemResult]
+- id: application.thesis_confirmed_transition
+  owner: thesis_trace_application
+  direction: output
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [postgres_atomic_adapter]
+  description:
+    purpose: Atomically consume an exact confirmation and commit one consequential Thesis transition.
+    data: Authenticated actor, target/version, transition, reason, idempotency key, challenge token and Server time.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Challenge, actor, or target is absent, stale, or unauthorized.}]
+  symbols: [ThesisConfirmedTransitionPort]
+- id: application.portfolio_confirmed_trade
+  owner: thesis_trace_application
+  direction: output
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [postgres_atomic_adapter]
+  description:
+    purpose: Atomically consume an exact confirmation and commit one Trade, correction, or company action.
+    data: Authenticated actor, immutable preview, reason, idempotency key, challenge token and Server time.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Challenge or immutable preview binding is absent, stale, or unauthorized.}]
+  symbols: [PortfolioConfirmedTradePort]
+- id: application.valuation_confirmed_publication
+  owner: thesis_trace_application
+  direction: output
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [postgres_atomic_adapter]
+  description:
+    purpose: Atomically revalidate bound Evidence and Cost Profile versions, consume confirmation, and publish a Valuation snapshot.
+    data: Authenticated actor, Thesis/draft versions, exact source binding, reason, idempotency key, challenge token and Server time.
+    timing: sync
+    immediate_rejections: [{code: valuation_source_invalid, condition: Challenge, Cost Profile, draft, Evidence, snapshot, or fact binding is stale or mismatched.}]
+  symbols: [ValuationConfirmedPublicationPort]
+- id: application.create_personal_thesis
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Create one authenticated Owner- or Learner-owned draft Thesis in an authorized Company.
+    data: Actor, Company identity/version, title, narrative, invalidation conditions, Evidence references and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Actor or Company is absent or unauthorized.}, {code: invalid_request, condition: Required identity, text, reference or idempotency data is invalid.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.query_personal_theses
+  owner: thesis_trace_application
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Query only the authenticated actor's Thesis cards or one detail/cycle projection in a Company.
+    data: Actor, Company identity and optional Thesis identity.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Actor, Company or Thesis is absent or outside personal scope.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.save_personal_thesis
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Explicitly save a personal Thesis draft, published invalidation-condition version or Evidence links.
+    data: Actor, Thesis/expected version, bounded fields, exact Research references, reason and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Target or reference is absent or unauthorized.}, {code: version_conflict, condition: Expected version or retry digest is stale or mismatched.}, {code: invalid_request, condition: Fields or reason fail policy.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.transition_personal_thesis
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Preview or commit one legal direct or consequential personal Thesis lifecycle transition.
+    data: Actor, Thesis/expected version, target status, reason, idempotency and optional exact confirmation challenge.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Target is absent or outside personal scope.}, {code: invalid_transition, condition: Edge or prerequisite fails ALG-0013.}, {code: confirmation_required, condition: Consequential operation lacks a current exact challenge.}, {code: version_conflict, condition: Target version changed.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.save_thesis_outcome
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Append one current-cycle personal Thesis Outcome version through explicit save.
+    data: Actor, Thesis/expected version, observation time, result text, Evidence references, reason and idempotency.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Target or Evidence is absent or unauthorized.}, {code: version_conflict, condition: Expected version is stale.}, {code: invalid_request, condition: Outcome fields are invalid.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.autosave_thesis_reflection
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Append one eligible unfinished Reflection draft revision without completing it.
+    data: Actor, Thesis/cycle, expected draft version, one eligible long-text field and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Target is absent or unauthorized.}, {code: version_conflict, condition: Draft expected version is stale.}, {code: invalid_request, condition: Field or payload is not autosave eligible.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.complete_thesis_reflection
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Explicitly append a completed current-cycle Reflection with all required learning sections.
+    data: Actor, Thesis/expected version, original assumption, judgment errors, missing Evidence, improvement, reason and idempotency.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Target is absent or unauthorized.}, {code: version_conflict, condition: Expected version is stale.}, {code: invalid_request, condition: Required Reflection section is blank or invalid.}]
+  symbols: [ThesisLifecycleFlow, ThesisLifecycleRequest, ThesisLifecycleResult]
+- id: application.save_valuation_draft
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Save and deterministically evaluate one Owner valuation draft against an exact Cost Profile version.
+    data: Owner, Thesis/draft versions, method, source-bound samples, horizon and Decimal forecast inputs.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Owner, Thesis or Portfolio is unavailable.}, {code: version_conflict, condition: Thesis or draft version is stale.}, {code: valuation_abstained, condition: Samples, costs, horizon or cash flow fail closed.}]
+  symbols: [ValuationFlow]
+- id: application.publish_valuation
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Preview and atomically publish one immutable valuation snapshot with an exact challenge.
+    data: Owner, Thesis/draft versions, exact challenge, reason and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: confirmation_required, condition: Challenge is absent expired or mismatched.}, {code: forecast_expired, condition: Draft validity has expired.}, {code: version_conflict, condition: Thesis or draft version changed.}]
+  symbols: [ValuationFlow, ValuationConfirmedPublicationPort]
+- id: application.manage_portfolio
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Save/query Owner Cost Profile, cash, holdings and server exposure projections.
+    data: Owner, expected Portfolio version, Decimal values, reason and idempotency key.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Actor is not Owner.}, {code: version_conflict, condition: Portfolio version is stale.}, {code: invalid_request, condition: Decimal or reason is invalid.}]
+  symbols: [PortfolioFlow]
+- id: application.confirm_portfolio_trade
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by: [fastapi_entrypoint]
+  description:
+    purpose: Preview deterministic Trade/allocation/exposure results and atomically confirm them with an exact challenge.
+    data: Owner, canonical trade intent, explicit buckets, authoritative classifications, challenge, reason and idempotency.
+    timing: sync
+    immediate_rejections: [{code: confirmation_required, condition: Challenge is absent expired or mismatched.}, {code: version_conflict, condition: Portfolio version changed.}, {code: risk_cap, condition: Post-trade exposure exceeds a hard cap.}]
+  symbols: [PortfolioFlow, PortfolioConfirmedTradePort]
+- id: thesis.save_valuation_draft
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Evaluate and save a versioned valuation draft., data: SaveValuationDraftCommand., timing: sync, immediate_rejections: []}
+  symbols: [SaveValuationDraftCommand, ValuationDraft]
+- id: thesis.publish_valuation
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Append an immutable confirmed valuation snapshot., data: PublishValuationCommand., timing: sync, immediate_rejections: []}
+  symbols: [PublishValuationCommand, ValuationSnapshot]
+- id: portfolio.store
+  owner: portfolio_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/portfolio/ports.py
+  implemented_by: [postgres_portfolio_adapter]
+  description: {purpose: Persist/query owner Portfolio state atomically., data: PortfolioRecord and command receipt primitives., timing: sync, immediate_rejections: []}
+  symbols: [PortfolioStorePort, PortfolioRecord]
 - id: application.recommendation_provider
   owner: thesis_trace_application
   direction: output
@@ -2174,6 +2618,74 @@ ports:
     - {code: conflict, condition: Fingerprint, idempotency, or expected-version constraint fails.}
     - {code: resource_unavailable, condition: Authorization scope or persistence is unavailable.}
   symbols: [ActionItemStorePort]
+- id: thesis.create
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Create one personal draft Thesis., data: Thesis actor and Server-validated Company/research primitives., timing: sync, immediate_rejections: [{code: forbidden, condition: Actor lacks personal Thesis authority.}, {code: invalid_request, condition: Required fields are invalid.}]}
+  symbols: [CreateThesisCommand, ThesisRecord]
+- id: thesis.query
+  owner: thesis_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Query owner-scoped Thesis cards details cycles and invalidation projections., data: Thesis actor, Company and optional Thesis identity., timing: sync, immediate_rejections: [{code: resource_unavailable, condition: Target is absent or outside personal scope.}]}
+  symbols: [ThesisRecord, ThesisInvalidationProjection]
+- id: thesis.save
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Save versioned Thesis fields conditions and Evidence links., data: Save command with expected version and idempotency., timing: sync, immediate_rejections: [{code: version_conflict, condition: Version or retry digest mismatches.}, {code: invalid_request, condition: Field or reference validation fails.}]}
+  symbols: [SaveThesisCommand, ThesisRecord]
+- id: thesis.transition
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Apply ALG-0013 to one personal Thesis., data: Actor target status expected version reason confirmation metadata and Server time., timing: sync, immediate_rejections: [{code: invalid_transition, condition: Edge or prerequisite fails.}, {code: version_conflict, condition: Target is stale.}]}
+  symbols: [TransitionThesisCommand, ThesisRecord, ThesisTransitionPreview]
+- id: thesis.save_outcome
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Append a current-cycle Outcome version., data: Outcome command and Server-validated Evidence references., timing: sync, immediate_rejections: [{code: invalid_request, condition: Outcome is incomplete.}, {code: version_conflict, condition: Thesis is stale.}]}
+  symbols: [SaveOutcomeCommand, ThesisOutcome, ThesisRecord]
+- id: thesis.autosave_reflection
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Append an unfinished Reflection draft revision under ALG-0021., data: Eligible field text expected draft version and idempotency., timing: sync, immediate_rejections: [{code: version_conflict, condition: Draft version is stale.}, {code: invalid_request, condition: Field is not eligible.}]}
+  symbols: [SaveReflectionDraftCommand, ReflectionDraftRevision]
+- id: thesis.complete_reflection
+  owner: thesis_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/thesis/contracts.py
+  implemented_by: []
+  description: {purpose: Append a completed current-cycle Reflection version., data: Four required learning sections expected Thesis version reason and idempotency., timing: sync, immediate_rejections: [{code: invalid_request, condition: A required section is blank.}, {code: version_conflict, condition: Thesis is stale.}]}
+  symbols: [CompleteReflectionCommand, ThesisReflection, ThesisRecord]
+- id: thesis.lifecycle_store
+  owner: thesis_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/thesis/ports.py
+  implemented_by: [postgres_thesis_adapter]
+  description:
+    purpose: Atomically persist and query owner-scoped Thesis current state, immutable versions/cycles/conditions/links/Outcomes/Reflections/receipts/audit.
+    data: Thesis semantic commands and values without Access, Research, HTTP, ORM, SQL or session representations.
+    timing: sync
+    immediate_rejections: [{code: conflict, condition: Idempotency, uniqueness or expected-version constraint fails.}, {code: resource_unavailable, condition: RLS scope or persistence is unavailable.}]
+  symbols: [ThesisStorePort]
 events:
 - id: platform.migration_failed
   owner: postgres_migration_entrypoint
@@ -2447,6 +2959,17 @@ events:
     payload_fields:
     - {name: code, type: string, meaning: Stable non-secret failure category.}
     intended_consumers: [fastapi_entrypoint]
+- id: application.thesis_operation_failed
+  owner: thesis_trace_application
+  output_port: application.events
+  delivery: at-most-once
+  envelope: [event_type, source, correlation_id, stream_id, sequence, payload]
+  lifecycle: [received, validated, processing, succeeded, failed]
+  description:
+    purpose: Describe a stable personal Thesis command or query rejection without disclosing inaccessible record existence.
+    emitted_when: Authorization, reference, transition, confirmation, version, idempotency or persistence validation rejects.
+    payload_fields: [{name: code, type: string, meaning: Stable non-secret Thesis failure code.}]
+    intended_consumers: [fastapi_entrypoint]
 - id: application.evidence_submission_completed
   owner: thesis_trace_application
   output_port: application.events
@@ -2474,6 +2997,637 @@ events:
     intended_consumers:
     - fastapi_entrypoint
 types:
+- {id: postgresportfoliosecuritycontext, owner: postgres_portfolio_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: _SecurityContext, kind: protocol}, visibility: private, semantic_kind: adapter-binding, description: "Minimal RLS context projection consumed by Portfolio persistence.", lifetime: One request, mutability: immutable, mutation_authority: [], consumers: [postgres_portfolio_adapter], references: [], fields: []}
+- {id: postgresportfolioconnection, owner: postgres_portfolio_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: _Connection, kind: class}, visibility: private, semantic_kind: adapter-binding, description: "Transaction-scoped SQLAlchemy or driver execution bridge.", lifetime: One transaction, mutability: immutable, mutation_authority: [], consumers: [postgres_portfolio_adapter], references: [], fields: []}
+- {id: postgresthesissecuritycontext, owner: postgres_thesis_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py, symbol: _SecurityContext, kind: protocol}, visibility: private, semantic_kind: adapter-binding, description: "Minimal RLS context projection consumed by Thesis persistence.", lifetime: One request, mutability: immutable, mutation_authority: [], consumers: [postgres_thesis_adapter], references: [], fields: []}
+- {id: postgresthesisconnection, owner: postgres_thesis_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py, symbol: _Connection, kind: class}, visibility: private, semantic_kind: adapter-binding, description: "Transaction-scoped SQLAlchemy or driver execution bridge.", lifetime: One transaction, mutability: immutable, mutation_authority: [], consumers: [postgres_thesis_adapter], references: [], fields: []}
+- {id: postgresresearchtransactionconnection, owner: postgres_research_adapter, language: python, declaration: {path: backend/src/thesis_trace/platform/postgres.py, symbol: _TransactionConnection, kind: class}, visibility: private, semantic_kind: adapter-binding, description: "Transaction-scoped SQLAlchemy execution bridge for Research persistence.", lifetime: One transaction, mutability: immutable, mutation_authority: [], consumers: [postgres_research_adapter], references: [], fields: []}
+- {id: impactsummaryvalue, owner: react_portfolio_adapter, language: typescript, declaration: {path: frontend/src/portfolio/routes.tsx, symbol: ImpactSummaryValue, kind: interface}, visibility: private, semantic_kind: wire-representation, description: "Defensively narrowed server-authored consequential action impact summary.", lifetime: One dialog, mutability: immutable, mutation_authority: [], consumers: [react_portfolio_adapter], references: [], fields: []}
+- id: researchrecordreference
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecordReference, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Research-parent role-safe Company or Evidence identity/version projection for L0 sibling mapping.
+  lifetime: One synchronous reference-validation result.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: record_type, type: str, role: contract-control, meaning: Company or Evidence discriminator.}
+  - {name: record_id, type: str, role: domain-identity, meaning: Stable Research record identity.}
+  - {name: version, type: int, role: contract-control, meaning: Current Server-authoritative record version.}
+  - {name: company_id, type: str, role: domain-identity, meaning: Owning Company identity for relationship validation.}
+- id: thesisstatus
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisStatus, kind: enum}
+  visibility: module-public
+  semantic_kind: policy
+  description: Server-owned personal Thesis lifecycle state governed by ALG-0013.
+  lifetime: One immutable Thesis version and durable stream lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: []
+  fields: []
+  values: [draft, active, paused, invalidated, closed]
+- id: thesisactorcontext
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisActorContext, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Thesis-local personal actor identity and capabilities mapped by L0 after Access revalidation.
+  lifetime: One command or query.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: actor_id, type: str, role: domain-identity, meaning: Stable internal personal owner identity.}
+  - {name: may_manage_personal_thesis, type: bool, role: policy, meaning: Owner or Learner personal Thesis capability.}
+- id: thesisresearchreference
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisResearchReference, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Server-validated immutable Company or Evidence identity/version mapped by L0 without importing Research types.
+  lifetime: One command and durable stable reference lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, thesis_trace_application, postgres_thesis_adapter]
+  references: []
+  fields:
+  - {name: record_type, type: str, role: contract-control, meaning: Company or Evidence discriminator.}
+  - {name: record_id, type: str, role: domain-identity, meaning: Stable Research record identity.}
+  - {name: version, type: int, role: contract-control, meaning: Validated immutable or optimistic Research version.}
+  - {name: company_id, type: str, role: domain-identity, meaning: Company scope validated by the application parent.}
+  - {name: fact_id, type: 'str | None', role: domain-identity, meaning: Exact Server-ingested valuation fact identity when this reference backs a valuation input.}
+- id: invalidationcondition
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: InvalidationCondition, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Published predeclared Thesis invalidation condition whose historical versions remain immutable.
+  lifetime: Durable published condition-version lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application]
+  references: []
+  fields:
+  - {name: condition_id, type: str, role: domain-identity, meaning: Stable condition identity.}
+  - {name: version, type: int, role: contract-control, meaning: Monotonic published condition version.}
+  - {name: summary, type: str, role: domain-value, meaning: Nonblank human-authored predeclared invalidation statement.}
+  - {name: active, type: bool, role: policy, meaning: Whether this exact published version is in the current active set.}
+- id: thesisoutcome
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisOutcome, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable version of the subsequently observed result for one Thesis lifecycle cycle.
+  lifetime: Durable append-only Outcome version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application]
+  references: [thesisresearchreference]
+  fields:
+  - {name: outcome_id, type: str, role: domain-identity, meaning: Stable Outcome stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Monotonic Outcome version.}
+  - {name: cycle, type: int, role: contract-control, meaning: Lifecycle cycle this result evaluates.}
+  - {name: observed_at, type: str, role: metadata, meaning: User-supplied observation instant normalized by Server.}
+  - {name: result, type: str, role: domain-value, meaning: Nonblank observed result narrative.}
+  - {name: evidence_refs, type: 'tuple[ThesisResearchReference, ...]', role: domain-value, meaning: Server-validated supporting Evidence identities and versions.}
+- id: reflectiondraftrevision
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ReflectionDraftRevision, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: One complete accepted unfinished Reflection draft snapshot that cannot satisfy closing.
+  lifetime: Durable append-only draft revision.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application]
+  references: []
+  fields:
+  - {name: revision, type: int, role: contract-control, meaning: Monotonic current-cycle draft revision.}
+  - {name: cycle, type: int, role: contract-control, meaning: Lifecycle cycle being reflected upon.}
+  - {name: original_assumption, type: str, role: domain-value, meaning: Current original-assumption draft text at this revision.}
+  - {name: judgment_errors, type: str, role: domain-value, meaning: Current judgment-error draft text at this revision.}
+  - {name: missing_evidence, type: str, role: domain-value, meaning: Current missing-evidence draft text at this revision.}
+  - {name: improvement, type: str, role: domain-value, meaning: Current improvement draft text at this revision.}
+  - {name: saved_at, type: str, role: metadata, meaning: Server acceptance time.}
+- id: thesisreflection
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisReflection, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Completed immutable learning record for one Thesis lifecycle cycle.
+  lifetime: Durable append-only Reflection version.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application]
+  references: []
+  fields:
+  - {name: reflection_id, type: str, role: domain-identity, meaning: Stable Reflection stream identity.}
+  - {name: version, type: int, role: contract-control, meaning: Monotonic completed Reflection version.}
+  - {name: cycle, type: int, role: contract-control, meaning: Lifecycle cycle evaluated.}
+  - {name: original_assumption, type: str, role: domain-value, meaning: Nonblank original assumption.}
+  - {name: judgment_errors, type: str, role: domain-value, meaning: Nonblank judgment-error analysis.}
+  - {name: missing_evidence, type: str, role: domain-value, meaning: Nonblank omitted-evidence analysis.}
+  - {name: improvement, type: str, role: domain-value, meaning: Nonblank future improvement.}
+- id: thesisrecord
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisRecord, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable projection of one current personal Thesis version and current-cycle learning prerequisites.
+  lifetime: Durable Thesis stream and one response projection.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application]
+  references: [thesisstatus, invalidationcondition, thesisresearchreference, thesisoutcome, thesisreflection, reflectiondraftrevision]
+  fields:
+  - {name: thesis_id, type: str, role: domain-identity, meaning: Stable personal Thesis identity.}
+  - {name: version, type: int, role: contract-control, meaning: Monotonic current Thesis version.}
+  - {name: owner_user_id, type: str, role: domain-identity, meaning: Immutable personal owner identity.}
+  - {name: company_id, type: str, role: domain-identity, meaning: Shared Company identity.}
+  - {name: company_version, type: int, role: contract-control, meaning: Company version validated at creation or latest reference save.}
+  - {name: title, type: str, role: domain-value, meaning: Human-authored Thesis title.}
+  - {name: narrative, type: str, role: domain-value, meaning: Human-authored Thesis narrative.}
+  - {name: status, type: ThesisStatus, role: policy, meaning: ALG-0013 current state.}
+  - {name: cycle, type: int, role: contract-control, meaning: Monotonic lifecycle cycle.}
+  - {name: reflection_pending, type: bool, role: policy, meaning: Current cycle requires completed Reflection after invalidation or before closing.}
+  - {name: created_at, type: str, role: metadata, meaning: Server creation time.}
+  - {name: updated_at, type: str, role: metadata, meaning: Server last-change time.}
+  - {name: conditions, type: 'tuple[InvalidationCondition, ...]', role: domain-value, meaning: Current published condition set.}
+  - {name: evidence_refs, type: 'tuple[ThesisResearchReference, ...]', role: domain-value, meaning: Current Server-validated Evidence links.}
+  - {name: outcome, type: 'ThesisOutcome | None', role: domain-value, meaning: Latest current-cycle Outcome if present.}
+  - {name: reflection, type: 'ThesisReflection | None', role: domain-value, meaning: Latest completed current-cycle Reflection if present.}
+  - {name: reflection_draft, type: 'ReflectionDraftRevision | None', role: domain-value, meaning: Latest unfinished current-cycle draft revision if present.}
+  - {name: policy_version, type: str, role: policy, meaning: Exact lifecycle policy version.}
+- id: createthesiscommand
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: CreateThesisCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Create one personal draft Thesis from L0-validated primitives.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisactorcontext, thesisresearchreference]
+  fields: []
+- id: savethesiscommand
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveThesisCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Explicit versioned save for personal Thesis fields, conditions and Evidence links.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisactorcontext, thesisresearchreference]
+  fields: []
+- id: transitionthesiscommand
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: TransitionThesisCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Exact expected-version personal Thesis transition intent governed by ALG-0013.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisactorcontext, thesisstatus]
+  fields: []
+- id: saveoutcomecommand
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveOutcomeCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Append one explicit current-cycle Outcome version.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisactorcontext, thesisresearchreference]
+  fields: []
+- id: savereflectiondraftcommand
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveReflectionDraftCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Append one ALG-0021 eligible unfinished Reflection draft revision.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisactorcontext]
+  fields: []
+- id: completereflectioncommand
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: CompleteReflectionCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Explicitly append a completed current-cycle Reflection.
+  lifetime: One synchronous command.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisactorcontext]
+  fields: []
+- id: thesisinvalidationprojection
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisInvalidationProjection, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Immutable Server-owned published invalidation condition projection mapped by L0 into Research anomaly primitives.
+  lifetime: One anomaly request bound to durable Thesis/condition versions.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, thesis_trace_application]
+  references: []
+  fields:
+  - {name: thesis_id, type: str, role: domain-identity, meaning: Authorized personal Thesis identity.}
+  - {name: thesis_version, type: int, role: contract-control, meaning: Exact bound Thesis version.}
+  - {name: condition_id, type: str, role: domain-identity, meaning: Exact published condition identity.}
+  - {name: condition_version, type: int, role: contract-control, meaning: Exact published condition version.}
+  - {name: condition_summary, type: str, role: domain-value, meaning: Server-loaded predeclared condition text.}
+- id: thesistransitionpreview
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ThesisTransitionPreview, kind: class}
+  visibility: module-public
+  semantic_kind: query
+  description: Server-authoritative before/after and consequences for one exact consequential Thesis transition.
+  lifetime: One five-minute confirmation interaction.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, thesis_trace_application]
+  references: [thesisstatus]
+  fields: []
+- id: thesisstoreport
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/ports.py, symbol: ThesisStorePort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Thesis-owned semantic persistence/query demand for current and append-only personal lifecycle state.
+  lifetime: Process binding with transaction-scoped operations.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_domain, postgres_thesis_adapter]
+  references: [thesisrecord, createthesiscommand, savethesiscommand, transitionthesiscommand, saveoutcomecommand, savereflectiondraftcommand, completereflectioncommand, thesisinvalidationprojection]
+  fields: []
+- id: thesisservice
+  owner: thesis_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/thesis/service.py, symbol: ThesisService, kind: class}
+  visibility: module-public
+  semantic_kind: policy
+  description: Authorize personal ownership, apply ALG-0013 and delegate atomic persistence through ThesisStorePort.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, thesis_trace_application]
+  references: [thesisstoreport, thesisrecord, createthesiscommand, savethesiscommand, transitionthesiscommand, saveoutcomecommand, savereflectiondraftcommand, completereflectioncommand, thesisinvalidationprojection, thesistransitionpreview]
+  fields: []
+- id: thesislifecyclerequest
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisLifecycleRequest, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Typed L0 personal Thesis operation request over wire-safe primitives.
+  lifetime: One synchronous request.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [authenticatedactor]
+  fields: []
+- id: thesislifecycleresult
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisLifecycleResult, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: API-safe primitive copy of one personal Thesis and current-cycle learning projection.
+  lifetime: One response.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields: []
+- id: thesislifecycleflow
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisLifecycleFlow, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: L0 orchestration for Access actor mapping, Research reference validation, Thesis commands, confirmation challenges and role-safe results.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, fastapi_entrypoint]
+  references: [authenticatedactor, thesisservice, thesisactorcontext, thesisresearchreference, thesislifecyclerequest, thesislifecycleresult, thesisconfirmedtransitionport]
+  fields: []
+- id: thesisconfirmedtransitionport
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisConfirmedTransitionPort, kind: protocol}
+  visibility: module-public
+  semantic_kind: port
+  description: Demand-owned L0 seam for atomically consuming one exact Access challenge and committing the matching consequential Thesis transition.
+  lifetime: API process binding.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, thesis_trace_application]
+  references: [authenticatedactor, thesisstatus, thesisrecord]
+  fields: []
+- id: thesisresearchqueryport
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisResearchQueryPort, kind: protocol}
+  visibility: private
+  semantic_kind: port
+  description: L0 query seam for role-safe current Company and Evidence references.
+  lifetime: API process binding.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application]
+  references: [researchrecordreference]
+  fields: []
+- id: thesisconfirmationport
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ThesisConfirmationPort, kind: protocol}
+  visibility: private
+  semantic_kind: port
+  description: L0 preview seam for an exact Access confirmation challenge.
+  lifetime: API process binding.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application]
+  references: []
+  fields: []
+- id: thesisresearchreferencebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisResearchReferenceBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP Research identity/version reference without source authority fields.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: thesiscreatebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisCreateBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP personal Thesis draft creation body without owner state or policy authority.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: [thesisresearchreferencebody]
+  fields: []
+- id: thesissavebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisSaveBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP explicit personal Thesis save body with optimistic version.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: [thesisresearchreferencebody]
+  fields: []
+- id: thesistransitionpreviewbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisTransitionPreviewBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP expected-version and target-state preview intent.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: thesistransitionbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisTransitionBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP lifecycle transition intent with reason idempotency and optional challenge token.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: [thesistransitionpreviewbody]
+  fields: []
+- id: thesisoutcomebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisOutcomeBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP current-cycle Outcome save intent.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: [thesisresearchreferencebody]
+  fields: []
+- id: thesisreflectiondraftbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisReflectionDraftBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP field-specific Reflection autosave revision intent.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: thesisreflectioncompletebody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisReflectionCompleteBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Strict HTTP explicit completed Reflection intent with all required learning sections.
+  lifetime: One HTTP request.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields: []
+- id: thesisresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: HTTP role-safe current personal Thesis and current-cycle learning projection.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint, react_thesis_adapter]
+  references: []
+  fields: []
+- id: thesistransitionpreviewresponse
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: ThesisTransitionPreviewResponse, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: HTTP Server-authored before/after consequences and optional challenge projection.
+  lifetime: One HTTP response.
+  mutability: owner-mutable
+  mutation_authority: [fastapi_entrypoint]
+  consumers: [fastapi_entrypoint, react_thesis_adapter]
+  references: []
+  fields: []
+- id: postgresconfirmedthesistransition
+  owner: postgres_atomic_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedThesisTransition, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Composition-local binding that uses the Access and Thesis owner-adapter transaction seams to commit a consequential transition atomically.
+  lifetime: API process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition, postgres_atomic_adapter]
+  references: [postgresaccessadapter, postgresthesisstore]
+  fields: []
+- id: postgresthesisstore
+  owner: postgres_thesis_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py, symbol: PostgresThesisStore, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: PostgreSQL implementation of the Thesis-owned lifecycle store port.
+  lifetime: Process lifetime with operation-scoped connections and Server-derived RLS context.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [backend_composition]
+  references: [thesisstoreport, thesisrecord, createthesiscommand, savethesiscommand, transitionthesiscommand, saveoutcomecommand, savereflectiondraftcommand, completereflectioncommand, thesisinvalidationprojection]
+  fields: []
+- id: thesisclient
+  owner: react_thesis_adapter
+  language: typescript
+  declaration: {path: frontend/src/thesis/client.ts, symbol: ThesisClient, kind: interface}
+  visibility: private
+  semantic_kind: port
+  description: Browser-local facade composed only from generated Thesis HTTP operations and DTOs.
+  lifetime: Page process lifetime.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_thesis_adapter]
+  references: []
+  fields: []
+- {id: valuationconfirmedpublicationport, owner: thesis_trace_application, language: python, declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ValuationConfirmedPublicationPort, kind: protocol}, visibility: private, semantic_kind: port, description: "L0 atomic valuation publication seam.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [thesis_trace_application, backend_composition], references: [], fields: []}
+- {id: valuationflow, owner: thesis_trace_application, language: python, declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: ValuationFlow, kind: class}, visibility: module-public, semantic_kind: composition-mapping, description: "Owner-only mapping of Portfolio costs into Thesis valuation commands.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition, fastapi_entrypoint], references: [], fields: []}
+- {id: portfolioconfirmedtradeport, owner: thesis_trace_application, language: python, declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: PortfolioConfirmedTradePort, kind: protocol}, visibility: private, semantic_kind: port, description: "L0 atomic confirmed Trade seam.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [thesis_trace_application, backend_composition], references: [], fields: []}
+- {id: portfolioflow, owner: thesis_trace_application, language: python, declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: PortfolioFlow, kind: class}, visibility: module-public, semantic_kind: composition-mapping, description: "Owner-only Portfolio command/query and trade confirmation flow.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition, fastapi_entrypoint], references: [], fields: []}
+- {id: postgresconfirmedportfoliotrade, owner: postgres_atomic_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedPortfolioTrade, kind: class}, visibility: module-public, semantic_kind: adapter-binding, description: "Atomic Access and Portfolio confirmation binding.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition, postgres_atomic_adapter], references: [], fields: []}
+- {id: postgresconfirmedvaluationpublication, owner: postgres_atomic_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedValuationPublication, kind: class}, visibility: module-public, semantic_kind: adapter-binding, description: "Atomic Access and Thesis valuation publication binding.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition, postgres_atomic_adapter], references: [], fields: []}
+- {id: tradeside, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradeSide, kind: enum}, visibility: module-public, semantic_kind: domain-value, description: "Canonical buy or sell direction.", lifetime: Durable value, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [], fields: [], values: [buy, sell]}
+- {id: officialsecuritysnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: OfficialSecuritySnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Server-resolved official close, price date/source, industry and Owner-confirmed theme snapshot.", lifetime: Durable version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [], fields: []}
+- {id: holdingsnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: HoldingSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "One exact bucket/security holding and classification snapshot.", lifetime: Portfolio version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [], fields: []}
+- {id: portfoliosnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Cash and all holding buckets for one exposure evaluation.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [holdingsnapshot], fields: []}
+- {id: exposuresnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ExposureSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "ALG-0011 security industry theme and feasibility result.", lifetime: Portfolio version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [], fields: []}
+- {id: dcaselection, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: DcaSelection, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "ALG-0012 ordered risk-feasible multiplier result.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [], fields: []}
+- {id: canonicaltrade, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CanonicalTrade, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Normalized source-bound Trade facts.", lifetime: Durable Trade, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [tradeside], fields: []}
+- {id: canonicalcsvissue, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CanonicalCsvIssue, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Stable canonical CSV row validation issue.", lifetime: One preview, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [], fields: []}
+- {id: canonicalcsvpreview, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CanonicalCsvPreview, kind: class}, visibility: module-public, semantic_kind: query, description: "Parse-only canonical CSV trades and issues.", lifetime: One preview, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [canonicaltrade, canonicalcsvissue], fields: []}
+- {id: tradeallocation, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradeAllocation, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Explicit quantity allocated to one holding bucket.", lifetime: Durable Trade, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [], fields: []}
+- {id: companyactionallocation, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CompanyActionAllocation, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Largest-remainder company-action allocation result.", lifetime: Durable action, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [], fields: []}
+- {id: portfolioactorcontext, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioActorContext, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Portfolio-owned Owner capability projection.", lifetime: One request, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [], fields: []}
+- {id: costprofilesnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CostProfileSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Versioned exact buy/sell fee and tax inputs.", lifetime: Durable version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [], fields: []}
+- {id: traderecord, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradeRecord, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Immutable confirmed Trade and allocations.", lifetime: Durable append-only record, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [canonicaltrade, tradeallocation], fields: []}
+- {id: tradecorrectionrecord, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradeCorrectionRecord, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Append-only reversal linked to an immutable original Trade.", lifetime: Durable append-only record, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [tradeallocation], fields: []}
+- {id: companyactionrecord, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CompanyActionRecord, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Append-only split, reduction or stock-dividend allocation record.", lifetime: Durable append-only record, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [companyactionallocation], fields: []}
+- {id: portfoliorecord, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioRecord, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Current owner Portfolio projection.", lifetime: Durable stream, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [costprofilesnapshot, holdingsnapshot, traderecord, tradecorrectionrecord, companyactionrecord], fields: []}
+- {id: tradepreview, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradePreview, kind: class}, visibility: module-public, semantic_kind: query, description: "Server-authoritative post-trade cash holdings and exposure preview.", lifetime: Five-minute interaction, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [canonicaltrade, tradeallocation, portfoliosnapshot, exposuresnapshot], fields: []}
+- {id: savecostprofilecommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: SaveCostProfileCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Versioned Cost Profile save intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [portfolioactorcontext], fields: []}
+- {id: saveinvestablecashcommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: SaveInvestableCashCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Versioned investable cash save intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [portfolioactorcontext], fields: []}
+- {id: previewtradecommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PreviewTradeCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Canonical Trade preview intent with explicit allocations.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [portfolioactorcontext, canonicaltrade, tradeallocation], fields: []}
+- {id: confirmtradecommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ConfirmTradeCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed Trade preview commit intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [portfolioactorcontext, tradepreview], fields: []}
+- {id: tradecorrectionpreview, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradeCorrectionPreview, kind: class}, visibility: module-public, semantic_kind: query, description: "Server-authoritative reversal preview bound to an original Trade.", lifetime: Five-minute interaction, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application, backend_composition], references: [portfoliosnapshot, exposuresnapshot], fields: []}
+- {id: confirmtradecorrectioncommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ConfirmTradeCorrectionCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed append-only Trade reversal intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, backend_composition], references: [portfolioactorcontext, tradecorrectionpreview], fields: []}
+- {id: companyactionpreview, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CompanyActionPreview, kind: class}, visibility: module-public, semantic_kind: query, description: "Largest-remainder company-action preview.", lifetime: Five-minute interaction, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application, backend_composition], references: [companyactionallocation, portfoliosnapshot, exposuresnapshot], fields: []}
+- {id: confirmcompanyactioncommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ConfirmCompanyActionCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed company-action allocation intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, backend_composition], references: [portfolioactorcontext, companyactionpreview], fields: []}
+- {id: portfoliostoreport, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: PortfolioStorePort, kind: protocol}, visibility: module-public, semantic_kind: port, description: "Portfolio-owned persistence demand.", lifetime: Process binding, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [portfoliorecord], fields: []}
+- {id: brokerstatementparserport, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: BrokerStatementParserPort, kind: protocol}, visibility: module-public, semantic_kind: port, description: "Reserved broker-specific parser demand; canonical CSV parsing stays domain-owned.", lifetime: Process binding, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [canonicalcsvpreview], fields: []}
+- {id: portfolioservice, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/service.py, symbol: PortfolioService, kind: class}, visibility: module-public, semantic_kind: policy, description: "Owner authorization, canonical Trade, allocation and exposure policy service.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition, thesis_trace_application], references: [portfoliostoreport, portfoliorecord, tradepreview], fields: []}
+- {id: postgresportfoliostore, owner: postgres_portfolio_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: PostgresPortfolioStore, kind: class}, visibility: module-public, semantic_kind: adapter-binding, description: "Forced-RLS PostgreSQL Portfolio store.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition], references: [portfoliostoreport, portfoliorecord], fields: []}
+- {id: valuationmethod, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationMethod, kind: enum}, visibility: module-public, semantic_kind: domain-value, description: "Owner-confirmed PE, PB or explicit abstain method.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [], fields: [], values: [pe, pb, abstain]}
+- {id: valuationcoverage, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationCoverage, kind: enum}, visibility: module-public, semantic_kind: domain-value, description: "Limited or standard history coverage.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter], references: [], fields: [], values: [limited_history, standard_history]}
+- {id: valuationdistribution, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationDistribution, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Median and inclusive-linear P75 benchmark result.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationcoverage], fields: []}
+- {id: valuationsample, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationSample, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Dated multiple and denominator bound to exact Research evidence.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [thesisresearchreference], fields: []}
+- {id: peervaluationmember, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: PeerValuationMember, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Owner-confirmed eligible peer, inclusion reason and source-bound sample.", lifetime: Durable peer snapshot, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationmethod, valuationsample], fields: []}
+- {id: valuationbenchmarksnapshot, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationBenchmarkSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Reproducible source-specific distribution, samples, exclusions and period.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationdistribution, valuationsample], fields: []}
+- {id: valuationvalidity, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationValidity, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Target date and fail-closed expiry trace.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [], fields: []}
+- {id: valuationreturn, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationReturn, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Exact target price costs terminal inflow and annualized return.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [], fields: []}
+- {id: valuationdraft, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationDraft, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Versioned evaluated unpublished valuation draft with separate source traces.", lifetime: Durable version, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationmethod, valuationdistribution, valuationvalidity, valuationreturn, valuationbenchmarksnapshot, peervaluationmember], fields: []}
+- {id: valuationsnapshot, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Immutable confirmed valuation publication.", lifetime: Durable append-only record, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationdraft], fields: []}
+- {id: savevaluationdraftcommand, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveValuationDraftCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Source and Cost Profile version-bound valuation draft intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [thesis_domain], references: [thesisactorcontext, valuationmethod], fields: []}
+- {id: publishvaluationcommand, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: PublishValuationCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed valuation publication intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [thesis_domain], references: [thesisactorcontext], fields: []}
+- {id: valuationabstained, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/valuation.py, symbol: ValuationAbstained, kind: class}, visibility: module-public, semantic_kind: policy, description: "Stable fail-closed valuation policy outcome.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, thesis_trace_application], references: [], fields: []}
+- {id: valuationsourcefact, owner: evidence_collection, language: python, declaration: {path: backend/src/thesis_trace/modules/research/evidence_collection/contracts.py, symbol: ValuationSourceFact, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Server-ingested valuation value, denominator, date and invalidation events bound to one immutable Evidence source snapshot.", lifetime: Durable immutable source fact, mutability: immutable, mutation_authority: [], consumers: [postgres_research_adapter, thesis_trace_application], references: [], fields: []}
+- {id: costprofilesavebody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: CostProfileSaveBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Strict Cost Profile HTTP body.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: investablecashsavebody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: InvestableCashSaveBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Strict investable cash HTTP body.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: tradeallocationbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: TradeAllocationBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Strict explicit bucket allocation HTTP value.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: tradepreviewbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: TradePreviewBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Strict Trade preview HTTP body without calculated authority fields.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [tradeallocationbody], fields: []}
+- {id: tradeconfirmbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: TradeConfirmBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Strict confirmed Trade HTTP body.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [tradepreviewbody], fields: []}
+- {id: portfolioresponse, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: PortfolioResponse, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Owner-only Portfolio HTTP projection.", lifetime: One response, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint, react_portfolio_adapter], references: [], fields: []}
+- {id: tradepreviewresponse, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: TradePreviewResponse, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Server-authored Trade preview and challenge projection.", lifetime: One response, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint, react_portfolio_adapter], references: [], fields: []}
+- {id: canonicalcsvpreviewbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: CanonicalCsvPreviewBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Bounded canonical CSV parse-only request.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: canonicalcsvpreviewresponse, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: CanonicalCsvPreviewResponse, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Canonical rows and stable validation issues.", lifetime: One response, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint, react_portfolio_adapter], references: [], fields: []}
+- {id: tradecorrectionpreviewbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: TradeCorrectionPreviewBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Exact original Trade reversal preview request.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: tradecorrectionconfirmbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: TradeCorrectionConfirmBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Confirmed append-only Trade correction request.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [tradecorrectionpreviewbody], fields: []}
+- {id: companyactionpreviewbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: CompanyActionPreviewBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Company-action allocation preview request.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: companyactionconfirmbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: CompanyActionConfirmBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Confirmed append-only company-action request.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [companyactionpreviewbody], fields: []}
+- {id: portfoliomutationpreviewresponse, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: PortfolioMutationPreviewResponse, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Server-authored correction or company-action impact plus challenge.", lifetime: One response, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint, react_portfolio_adapter], references: [], fields: []}
+- {id: valuationsourcereferencebody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: ValuationSourceReferenceBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Exact Research Evidence version and Server-owned fact ID submitted for resolution; contains no client-authored valuation value.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: valuationhistorysamplebody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: ValuationHistorySampleBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Fact identity selection whose date, multiple and denominator are resolved from Research.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [valuationsourcereferencebody], fields: []}
+- {id: peervaluationmemberbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: PeerValuationMemberBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Peer identity, inclusion reason and source input for Server eligibility checks.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [valuationsourcereferencebody], fields: []}
+- {id: valuationdraftsavebody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: ValuationDraftSaveBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Strict valuation draft HTTP body without costs or results.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: valuationpublicationpreviewbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: ValuationPublicationPreviewBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Exact valuation publication preview versions.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [], fields: []}
+- {id: valuationpublicationbody, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: ValuationPublicationBody, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Confirmed valuation publication HTTP body.", lifetime: One request, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint], references: [valuationpublicationpreviewbody], fields: []}
+- {id: valuationpublicationpreviewresponse, owner: fastapi_entrypoint, language: python, declaration: {path: backend/src/thesis_trace/api.py, symbol: ValuationPublicationPreviewResponse, kind: class}, visibility: private, semantic_kind: wire-representation, description: "Server challenge and publication impact projection.", lifetime: One response, mutability: owner-mutable, mutation_authority: [fastapi_entrypoint], consumers: [fastapi_entrypoint, react_thesis_adapter], references: [], fields: []}
+- {id: portfolioclient, owner: react_portfolio_adapter, language: typescript, declaration: {path: frontend/src/portfolio/client.ts, symbol: PortfolioClient, kind: interface}, visibility: private, semantic_kind: port, description: "Generated-operation Portfolio browser facade.", lifetime: Page process, mutability: immutable, mutation_authority: [], consumers: [react_portfolio_adapter], references: [], fields: []}
 - id: actionitemstatus
   owner: workflow_domain
   language: python
@@ -3958,16 +5112,16 @@ types:
   references: [secretprovider]
   fields: []
 - id: postgresunavailable
-  owner: postgres_research_adapter
+  owner: postgres_database_support
   language: python
-  declaration: {path: backend/src/thesis_trace/platform/postgres.py, symbol: PostgresUnavailable, kind: class}
+  declaration: {path: backend/src/thesis_trace/platform/database.py, symbol: PostgresUnavailable, kind: class}
   visibility: module-public
   semantic_kind: domain-value
   description: Stable redacted failure for unavailable PostgreSQL capability.
   lifetime: Error propagation lifetime.
   mutability: immutable
   mutation_authority: []
-  consumers: [backend_composition]
+  consumers: [postgres_database_support, postgres_research_adapter, postgres_access_adapter, postgres_thesis_adapter, postgres_portfolio_adapter, backend_composition]
   references: []
   fields: []
 - id: apiruntime
@@ -3992,6 +5146,7 @@ types:
   - postgresaccessadapter
   - cloudflareidentityadapter
   - postgresworkflowstore
+  - postgresthesisstore
   fields:
   - name: store
     type: PostgresEvidenceStore
@@ -4013,6 +5168,10 @@ types:
     type: PostgresWorkflowStore
     role: runtime-state
     meaning: Process-scoped Workflow persistence binding retaining the cursor signing key.
+  - name: thesis_store
+    type: PostgresThesisStore
+    role: runtime-state
+    meaning: Process-scoped Thesis persistence binding selected by composition.
 - id: collectorruntime
   owner: backend_composition
   language: python
@@ -4155,16 +5314,16 @@ types:
   references: [sourcetransport, sourcefetchfailure]
   fields: []
 - id: databaseurlprovider
-  owner: postgres_research_adapter
+  owner: postgres_database_support
   language: python
-  declaration: {path: backend/src/thesis_trace/platform/postgres.py, symbol: DatabaseUrlProvider, kind: protocol}
-  visibility: private
+  declaration: {path: backend/src/thesis_trace/platform/database.py, symbol: DatabaseUrlProvider, kind: protocol}
+  visibility: module-public
   semantic_kind: port
   description: Adapter-local callable that resolves one database URL per connection attempt.
   lifetime: Process lifetime reference; resolved value is connection scoped.
   mutability: immutable
   mutation_authority: []
-  consumers: [postgres_research_adapter]
+  consumers: [postgres_database_support, postgres_research_adapter, postgres_access_adapter, postgres_workflow_adapter, postgres_thesis_adapter, postgres_portfolio_adapter, backend_composition]
   references: []
   fields: []
 - id: provideridentity
@@ -5631,17 +6790,61 @@ boundary_mappings:
   state_objects: []
   allowed_edges: [research_domain->evidence_collection, research_domain->anomaly_assessment]
   forbidden_edges: [evidence_collection->anomaly_assessment, anomaly_assessment->evidence_collection]
+- id: authenticated-personal-actor-to-thesis
+  interaction: Map a revalidated Owner or Learner into personal Thesis capabilities without importing Access contracts into Thesis.
+  producer: access_domain
+  consumer: thesis_domain
+  parent: thesis_trace_application
+  producer_contract: authenticatedactor
+  consumer_contract: thesisactorcontext
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->access_domain, thesis_trace_application->thesis_domain]
+  forbidden_edges: [access_domain->thesis_domain, thesis_domain->access_domain, fastapi_entrypoint->thesis_domain]
+- id: research-reference-to-personal-thesis
+  interaction: Validate shared Company and Evidence identities and versions then map stable primitives into a personal Thesis command without transferring state ownership.
+  producer: research_domain
+  consumer: thesis_domain
+  parent: thesis_trace_application
+  producer_contract: researchrecordreference
+  consumer_contract: thesisresearchreference
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->research_domain, thesis_trace_application->thesis_domain]
+  forbidden_edges: [research_domain->thesis_domain, thesis_domain->research_domain, postgres_thesis_adapter->postgres_research_adapter]
+- id: evidence-reference-to-personal-thesis
+  interaction: Validate shared Evidence identity and version in its Company then map a stable reference into a personal Thesis Evidence link or Outcome.
+  producer: research_domain
+  consumer: thesis_domain
+  parent: thesis_trace_application
+  producer_contract: researchrecordreference
+  consumer_contract: thesisresearchreference
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->research_domain, thesis_trace_application->thesis_domain]
+  forbidden_edges: [research_domain->thesis_domain, thesis_domain->research_domain, postgres_thesis_adapter->postgres_research_adapter]
 - id: thesis-invalidation-to-anomaly-assessment
-  interaction: Map a future Server-owned immutable predeclared Thesis invalidation projection into Research assessment primitives without accepting client or AI authority.
+  interaction: Map a Server-owned immutable published Thesis invalidation projection into Research assessment primitives without accepting client or AI authority.
   producer: thesis_domain
   consumer: research_domain
   parent: thesis_trace_application
-  producer_contract: null
-  consumer_contract: null
+  producer_contract: thesisinvalidationprojection
+  consumer_contract: researchanomalyrequest
   mapping_owner: thesis_trace_application
   state_objects: []
   allowed_edges: [thesis_trace_application->thesis_domain, thesis_trace_application->research_domain]
   forbidden_edges: [thesis_domain->research_domain, research_domain->thesis_domain, anomaly_assessment->thesis_domain]
+- id: personal-thesis-to-application-result
+  interaction: Copy owner-scoped Thesis cards, current-cycle learning state and legal operations into application primitives before HTTP presentation.
+  producer: thesis_domain
+  consumer: thesis_trace_application
+  parent: thesis_trace_application
+  producer_contract: thesisrecord
+  consumer_contract: thesislifecycleresult
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges: [thesis_trace_application->thesis_domain, fastapi_entrypoint->thesis_trace_application]
+  forbidden_edges: [react_thesis_adapter->thesis_domain, react_thesis_adapter->postgres_thesis_adapter, fastapi_entrypoint->thesis_domain]
 - id: anomaly-assessment-to-action-source
   interaction: Resolve an immutable authorized anomaly, Evidence, and Company projection into Workflow-local source primitives for a manual review item.
   producer: research_domain
@@ -6061,6 +7264,81 @@ flows:
   - condition: Query, cursor, item, authority, transition, time, or expected version is invalid.
     event: application.action_item_operation_failed
     handling: Write nothing for rejected transitions, discard optimistic UI state, and reload the current Server projection.
+- id: personal_thesis_lifecycle
+  owner: thesis_trace_application
+  description: Create, query and operate one Owner- or Learner-owned Thesis lifecycle with immutable cycles, Outcomes and Reflections.
+  trigger:
+    kind: command
+    ref: application.create_personal_thesis
+    description: An authenticated Owner or Learner opens the Company Theses route or submits one explicit personal Thesis operation.
+  steps:
+  - id: personal_thesis_lifecycle.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate the session and map only personal Thesis capabilities for Owner or Learner; Admin has no projection.
+    receives: [application.create_personal_thesis, application.query_personal_theses, application.save_personal_thesis, application.transition_personal_thesis, application.save_thesis_outcome, application.autosave_thesis_reflection, application.complete_thesis_reflection, application.save_valuation_draft, application.publish_valuation]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: personal_thesis_lifecycle.resolve
+    order: 2
+    module: thesis_trace_application
+    action: Validate exact role-safe Company and Evidence identities and versions through Research then map stable primitives without exposing sibling contracts.
+    receives: [application.query_evidence_stage]
+    emits: []
+    state_changes: []
+    side_effects: [Bounded role-safe Research queries before a Thesis mutation.]
+  - id: personal_thesis_lifecycle.evaluate
+    order: 3
+    module: thesis_domain
+    action: Apply personal ownership, ALG-0013 lifecycle, Outcome/Reflection prerequisites, explicit-save and ALG-0021 draft rules.
+    receives: [thesis.create, thesis.query, thesis.save, thesis.transition, thesis.save_outcome, thesis.autosave_reflection, thesis.complete_reflection, thesis.save_valuation_draft, thesis.publish_valuation]
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: personal_thesis_lifecycle.confirm
+    order: 4
+    module: thesis_trace_application
+    action: For invalidated closed or reopen operations obtain and revalidate an exact five-minute single-use challenge; direct operations skip this step.
+    receives: [access.preview_consequential_action, access.confirm_consequential_action]
+    emits: []
+    state_changes: [A consequential operation binds and consumes one exact confirmation challenge only with the destination commit.]
+    side_effects: [Persist and atomically consume bounded challenge metadata without retaining its plaintext token.]
+  - id: personal_thesis_lifecycle.commit
+    order: 5
+    module: thesis_domain
+    action: Atomically append current/version/cycle/condition/link/Outcome/Reflection/receipt/audit state or reject without partial writes.
+    receives: [thesis.lifecycle_store]
+    emits: []
+    state_changes: [Exactly one personal Thesis or current-cycle learning version advances for an accepted command.]
+    side_effects: [One PostgreSQL transaction under Server-derived owner RLS.]
+  - id: personal_thesis_lifecycle.present
+    order: 6
+    module: thesis_trace_application
+    action: Return owner-scoped cards, detail, current cycle, legal operations and autosave status through generated responsive contracts.
+    receives: [thesis.query]
+    emits: []
+    state_changes: []
+    side_effects: [Generated HTTPS response; browser retains only route and volatile unsent text.]
+  success:
+    result: Owner or Learner observes one immediately committed personal Thesis version while prior cycles, Outcomes and Reflections remain immutable.
+    events: []
+  errors:
+  - condition: Actor, ownership, Company/Evidence reference, transition, prerequisite, confirmation, version, idempotency, autosave or persistence validation fails.
+    event: application.thesis_operation_failed
+    handling: Commit no partial Thesis state and return a stable non-disclosing response; preserve unsent Reflection text only in current page memory.
+- id: owner_portfolio_management
+  owner: thesis_trace_application
+  description: Save/query Owner Portfolio data and preview/confirm one canonical explicitly allocated Trade with Server exposure policy.
+  trigger: {kind: command, ref: application.manage_portfolio, description: An authenticated Owner opens Portfolio or submits a Portfolio or Trade operation.}
+  steps:
+  - {id: owner_portfolio_management.authorize, order: 1, module: access_domain, action: Revalidate Owner capability; Learner and Admin receive no Portfolio projection., receives: [application.manage_portfolio, application.confirm_portfolio_trade], emits: [], state_changes: [], side_effects: []}
+  - {id: owner_portfolio_management.evaluate, order: 2, module: portfolio_domain, action: Canonicalize Trade intent apply explicit allocation conservation and calculate holdings exposure and hard caps., receives: [], emits: [], state_changes: [], side_effects: []}
+  - {id: owner_portfolio_management.confirm, order: 3, module: thesis_trace_application, action: Issue or validate an exact five-minute challenge for a consequential Trade while direct Cost/cash saves skip confirmation., receives: [access.preview_consequential_action, access.confirm_consequential_action], emits: [], state_changes: [One exact challenge is consumed only with an accepted Trade.], side_effects: []}
+  - {id: owner_portfolio_management.commit, order: 4, module: portfolio_domain, action: Atomically persist current Portfolio immutable version receipt and audit state or return the role-safe projection., receives: [portfolio.store], emits: [], state_changes: [At most one Portfolio version advances.], side_effects: [One forced-RLS PostgreSQL owner transaction.]}
+  success: {result: Owner observes Server-authoritative Cost cash holdings Trade and exposure state., events: []}
+  errors:
+  - {condition: Authority input allocation risk challenge version idempotency or persistence validation fails., event: application.thesis_operation_failed, handling: Commit no partial Portfolio or challenge state and return a stable response.}
 adr_exceptions:
 - rule_id: DEP001
   scope: backend_composition->thesis_trace_application
@@ -6190,6 +7468,30 @@ workloads:
   timing_class: best-effort
   activation: {kind: query}
   data: {volume: one bounded page of at most 100 Action Items plus summary counts and optional one-item transition}
+  budgets: []
+- id: personal_thesis_lifecycle_workload
+  flow: personal_thesis_lifecycle
+  steps:
+  - personal_thesis_lifecycle.authorize
+  - personal_thesis_lifecycle.resolve
+  - personal_thesis_lifecycle.evaluate
+  - personal_thesis_lifecycle.confirm
+  - personal_thesis_lifecycle.commit
+  - personal_thesis_lifecycle.present
+  timing_class: best-effort
+  activation: {kind: command}
+  data: {volume: one personal Thesis, a bounded set of Company/Evidence references, one current lifecycle cycle, and optional Outcome or Reflection version per command}
+  budgets: []
+- id: owner_portfolio_management_workload
+  flow: owner_portfolio_management
+  steps:
+  - owner_portfolio_management.authorize
+  - owner_portfolio_management.evaluate
+  - owner_portfolio_management.confirm
+  - owner_portfolio_management.commit
+  timing_class: best-effort
+  activation: {kind: command}
+  data: {volume: one Owner Portfolio projection, one bounded canonical Trade and at most 100 explicit bucket allocations}
   budgets: []
 execution_profiles:
 - id: linux_server_functional
@@ -6364,6 +7666,34 @@ execution_mappings:
   - owner_action_inbox.present
   units: [api_process]
   serialization: repeatable-read per inbox query and optimistic transaction per Action Item transition
+  reentrant: false
+  activation: authenticated HTTP query or command
+  wcet: not established
+- id: personal_thesis_lifecycle_api_mapping
+  profile: linux_server_functional
+  workload: personal_thesis_lifecycle_workload
+  steps:
+  - personal_thesis_lifecycle.authorize
+  - personal_thesis_lifecycle.resolve
+  - personal_thesis_lifecycle.evaluate
+  - personal_thesis_lifecycle.confirm
+  - personal_thesis_lifecycle.commit
+  - personal_thesis_lifecycle.present
+  units: [api_process]
+  serialization: one optimistic transaction per personal Thesis or current-cycle learning stream; direct read query per authorized route
+  reentrant: false
+  activation: authenticated HTTP query or command
+  wcet: not established
+- id: owner_portfolio_management_api_mapping
+  profile: linux_server_functional
+  workload: owner_portfolio_management_workload
+  steps:
+  - owner_portfolio_management.authorize
+  - owner_portfolio_management.evaluate
+  - owner_portfolio_management.confirm
+  - owner_portfolio_management.commit
+  units: [api_process]
+  serialization: one optimistic Portfolio transaction per Owner with exact challenge consumption for confirmed Trades
   reentrant: false
   activation: authenticated HTTP query or command
   wcet: not established

@@ -1,5 +1,6 @@
 annotated-doc==0.0.5
 annotated-types==0.8.0
+alembic==1.19.1
 anyio==4.14.2
 certifi==2026.7.22
 cffi==2.0.0
@@ -12,6 +13,9 @@ httpx==0.28.1
 idna==3.19
 iniconfig==2.3.0
 packaging==26.3
+greenlet==3.5.5
+Mako==1.4.1
+MarkupSafe==3.0.3
 psycopg==3.2.10
 psycopg-binary==3.2.10
 PyJWT==2.10.1
@@ -22,6 +26,7 @@ pydantic_core==2.46.4
 Pygments==2.21.0
 pytest==9.1.1
 starlette==1.6.0
+SQLAlchemy==2.0.52
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 uvicorn==0.35.0

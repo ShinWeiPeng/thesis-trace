@@ -11,6 +11,7 @@ from thesis_trace.modules.research.evidence_intake.contracts import (
 )
 import uuid
 from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot
+from thesis_trace.modules.research.evidence_collection.contracts import ValuationSourceFact
 from thesis_trace.modules.research.evidence_stage.contracts import (
     ConfirmDimensionFactsCommand,
     EvidenceStageRecord,
@@ -37,6 +38,7 @@ class InMemoryEvidenceStore:
         self.audit_events: list[EvidenceAuditFact] = []
         self.collection_jobs: list[CollectionRequest] = []
         self.source_snapshots: dict[str, CollectedSourceSnapshot] = {}
+        self.valuation_facts: dict[tuple[str, str], ValuationSourceFact] = {}
         self._accepted_by_key: dict[str, EvidenceAccepted] = {}
         self.stage_records: dict[str, EvidenceStageRecord] = {}
         self._stage_by_idempotency_key: dict[str, EvidenceStageRecord] = {}
@@ -89,6 +91,15 @@ class InMemoryEvidenceStore:
 
     def get_source_snapshot_id(self, evidence_id: str) -> str | None:
         return evidence_id if evidence_id in self.source_snapshots else None
+
+    def get_valuation_fact(self, evidence_id: str, fact_id: str) -> ValuationSourceFact | None:
+        return self.valuation_facts.get((evidence_id, fact_id))
+
+    def save_valuation_facts(self, evidence_id: str, facts: tuple[ValuationSourceFact, ...]) -> None:
+        for fact in facts:
+            if fact.evidence_id != evidence_id:
+                raise ValueError("valuation_source_invalid")
+            self.valuation_facts[(evidence_id, fact.fact_id)] = fact
 
     def claim_collection_job(self) -> LeasedCollectionJob | None:
         if not self.collection_jobs:

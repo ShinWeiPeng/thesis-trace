@@ -1,7 +1,7 @@
 ---
 spec_version: "1"
 spec_id: SPEC-0001
-revision: 88
+revision: 93
 status: confirmed
 change_set: thesis-trace-foundation
 ---
@@ -180,6 +180,10 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-098 | 第一個 user-visible walking skeleton 為 authenticated Owner 的 Company/Evidence intake：Owner 在 responsive Web 選擇或建立 Company 並提交 Evidence URL；API 在同一 PostgreSQL transaction 內驗證 admission、保存 `received` 狀態、audit event 與 durable outbox job，立即回傳可查詢的 record/version ID。Collector worker 以 at-least-once、leased claim 與 idempotency 執行受限制的來源取得，成功時保存 immutable content snapshot/hash、URL、publisher、published/observed/retrieved times、必要摘錄、source category、lineage/provenance 與 `succeeded` 狀態，失敗時保存可理解但不洩密的 `failed`／retrying／dead-letter 狀態；同 URL 或同內容不得產生重複 source-of-record。UI 以該 Server record/version 查詢並顯示 received、processing、succeeded 或 failed，不建立 client-only 真實狀態。此 slice 必須通過 Cloudflare identity/JWT 邊界、PostgreSQL transaction/outbox/dedup integration、collector adapter contract、API/OpenAPI 及 responsive Playwright flow；不執行 AI、E0–E6、Hard anomaly、Thesis、估值或 Recommendation。 | 第一片就證明產品核心的證據入口以及 UI、API、PostgreSQL、audit/outbox、獨立 worker、錯誤處理和響應式狀態更新能共同運作，同時把高風險 AI 與 anomaly policy 留在後續專屬 slices；代價是第一片即需安全的來源擷取 adapter 與完整 provenance/dedup 語義。 |
 | DEC-099 | URL canonicalization policy `url-normalization-v1` 採保守規則：只接受通過來源政策的 HTTPS URL；hostname 轉小寫、移除明確的預設 `:443` 與 fragment、空 path 轉為 `/`；非空 path 的字面內容與 percent encoding，以及 query 的內容、重複參數與順序均原樣保留。每個 canonical source、snapshot 與 URL dedup key 必須保存 normalization policy version，歷史 key 不得用新規則原地重新解讀；未來規則變更必須使用新版本及明確 migration／coexistence policy。 | 這只合併可安全證明等價的 URL 形式，避免 query 順序、重複參數、percent encoding 或來源特定 path 語義被積極正規化後錯誤合併；代價是部分實際別名仍可能分成不同 URL identity，需由 content hash 與 lineage 去重補足。 |
 | DEC-100 | E-stage confirmed-fact authority 採 Owner-only：在 AI／critic 切片啟用前，只有 authenticated Owner 可透過 Server API／UI 建立或確認版本化 dimension facts；每項 fact 綁定來源 snapshot、actor、Server time、理由及 record/version，並由 ALG-0002 deterministic sequential gates 計算 canonical E0–E6。未來 AI output 只能保存為分離的候選 fact，必須經 Owner 確認後才可建立新的 confirmed-fact version 並觸發重算。Learner、Admin、client-computed stage 與未確認 AI output 均不得改變 canonical facts 或 stage。 | 先建立單一明確的人類 authority、完整 audit 與 fail-closed seam，避免 AI 或 client 候選直接取得階段寫入權；代價是初期需要 Owner 人工確認，Learner 只能查看共享 Evidence/E-stage，日後 AI 切片仍需增加 candidate-to-confirmed workflow。 |
+| DEC-101 | 歷史與 peer-group 估值的第 75 百分位統一使用 inclusive linear interpolation：先將有效 Decimal 樣本升冪排序，以一基底位置 `h = 1 + (n - 1) × 0.75` 計算；若 `h` 非整數，於相鄰樣本間按小數部分線性內插。計算政策版本必須隨估值快照保存，歷史結果不得以新版本重算覆寫。 | 相較 nearest-rank，線性內插在 5 至 12 家 peer 與不同歷史樣本數下較平滑且避免僅因樣本數跨一個邊界造成候選倍數跳躍；代價是結果可能不是任一實際樣本值，因此 UI 與 audit trace 必須同時顯示排序樣本、位置及內插步驟。 |
+| DEC-102 | 6、12 或 24 個日曆月的 target date 由估值基準日期直接加上所選月數；若目標月份不存在相同日號，target date 截至該目標月份的最後一個日曆日，不將超出日數順延至下一個月。`holding_days` 仍依估值基準時間至此 target date 的實際日數計算。 | 月末截斷符合「日曆月」的使用者預期，且避免 29、30、31 日因月份長度不同而溢位至下一個月、改變估值期間與年化報酬；代價是不同起始日的同月數期間可能相差少數實際日數，因此測試必須涵蓋平年、閏年與月末。 |
+| DEC-103 | 股票分割、減資、股票股利等公司行動後的券商確認整股總數，必須按行動前各 active Thesis 與 independent bucket 的持股比例，以最大餘數法分配：先計算每桶精確 Decimal 配額並取整數下限，再依小數餘額由大到小逐股補足；小數餘額相同時以穩定 bucket ID 升冪決勝。現金補償按相同的行動前比例以 Decimal 分配。規則版本、輸入總數、各桶精確配額、餘額次序及結果必須保存，且以追加式公司行動／分配紀錄更新，不得改寫歷史交易。 | 最大餘數法讓桶合計精確等於券商整股總數，並在無法完全等比例時最小化歸因偏差；相較人工分配或全部歸入 independent bucket，可重現且不會阻塞持股與曝險計算。代價是少數桶可能因決勝規則相差一股，因此必須顯示並保存完整 allocation trace。 |
+| DEC-104 | company_history 有效月樣本少於 36 個時必須 abstain；36 至 59 個時可同時計算中位數與 P75，但兩者都必須標示為 `limited_history`、顯示有效樣本期間／數量與排除原因，且仍須 Owner 明確確認來源選擇及理由；60 個以上才標示為標準五年歷史候選。有限歷史候選不得被系統自動提高信心、與 peer_group 混合或省略樣本不足提示。 | 讓三年門檻可支援上市時間較短或有效資料尚未滿五年的公司，同時不把有限樣本偽裝成標準五年基準；相較完全禁用或只提供 P75，保留基準與樂觀候選的成對可解釋性。代價是 UI、決策 trace 與測試必須明確區分 limited 與 standard coverage。 |
 
 ## Discussion Context
 
@@ -889,6 +893,42 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 - **User answer:** 1 — authenticated Owner-only confirmation through the Server API/UI.
 - **Explicit rationale:** The user selected the recommended Owner-only authority; no additional rationale was provided.
 - **Resulting impact:** Adds DEC-100 and refines REQ-003 and AC-003. Confirmed facts become versioned, snapshot-bound Owner actions; AI output remains a separate candidate until Owner confirmation.
+
+### DISC-083: Select the P75 quantile convention
+
+- **Situation:** Wave 6 architecture review found that REQ-005 requires an optimistic P75 valuation candidate but does not define how a discrete history or 5-to-12-company peer sample maps to that percentile.
+- **Question:** Should P75 use inclusive linear interpolation or nearest-rank selection?
+- **Options and tradeoffs:** Inclusive linear interpolation uses `h = 1 + (n - 1) × 0.75`, changes smoothly with sample values and counts, and may return a value not present in the sample; nearest-rank always returns an observed value and is easy to inspect, but small samples jump abruptly and can be more optimistic.
+- **User answer:** 1 — use inclusive linear interpolation.
+- **Explicit rationale:** The user selected the recommended option; no additional rationale was stated.
+- **Resulting impact:** Adds DEC-101 and refines the deterministic P75 behavior validated by AC-005. ALG-0008 must persist the policy version and expose the sorted samples, percentile position and interpolation trace.
+
+### DISC-084: Select the calendar-month target-date boundary
+
+- **Situation:** Wave 6 clarification found that adding 6, 12 or 24 calendar months to a valuation basis date such as August 31 can reach a target month without the same day number, which otherwise changes `holding_days` and annualized return by implementation convention.
+- **Question:** Should a missing same-numbered day clamp to the target month's final calendar day, or should overflow days roll into the following month?
+- **Options and tradeoffs:** Clamping preserves the selected calendar month and gives stable month-end behavior; rolling overflow preserves arithmetic overflow days but can place the target date in a later month and slightly change annualized return.
+- **User answer:** 1 — clamp to the target month's final calendar day.
+- **Explicit rationale:** The user selected the recommended option; no additional rationale was stated.
+- **Resulting impact:** Adds DEC-102 and refines REQ-005 and AC-005. ALG-0009 and target-date tests must use deterministic month-end clamping, including leap-year cases.
+
+### DISC-085: Select corporate-action whole-share remainder allocation
+
+- **Situation:** REQ-031 requires stock splits, capital reductions and stock dividends to follow each bucket's holding proportion, while ALG-0014 requires a versioned remainder convention but does not specify how indivisible whole shares are assigned.
+- **Question:** Should indivisible whole-share remainders use deterministic largest-remainder allocation, require Owner allocation, or all flow to the independent bucket?
+- **Options and tradeoffs:** Largest remainder preserves the broker-confirmed total and most closely follows existing proportions; Owner allocation preserves explicit intent but blocks reliable holdings and exposure until handled; assigning all remainders to independent is simple but distorts Thesis attribution.
+- **User answer:** 1 — use largest-remainder proportional allocation with a stable bucket-ID tie break; allocate cash-in-lieu proportionally using Decimal.
+- **Explicit rationale:** The user selected the recommended option; no additional rationale was stated.
+- **Resulting impact:** Adds DEC-103 and refines REQ-031 and AC-025. ALG-0014 must persist the allocation-policy version and exact remainder trace, and tests must prove bucket totals equal the broker-confirmed whole-share total.
+
+### DISC-086: Select company-history behavior for three to less than five years
+
+- **Situation:** REQ-005 requires at least five years of valid monthly data for the standard historical median and forbids automatic company-history candidates below three years, but does not define the observable behavior for three to less than five years.
+- **Question:** Should that interval produce clearly labeled limited-history median and P75 candidates, display statistics without candidates, or produce only P75?
+- **Options and tradeoffs:** Paired limited-history candidates support younger listings while exposing weaker coverage and retaining Owner confirmation; display-only is most conservative but makes the three-year threshold informational; P75-only follows a narrow reading but exposes an optimistic value without a baseline.
+- **User answer:** 1 — provide limited-history median and P75 candidates with explicit labeling and Owner confirmation; abstain below three years.
+- **Explicit rationale:** The user selected the recommended option; no additional rationale was stated.
+- **Resulting impact:** Adds DEC-104 and refines REQ-005 and AC-005. ALG-0008 must distinguish 36–59 valid monthly samples from the standard 60-or-more path and preserve coverage in its decision trace.
 ## Acceptance Criteria
 
 | ID | Requirements | Scenario | Validation Method | Evidence |
@@ -1118,6 +1158,10 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-098 | depends_on | REQ-002 |
 | DEC-099 | refines | REQ-002 |
 | DEC-100 | refines | REQ-003 |
+| DEC-101 | refines | REQ-005 |
+| DEC-102 | refines | REQ-005 |
+| DEC-103 | refines | REQ-031 |
+| DEC-104 | refines | REQ-005 |
 | DEC-098 | depends_on | REQ-008 |
 | DEC-098 | depends_on | REQ-011 |
 | DEC-098 | depends_on | REQ-012 |
@@ -1250,3 +1294,8 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | 86 | 2026-08-20 | Reopened before clarification: Clarify the versioned URL path and query normalization policy exposed by ALG-0001 implementation review. |
 | 87 | 2026-08-20 | working | Selected conservative `url-normalization-v1`, required persisted policy versions, preserved non-empty path/query representation, and added future migration/coexistence rules. |
 | 88 | 2026-08-20 | working | Selected Owner-only confirmed E-stage facts, separated AI candidates, and required snapshot-bound versioning, audit and Server authority. |
+| 89 | 2026-08-29 | Reopened before clarification: Wave 6 requires an explicit P75 quantile convention because discrete peer/history samples otherwise produce different observable valuation candidates. |
+| 90 | 2026-08-29 | working | Selected inclusive linear interpolation for P75, required versioned policy binding, and required reproducible sorted-sample and interpolation traces. |
+| 91 | 2026-08-29 | working | Selected deterministic month-end clamping for 6/12/24-calendar-month target dates, including leap-year and month-end validation. |
+| 92 | 2026-08-29 | working | Selected largest-remainder allocation for corporate-action whole shares with stable bucket-ID tie-breaking and proportional Decimal cash compensation. |
+| 93 | 2026-08-29 | working | Selected paired limited-history median/P75 candidates for 36–59 valid monthly samples, standard candidates at 60 or more, and abstention below 36. |

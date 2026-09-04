@@ -1,34 +1,36 @@
 # ALG-0009: Valuation validity and abstention
 ## Metadata
-- Status: proposed
-- Owner module: portfolio
+- Status: accepted
+- Owner module: thesis_domain
 - Product feature: Valuation input expiration and eligibility
-- Flow IDs: valuation-publication-flow
-- Related ADRs: none
-- Source paths: planned portfolio valuation policy
-- Test and benchmark paths: planned valuation tests
+- Flow IDs: owner_valuation_publication
+- Related ADRs: ADR-0008
+- Source paths: planned `backend/src/thesis_trace/modules/thesis/valuation.py`
+- Test and benchmark paths: planned `backend/tests/test_valuation_policy.py`
 - Supersedes: none
 ## Problem and observable success
-Prevent a target price or buy recommendation from using stale, incomplete, unconfirmed or inapplicable assumptions.
+Prevent target price or later buy Recommendation from using stale, incomplete, unconfirmed or inapplicable assumptions. Every abstention exposes stable reasons and exact versions.
 ## Inputs, outputs, units, ranges, and data-quality assumptions
-Inputs include method, target date, as-of, forecast, source/Owner confirmations, new-report and material-event times, cost profile and minimum return. Output valid or abstain with trace.
+Inputs are method, 6/12/24-month horizon, basis time/date, forecast and confirmation, selected benchmark/result, report/event times, Cost Profile and minimum return. Output is valid or abstain plus target date, expiry, reasons and trace.
 ## Constraints and quantitative acceptance thresholds
-Periods are 6/12/24 calendar months; expiration is the earliest of new quarterly report, material event, or 90 days.
+Horizon is exactly 6, 12 or 24 calendar months. Forecast expires at the earliest of saved time plus 90 days, next quarterly report or relevant material event. Evaluation at or after expiry is invalid. Method/source/forecast/Cost Profile/minimum return and positive holding days are mandatory before publication for Recommendation use.
 ## Candidate methods and comparative evidence
-Candidates: lazy warning; deterministic validity gate. Gate is selected because warnings could still issue unsafe recommendations.
+Warning-only could publish unsafe values. A deterministic gate is selected. Calendar overflow and expiry equality require exact policies.
 ## Selected method and reasons for rejecting alternatives
-Require every prerequisite before publication and recompute validity from explicit time inputs.
+Compute prerequisites from explicit versioned inputs and injected evaluation time. Apply DEC-102 month-end clamping and fail closed.
 ## Exact behavior, formula or pseudocode, boundaries, and tie-breaking
-`expires_at=min(saved_at+90d, next_report_time, material_event_time)` over present values. Invalid when evaluation time >= expiry. Abstain for unconfirmed method/source/forecast, invalid target alignment, absent cost profile/minimum return, nonpositive holding days or inapplicable PE/PB.
+`target_date = add_calendar_months_clamped(basis_date, horizon)`; a missing day uses the target month's final day without overflow. `expires_at = min(saved_at + 90 days, next_report_time?, material_event_time?)`; equal causes are all retained in stable order. Invalid when `evaluation_time >= expires_at`. Missing, unconfirmed, abstain, inapplicable, insufficient, stale or nonpositive-day inputs abstain.
 ## Parameters, calibration, versioning, and compatibility
-Calendar/time-zone and expiry policy are versioned; time comes from input, never an implicit clock.
+Bind `valuation-validity-v1`, `calendar-month-clamp-v1`, timezone/calendar and input versions. Time is an argument, never an implicit clock.
 ## Time and space complexity and resource budgets
-O(1).
+`O(1)` time and space.
 ## Errors, degradation, fallback, and forbidden behavior
-Ambiguous time or missing prerequisite abstains; no silent defaults except the user-visible 12-month draft default before confirmation.
+Ambiguous timezone, invalid date/Decimal or missing prerequisite abstains. Only an unpublished draft may visibly default to 12 months; publication never silently defaults.
 ## Validation cases and evidence
-Boundary tests at just before/at/after expiry, leap dates, equal triggers and every missing prerequisite.
+Fake-clock tests cover before/at/after expiry, equal triggers, month ends, leap years, all horizons and nonpositive days. `pytest backend/tests/test_valuation_policy.py -q` must match exact target dates, causes and abstention codes.
 ## Risks and monitoring
-Late event ingestion can delay invalidation; monitor expiry Action Items and freshness.
+Late report/event ingestion delays invalidation; monitor stale/expired reason counts.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-29
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

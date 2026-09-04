@@ -18,7 +18,9 @@ const client = (profile: SessionProfile = owner): AccessClient => ({
 it("renders role-safe Owner navigation and profile", async () => {
   render(<AccessApp client={client()} initialPath="/profile" />);
   expect(await screen.findByRole("heading", { name: "Owner 個人資料" })).toBeVisible();
-  expect(screen.getByRole("link", { name: "帳號管理" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "帳號管理" })).toHaveClass("access-nav-link");
+  expect(screen.getByRole("link", { name: "個人資料" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("button", { name: "登出" })).toHaveClass("secondary-button");
 });
 
 it("isolates Learner profile fields and keeps research navigation", async () => {
@@ -40,6 +42,16 @@ it("shows uniform unavailable for an Admin company deep link", async () => {
   expect(await screen.findByRole("heading", { name: "資源無法使用" })).toBeVisible();
   expect(screen.queryByText("secret")).not.toBeInTheDocument();
 });
+
+it.each(["learner", "admin"] as const)(
+  "rejects the company Trades deep link for %s without rendering portfolio data",
+  async (kind) => {
+    render(<AccessApp client={client({ ...(kind === "admin" ? admin : owner), kind })} initialPath="/companies/2330/trades" />);
+    expect(await screen.findByRole("heading", { name: "資源無法使用" })).toBeVisible();
+    expect(screen.queryByText("投資組合與交易")).not.toBeInTheDocument();
+    expect(screen.queryByText("2330 · 交易")).not.toBeInTheDocument();
+  },
+);
 
 it("keeps confirmation token volatile and clears it after cancellation", async () => {
   const user = userEvent.setup(); render(<AccessApp client={client(owner)} initialPath="/admin/accounts/u-1" />);

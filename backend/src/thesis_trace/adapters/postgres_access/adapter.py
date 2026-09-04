@@ -12,15 +12,76 @@ from thesis_trace.modules.access.confirmation_challenge.contracts import Confirm
 from thesis_trace.modules.access.contracts import Role, SecurityContext
 from thesis_trace.modules.access.identity_registry.contracts import AccessAccount, ProviderIdentity, ProviderIdentityMapping
 from thesis_trace.modules.access.session_management.contracts import AccessSession
-from thesis_trace.platform.postgres import DatabaseUrlProvider, _redacted_connection
+from thesis_trace.platform.database import DatabaseUrlProvider, create_database_engine, database_connection
+from thesis_trace.platform.postgres import _redacted_connection
 
 
 class PostgresAccessAdapter:
     """Access persistence and transaction-local PostgreSQL security context."""
 
-    def __init__(self, database_url_provider: DatabaseUrlProvider, *, recovery_fault_hook: Callable[[], None] | None = None) -> None:
+    def __init__(self, database_url_provider: DatabaseUrlProvider, *, recovery_fault_hook: Callable[[], None] | None = None,
+                 confirmed_mutation_fault_hook: Callable[[], None] | None = None) -> None:
         self._provider = database_url_provider
+        self._engine = create_database_engine(database_url_provider)
         self._recovery_fault_hook = recovery_fault_hook
+        self._confirmed_mutation_fault_hook = confirmed_mutation_fault_hook
+
+    def execute_confirmed_mutation(
+        self,
+        *,
+        token: str,
+        actor_id: str,
+        actor_role: Role,
+        action_type: str,
+        target_id: str,
+        target_version: int,
+        payload: dict[str, Any],
+        reason: str,
+        now: datetime,
+        mutation: Callable[[Any, str, bool], Any],
+    ) -> Any:
+        """Own challenge access while an injected owner-adapter mutation shares the transaction."""
+        if not reason.strip():
+            raise ValueError("reason_required")
+        digest = sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        token_digest = sha256(token.encode()).hexdigest()
+        with database_connection(self._engine, isolation_level="SERIALIZABLE") as connection:
+            connection.exec_driver_sql("SELECT set_config('app.user_id',%s,true)", (actor_id,))
+            connection.exec_driver_sql("SELECT set_config('app.role',%s,true)", (actor_role.value,))
+            connection.exec_driver_sql("SELECT set_config('app.request_id',%s,true)", (str(uuid.uuid4()),))
+            row = connection.exec_driver_sql(
+                """SELECT challenge_id::text,consumed_at,result_id,expires_at
+                FROM access.confirmation_challenges
+                WHERE token_digest=%s AND actor_user_id=%s AND action_type=%s
+                  AND target_id=%s AND target_version=%s AND payload_digest=%s
+                  AND revoked_at IS NULL FOR UPDATE""",
+                (token_digest, actor_id, action_type, target_id, target_version, digest),
+            ).fetchone()
+            if row is None or (row[1] is None and row[3] <= now):
+                raise PermissionError("resource_unavailable")
+            replay = row[1] is not None
+            if replay and row[2] != target_id:
+                raise PermissionError("resource_unavailable")
+            result = mutation(connection, str(row[0]), replay)
+            if replay:
+                return result
+            if self._confirmed_mutation_fault_hook is not None:
+                self._confirmed_mutation_fault_hook()
+            changed = connection.exec_driver_sql(
+                """UPDATE access.confirmation_challenges SET consumed_at=%s,result_id=%s
+                WHERE challenge_id=%s AND consumed_at IS NULL RETURNING challenge_id""",
+                (now, target_id, row[0]),
+            ).fetchone()
+            if changed is None:
+                raise PermissionError("resource_unavailable")
+            connection.exec_driver_sql(
+                """INSERT INTO access.security_audit_events(
+                event_id,actor_user_id,subject_id,action,reason,metadata)
+                VALUES(%s,%s,%s,%s,%s,%s::jsonb)""",
+                (uuid.uuid4(), actor_id, target_id, action_type, reason,
+                 json.dumps({"challenge_id": row[0], "payload_digest": digest})),
+            )
+            return result
 
     @contextmanager
     def transaction(self, context: SecurityContext) -> Iterator[Any]:

@@ -56,8 +56,27 @@ def main() -> None:
             assert can_create is False, f"{role} unexpectedly has DDL authority"
         migration_module = runpy.run_path(str(root / "infra/postgres/run-production-migrations.py"))
         migration_module["apply_runtime_grants"](admin)
+        for role in ("thesis_trace_api", "thesis_trace_collector", "thesis_trace_ai_worker"):
+            assert admin.execute(
+                "SELECT has_schema_privilege(%s,'platform','USAGE')", (role,)
+            ).fetchone()[0], f"{role} cannot inspect Alembic schema version"
+            assert admin.execute(
+                "SELECT has_table_privilege(%s,'platform.alembic_version','SELECT')", (role,)
+            ).fetchone()[0], f"{role} cannot read Alembic schema version"
         assert admin.execute(
             "SELECT has_table_privilege('thesis_trace_api','research.evidence_stage_versions','SELECT,INSERT')"
+        ).fetchone()[0]
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','portfolio.official_security_snapshots','SELECT,INSERT,UPDATE')"
+        ).fetchone()[0]
+        assert admin.execute(
+            "SELECT to_regclass('portfolio.portfolios'),to_regclass('portfolio.record_versions')"
+        ).fetchone() == (None, None), "legacy Portfolio JSON authority still exists"
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','portfolio.current_state','SELECT,INSERT,UPDATE,DELETE')"
+        ).fetchone()[0]
+        assert admin.execute(
+            "SELECT has_table_privilege('thesis_trace_api','portfolio.trade_corrections','SELECT,INSERT')"
         ).fetchone()[0]
         assert not admin.execute(
             "SELECT has_table_privilege('thesis_trace_api','research.evidence_stage_versions','UPDATE,DELETE')"

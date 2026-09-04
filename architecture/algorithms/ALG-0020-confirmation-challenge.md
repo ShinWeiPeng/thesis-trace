@@ -1,6 +1,6 @@
 # ALG-0020: Consequential-action confirmation challenge
 ## Metadata
-- Status: proposed
+- Status: accepted
 - Owner module: access
 - Product feature: Two-step high-risk command confirmation
 - Flow IDs: consequential-command-flow
@@ -15,7 +15,7 @@ Inputs are actor, action type, target/version, canonical payload, server time an
 ## Constraints and quantitative acceptance thresholds
 Single use, lifetime <=5 minutes, nonblank reason, role/version/payload revalidation and atomic audit.
 ## Candidate methods and comparative evidence
-Candidates: (A) a client modal flag, (B) a server-stored digest challenge committed separately from the domain command, and (C) a server-stored digest challenge consumed in the same PostgreSQL transaction as the destination-domain mutation and audit. A is forgeable/stale. B can consume a challenge without committing the action, or commit an action after challenge rollback. C is the authoring candidate because it binds single use and domain effect atomically; it remains pending non-AI approval.
+Candidates: (A) a client modal flag, (B) a server-stored digest challenge committed separately from the domain command, and (C) a server-stored digest challenge consumed in the same PostgreSQL transaction as the destination-domain mutation and audit. A is forgeable/stale. B can consume a challenge without committing the action, or commit an action after challenge rollback. C is selected because it binds single use and domain effect atomically.
 ## Selected method and reasons for rejecting alternatives
 Canonicalize payload, hash binding fields and persist opaque one-time challenge; confirmation reruns all authorization and domain checks.
 ## Exact behavior, formula or pseudocode, boundaries, and tie-breaking
@@ -31,7 +31,9 @@ Expiry boundaries, replay, tamper, version race, actor swap and transaction roll
 ## Risks and monitoring
 Canonicalization mismatch; share server canonicalizer and monitor rejection reasons.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-29
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`
 
 ## Design links
 - `architecture/design/access-wave1.md`

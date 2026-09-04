@@ -10,6 +10,11 @@ from fastapi import Cookie, Header, HTTPException, Request, Response
 from thesis_trace.api import AccessApi, EvidenceApi
 from thesis_trace.adapters.cloudflare_identity.adapter import CloudflareGetIdentityClient, CloudflareIdentityAdapter, CloudflareJwksDecoder
 from thesis_trace.adapters.postgres_access.adapter import PostgresAccessAdapter
+from thesis_trace.adapters.postgres_atomic.adapter import (
+    PostgresConfirmedPortfolioTrade,
+    PostgresConfirmedThesisTransition,
+    PostgresConfirmedValuationPublication,
+)
 from thesis_trace.application.flows.evidence_intake import EvidenceIntakeFlow
 from thesis_trace.application.flows.evidence_stage import EvidenceStageFlow
 from thesis_trace.application.flows.anomaly_assessment import AnomalyAssessmentFlow
@@ -17,7 +22,10 @@ from thesis_trace.application.flows.anomaly_assessment import AnomalyJobProcesso
 from thesis_trace.application.flows.anomaly_assessment import ActionInboxFlow
 from thesis_trace.adapters.openai_recommendation.adapter import OpenAIRecommendationAdapter
 from thesis_trace.adapters.postgres_workflow.adapter import PostgresWorkflowStore
-from thesis_trace.modules.access.contracts import AuthenticatedActor, SecurityContext
+from thesis_trace.adapters.postgres_thesis.adapter import PostgresThesisStore
+from thesis_trace.adapters.postgres_portfolio.adapter import PostgresPortfolioStore
+from thesis_trace.application.contracts import PortfolioFlow, ThesisLifecycleFlow, ValuationFlow
+from thesis_trace.modules.access.contracts import AuthenticatedActor, Role, SecurityContext
 from thesis_trace.modules.access.jwt_verifier import AccessJwtConfiguration, CloudflareJwtVerifier, JwtVerificationError
 from thesis_trace.modules.access.jwt_verifier import derive_identity_facts
 from thesis_trace.modules.access.identity_registry.service import IdentityRegistry
@@ -40,6 +48,8 @@ from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAsse
 from thesis_trace.modules.research.anomaly_assessment.contracts import AnomalyAnalysisVersions
 from thesis_trace.modules.research import ResearchAnomalyFacade, ResearchStageFacade
 from thesis_trace.modules.workflow.service import WorkflowService
+from thesis_trace.modules.thesis.service import ThesisService
+from thesis_trace.modules.portfolio.service import PortfolioService
 
 
 @dataclass(slots=True)
@@ -51,6 +61,8 @@ class ApiRuntime:
     access_store: PostgresAccessAdapter
     identity_adapter: CloudflareIdentityAdapter
     workflow_store: PostgresWorkflowStore
+    thesis_store: PostgresThesisStore
+    portfolio_store: PostgresPortfolioStore
 
 
 @dataclass(slots=True)
@@ -204,6 +216,16 @@ def compose_application(role: str = "api") -> object:
             database_url_provider,
             security_context_provider=current_database_security_context,
         ),
+        thesis_store=PostgresThesisStore(
+            database_url_provider,
+            security_context_provider=current_database_security_context,
+            build_version=required_setting("THESIS_TRACE_BUILD_ID"),
+        ),
+        portfolio_store=PostgresPortfolioStore(
+            database_url_provider,
+            security_context_provider=current_database_security_context,
+            build_version=required_setting("THESIS_TRACE_BUILD_ID"),
+        ),
     )
     flow = EvidenceIntakeFlow(store=store, id_generator=lambda: str(uuid.uuid4()))
     stage_flow = EvidenceStageFlow(
@@ -228,10 +250,40 @@ def compose_application(role: str = "api") -> object:
         ),
         clock=lambda: datetime.now(timezone.utc).isoformat(),
     )
+    thesis_service = ThesisService(runtime.thesis_store, id_factory=lambda: str(uuid.uuid4()))
+    thesis_flow = ThesisLifecycleFlow(
+        thesis_service,
+        store,
+        confirmations=confirmations,
+        confirmed_transitions=PostgresConfirmedThesisTransition(
+            access_store, runtime.thesis_store, thesis_service,
+        ),
+        clock=lambda: datetime.now(timezone.utc),
+    )
+    portfolio_service = PortfolioService(runtime.portfolio_store)
+    portfolio_flow = PortfolioFlow(
+        portfolio_service,
+        thesis=thesis_service,
+        confirmations=confirmations,
+        confirmed_trades=PostgresConfirmedPortfolioTrade(
+            access_store, runtime.portfolio_store, portfolio_service,
+        ),
+        clock=lambda: datetime.now(timezone.utc),
+    )
+    valuation_flow = ValuationFlow(
+        thesis_service, portfolio_service, store, confirmations=confirmations,
+        confirmed_publications=PostgresConfirmedValuationPublication(
+            access_store, runtime.thesis_store, thesis_service, store, runtime.portfolio_store,
+        ),
+        clock=lambda: datetime.now(timezone.utc),
+    )
     app = create_fastapi_app(
         EvidenceApi(
             flow=flow, stage_flow=stage_flow, anomaly_flow=anomaly_flow,
             action_inbox_flow=action_inbox_flow,
+            thesis_flow=thesis_flow,
+            portfolio_flow=portfolio_flow,
+            valuation_flow=valuation_flow,
         ), authenticated_actor,
         AccessApi(access_store, sessions, account_actions),
     )

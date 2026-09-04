@@ -43,6 +43,12 @@
           "backend/src/thesis_trace/adapters/openai_recommendation/adapter.py",
           "backend/src/thesis_trace/adapters/postgres_access/__init__.py",
           "backend/src/thesis_trace/adapters/postgres_access/adapter.py",
+          "backend/src/thesis_trace/adapters/postgres_atomic/__init__.py",
+          "backend/src/thesis_trace/adapters/postgres_atomic/adapter.py",
+          "backend/src/thesis_trace/adapters/postgres_portfolio/__init__.py",
+          "backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py",
+          "backend/src/thesis_trace/adapters/postgres_thesis/__init__.py",
+          "backend/src/thesis_trace/adapters/postgres_thesis/adapter.py",
           "backend/src/thesis_trace/adapters/postgres_workflow/__init__.py",
           "backend/src/thesis_trace/adapters/postgres_workflow/adapter.py",
           "backend/src/thesis_trace/api.py",
@@ -83,7 +89,11 @@
           "backend/src/thesis_trace/modules/notification/__init__.py",
           "backend/src/thesis_trace/modules/notification/service.py",
           "backend/src/thesis_trace/modules/portfolio/__init__.py",
+          "backend/src/thesis_trace/modules/portfolio/contracts.py",
+          "backend/src/thesis_trace/modules/portfolio/policy.py",
+          "backend/src/thesis_trace/modules/portfolio/ports.py",
           "backend/src/thesis_trace/modules/portfolio/service.py",
+          "backend/src/thesis_trace/modules/portfolio/trades.py",
           "backend/src/thesis_trace/modules/recommendation/__init__.py",
           "backend/src/thesis_trace/modules/recommendation/service.py",
           "backend/src/thesis_trace/modules/research/__init__.py",
@@ -105,18 +115,22 @@
           "backend/src/thesis_trace/modules/research/evidence_stage/ports.py",
           "backend/src/thesis_trace/modules/research/evidence_stage/service.py",
           "backend/src/thesis_trace/modules/thesis/__init__.py",
+          "backend/src/thesis_trace/modules/thesis/contracts.py",
+          "backend/src/thesis_trace/modules/thesis/ports.py",
           "backend/src/thesis_trace/modules/thesis/service.py",
+          "backend/src/thesis_trace/modules/thesis/valuation.py",
           "backend/src/thesis_trace/modules/workflow/__init__.py",
           "backend/src/thesis_trace/modules/workflow/contracts.py",
           "backend/src/thesis_trace/modules/workflow/ports.py",
           "backend/src/thesis_trace/modules/workflow/service.py",
+          "backend/src/thesis_trace/platform/database.py",
           "backend/src/thesis_trace/platform/postgres.py",
           "backend/src/thesis_trace/platform/runtime.py",
           "backend/src/thesis_trace/platform/source_fetch.py",
           "infra/postgres/run-production-migrations.py"
         ],
         "mode": "python-ast",
-        "type_count": 185
+        "type_count": 298
       },
       "typescript": {
         "analyzed_files": [
@@ -124,12 +138,18 @@
           "frontend/src/access/contracts.ts",
           "frontend/src/access/routes.test.tsx",
           "frontend/src/access/routes.tsx",
+          "frontend/src/portfolio/client.ts",
+          "frontend/src/portfolio/routes.test.tsx",
+          "frontend/src/portfolio/routes.tsx",
+          "frontend/src/thesis/client.ts",
+          "frontend/src/thesis/routes.test.tsx",
+          "frontend/src/thesis/routes.tsx",
           "frontend/src/workflow/client.ts",
           "frontend/src/workflow/routes.test.tsx",
           "frontend/src/workflow/routes.tsx"
         ],
         "mode": "typescript-compiler-api",
-        "type_count": 6
+        "type_count": 9
       }
     },
     "diagnostics": [
