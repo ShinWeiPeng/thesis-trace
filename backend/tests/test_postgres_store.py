@@ -219,44 +219,97 @@ def test_schema_migration_is_versioned_and_reapplying_is_idempotent(store: Postg
     ]
 
 
-def test_valuation_source_facts_enforce_rls_append_only_runtime_grants(store: PostgresEvidenceStore) -> None:
+def test_valuation_source_facts_enforce_rls_append_only_runtime_grants(
+    store: PostgresEvidenceStore,
+) -> None:
     evidence_id = str(uuid.uuid4())
     store.commit_admission(
         idempotency_key="valuation-fact-intake",
-        record=EvidenceRecord(evidence_id, 1, "2330", 1, "https://example.com/facts", EvidenceStatus.RECEIVED),
+        record=EvidenceRecord(
+            evidence_id,
+            1,
+            "2330",
+            1,
+            "https://example.com/facts",
+            EvidenceStatus.RECEIVED,
+        ),
         audit=EvidenceAuditFact("owner-1", "evidence.received", evidence_id, 1),
-        job=CollectionRequest(evidence_id, 1, "https://example.com/facts", "collect:valuation-facts"),
+        job=CollectionRequest(
+            evidence_id, 1, "https://example.com/facts", "collect:valuation-facts"
+        ),
         accepted=EvidenceAccepted(evidence_id, 1),
     )
     lease = store.claim_collection_job()
     assert lease is not None
-    assert store.complete_collection(evidence_id, CollectedSourceSnapshot(
-        "https://example.com/facts", "MOPS", "valuation-facts-hash",
-        "2026-08-29T00:00:00+00:00", source_category="A",
-    ), lease.lease_token)
+    assert store.complete_collection(
+        evidence_id,
+        CollectedSourceSnapshot(
+            "https://example.com/facts",
+            "MOPS",
+            "valuation-facts-hash",
+            "2026-08-29T00:00:00+00:00",
+            source_category="A",
+        ),
+        lease.lease_token,
+    )
     record = store.get_record(evidence_id)
     snapshot_id = store.get_source_snapshot_id(evidence_id)
     assert record is not None and snapshot_id is not None
-    store.save_valuation_facts(evidence_id, (ValuationSourceFact(
-        "pe-history-1", evidence_id, record.version, snapshot_id, "2330", "pe",
-        "history_multiple", date(2026, 8, 1), Decimal("20"), Decimal("1"),
-    ),))
+    store.save_valuation_facts(
+        evidence_id,
+        (
+            ValuationSourceFact(
+                "pe-history-1",
+                evidence_id,
+                record.version,
+                snapshot_id,
+                "2330",
+                "pe",
+                "history_multiple",
+                date(2026, 8, 1),
+                Decimal("20"),
+                Decimal("1"),
+            ),
+        ),
+    )
 
     url = os.environ["THESIS_TRACE_TEST_DATABASE_URL"]
     apply_runtime_grants = runpy.run_path(
-        str(Path(__file__).resolve().parents[2] / "infra/postgres/run-production-migrations.py")
+        str(
+            Path(__file__).resolve().parents[2]
+            / "infra/postgres/run-production-migrations.py"
+        )
     )["apply_runtime_grants"]
-    with psycopg.connect(url) as connection:
-        for role_name in ("thesis_trace_api", "thesis_trace_collector", "thesis_trace_ai_worker"):
+    role_snapshot_sql = """SELECT rolname, rolcanlogin, rolsuper, rolcreatedb,
+        rolcreaterole, rolinherit, rolbypassrls FROM pg_roles
+        WHERE rolname IN ('thesis_trace_api', 'thesis_trace_collector',
+                         'thesis_trace_ai_worker') ORDER BY rolname"""
+    grants_snapshot_sql = """SELECT relacl FROM pg_class
+        WHERE oid = 'research.valuation_source_facts'::regclass"""
+    # Test-only roles and grants must not leak into the later production bootstrap.
+    with (
+        psycopg.connect(url) as connection,
+        connection.transaction(force_rollback=True),
+    ):
+        roles_before = connection.execute(role_snapshot_sql).fetchall()
+        grants_before = connection.execute(grants_snapshot_sql).fetchall()
+        for role_name in (
+            "thesis_trace_api",
+            "thesis_trace_collector",
+            "thesis_trace_ai_worker",
+        ):
             connection.execute(
                 f"""DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{role_name}')
                 THEN CREATE ROLE {role_name} NOLOGIN NOBYPASSRLS; END IF; END $$"""
             )
         apply_runtime_grants(connection)
-        assert connection.execute(
-            """SELECT relrowsecurity AND relforcerowsecurity FROM pg_class
+        assert (
+            connection.execute(
+                """SELECT relrowsecurity AND relforcerowsecurity FROM pg_class
             WHERE oid='research.valuation_source_facts'::regclass"""
-        ).fetchone()[0] is True
+            ).fetchone()[0]
+            is True
+        )
         api_privileges = connection.execute(
             """SELECT has_table_privilege('thesis_trace_api','research.valuation_source_facts','SELECT'),
             has_table_privilege('thesis_trace_api','research.valuation_source_facts','INSERT'),
@@ -275,7 +328,12 @@ def test_valuation_source_facts_enforce_rls_append_only_runtime_grants(store: Po
             with connection.transaction():
                 connection.execute("SET LOCAL ROLE thesis_trace_api")
                 connection.execute("SELECT set_config('app.role','owner',true)")
-                assert connection.execute("SELECT count(*) FROM research.valuation_source_facts").fetchone()[0] == 1
+                assert (
+                    connection.execute(
+                        "SELECT count(*) FROM research.valuation_source_facts"
+                    ).fetchone()[0]
+                    == 1
+                )
                 connection.execute("DELETE FROM research.valuation_source_facts")
         with connection.transaction():
             connection.execute("SET LOCAL ROLE thesis_trace_collector")
@@ -295,6 +353,10 @@ def test_valuation_source_facts_enforce_rls_append_only_runtime_grants(store: Po
                     "UPDATE research.valuation_source_facts SET value=22 WHERE evidence_id=%s",
                     (evidence_id,),
                 )
+
+    with psycopg.connect(url) as connection:
+        assert connection.execute(role_snapshot_sql).fetchall() == roles_before
+        assert connection.execute(grants_snapshot_sql).fetchall() == grants_before
 
 
 def test_anomaly_request_job_and_result_are_atomic_version_bound_and_shadow_only(

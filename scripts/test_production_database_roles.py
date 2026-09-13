@@ -105,11 +105,18 @@ def main() -> None:
         assert not admin.execute(
             "SELECT has_table_privilege('thesis_trace_api','workflow.action_items','DELETE')"
         ).fetchone()[0]
-        for role in ("thesis_trace_collector", "thesis_trace_ai_worker"):
-            assert not admin.execute(
-                "SELECT has_table_privilege(%s,'workflow.action_items','SELECT,INSERT,UPDATE,DELETE')",
-                (role,),
-            ).fetchone()[0]
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_collector','workflow.action_items','SELECT,INSERT,UPDATE,DELETE')"
+        ).fetchone()[0]
+        # ADR-0009: publication and expiry coordinate Workflow under the worker role.
+        for privilege in ("SELECT", "INSERT", "UPDATE"):
+            assert admin.execute(
+                "SELECT has_table_privilege('thesis_trace_ai_worker','workflow.action_items',%s)",
+                (privilege,),
+            ).fetchone()[0], f"AI worker is missing Workflow {privilege}"
+        assert not admin.execute(
+            "SELECT has_table_privilege('thesis_trace_ai_worker','workflow.action_items','DELETE')"
+        ).fetchone()[0], "AI worker must not delete Workflow action items"
         source_id = uuid.uuid4()
         admin.execute("BEGIN")
         try:

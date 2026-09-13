@@ -42,7 +42,7 @@ test("Owner follows the exact Inbox source, sees risk, confirms with a reason an
       ? []
       : ["in_progress", "deferred", "dismissed"],
   });
-  await page.route("**/api/**", async (route) => {
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const path = new URL(route.request().url()).pathname;
     const json = async (value: unknown) => route.fulfill({ json: value });
     if (path === "/api/session")
@@ -216,7 +216,7 @@ for (const role of ["learner", "admin"]) {
     page,
   }) => {
     const forbiddenRequests: string[] = [];
-    await page.route("**/api/**", (route) => {
+    await page.route(/^https?:\/\/[^/]+\/api\//, (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path === "/api/session")
         return route.fulfill({
