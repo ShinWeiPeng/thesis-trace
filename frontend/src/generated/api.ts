@@ -1,6 +1,6 @@
 /* eslint-disable */
 // Generated from backend OpenAPI. Do not edit.
-export const OPENAPI_SHA256 = "0100281198449c1c40064ad43428e5ca5f0ab29889c2ffb5eca923c01b3b5493";
+export const OPENAPI_SHA256 = "3da7e9f48baea8488ac397ae581bf7d5e6959cc2050a667a79c8811f1e03f772";
 
 export type AccountCreateBody = { "challenge_token": string; "email_fact": string; "provider_id": string; "provider_subject": string; "provider_type": string; "reason": string; "role": Role };
 
@@ -81,6 +81,32 @@ export type PortfolioMutationPreviewResponse = { "allocation"?: Record<string, u
 export type PortfolioResponse = { "cash": string; "cash_as_of": string | null; "company_actions": Record<string, unknown>[]; "corrections": Record<string, unknown>[]; "cost_profile": Record<string, unknown> | null; "exposure": Record<string, unknown>; "holdings": Record<string, unknown>[]; "trades": Record<string, unknown>[]; "updated_at": string; "version": number };
 
 export type ProblemResponse = { "code": string };
+
+export type RecommendationAdmissionBody = { "benchmark_source": "company_history" | "peer_group" | "abstain"; "expected_portfolio_version": number; "expected_thesis_version": number; "expected_valuation_version": number; "idempotency_key": string; "source_selection_reason": string; "thesis_id": string; "valuation_id": string };
+
+export type RecommendationClaimView = { "citations": string[]; "text": string };
+
+export type RecommendationConfirmBody = { "challenge_token"?: string | null; "defer_until"?: string | null; "expected_sequence": number; "idempotency_key": string; "reason": string; "target_status": "accepted" | "rejected" | "deferred"; "version": number };
+
+export type RecommendationDecisionBody = { "defer_until"?: string | null; "expected_sequence": number; "idempotency_key": string; "reason": string; "target_status": "accepted" | "rejected" | "deferred"; "version": number };
+
+export type RecommendationDecisionHistoryView = { "checks": RecommendationFieldView[]; "confirmation_id": string | null; "defer_until": string | null; "reason": string; "recorded_at": string; "sequence": number; "status": string };
+
+export type RecommendationDecisionPreview = { "challenge_token": string | null; "expires_at": string | null; "impact_summary": string; "view": RecommendationView };
+
+export type RecommendationDetailView = { "annualized_return": string | null; "benchmark_source": string; "checked_at": string; "claims": RecommendationClaimView[]; "company_id": string; "decisions": RecommendationDecisionHistoryView[]; "direction": string; "facts": RecommendationFieldView[]; "final_multiplier": string; "minimum_return": string | null; "next_decision_sequence": number | null; "portfolio_snapshot_id": string | null; "publication_reasons": string[]; "published_at": string; "raw_ceiling": string; "risk": RecommendationRiskRow[]; "source_selection_reason": string; "sources": RecommendationSourceView[]; "thesis_id": string; "thesis_title": string; "valuation_id": string; "view": RecommendationView };
+
+export type RecommendationFieldView = { "label": string; "value": string };
+
+export type RecommendationRequestPage = { "items": RecommendationRequestView[]; "next_cursor": string | null };
+
+export type RecommendationRequestView = { "error_code": string | null; "request_id": string; "result_version": number | null; "status": string; "submitted_at": string; "thesis_id": string };
+
+export type RecommendationRiskRow = { "current_ratio": string; "dimension": string; "limit_ratio": string; "projected_ratio": string | null; "subject": string };
+
+export type RecommendationSourceView = { "category": string | null; "excerpt": string; "lineage": string | null; "published_at": string | null; "publisher": string; "retrieved_at": string; "snapshot_id": string; "url": string };
+
+export type RecommendationView = { "allowed_actions": string[]; "decision_sequence"?: number; "decision_status": string | null; "input_validity": string; "reason_codes": string[]; "record_id": string; "version": number };
 
 export type Role = "owner" | "learner" | "admin";
 
@@ -192,6 +218,17 @@ export function create_company_api_companies_post(baseUrl: string, body: Company
   return request(fetcher, `${baseUrl}/companies`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
 
+export function list_recommendation_requests_api_companies__company_id__recommendation_requests_get(baseUrl: string, company_id: string, query: { "before"?: string | null } = {}, fetcher: typeof fetch = fetch): Promise<RecommendationRequestPage> {
+  const queryString = new URLSearchParams();
+  if (query.before !== undefined && query.before !== null) queryString.set("before", String(query.before));
+  const suffix = queryString.size ? `?${queryString}` : "";
+  return request(fetcher, `${baseUrl}/companies/${encodeURIComponent(company_id)}/recommendation-requests${suffix}`);
+}
+
+export function request_recommendation_api_companies__company_id__recommendation_requests_post(baseUrl: string, company_id: string, body: RecommendationAdmissionBody, fetcher: typeof fetch = fetch): Promise<RecommendationRequestView> {
+  return request(fetcher, `${baseUrl}/companies/${encodeURIComponent(company_id)}/recommendation-requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
 export function list_theses_api_companies__company_id__theses_get(baseUrl: string, company_id: string, fetcher: typeof fetch = fetch): Promise<ThesisResponse[]> {
   return request(fetcher, `${baseUrl}/companies/${encodeURIComponent(company_id)}/theses`);
 }
@@ -266,6 +303,25 @@ export function preview_portfolio_trade_api_portfolio_trade_previews_post(baseUr
 
 export function confirm_portfolio_trade_api_portfolio_trades_post(baseUrl: string, body: TradeConfirmBody, fetcher: typeof fetch = fetch): Promise<PortfolioResponse> {
   return request(fetcher, `${baseUrl}/portfolio/trades`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+export function get_recommendation_request_api_recommendation_requests__request_id__get(baseUrl: string, request_id: string, fetcher: typeof fetch = fetch): Promise<RecommendationRequestView> {
+  return request(fetcher, `${baseUrl}/recommendation-requests/${encodeURIComponent(request_id)}`);
+}
+
+export function preview_recommendation_decision_api_recommendations__record_id__decision_previews_post(baseUrl: string, record_id: string, body: RecommendationDecisionBody, fetcher: typeof fetch = fetch): Promise<RecommendationDecisionPreview> {
+  return request(fetcher, `${baseUrl}/recommendations/${encodeURIComponent(record_id)}/decision-previews`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+export function decide_recommendation_api_recommendations__record_id__decisions_post(baseUrl: string, record_id: string, body: RecommendationConfirmBody, fetcher: typeof fetch = fetch): Promise<RecommendationView> {
+  return request(fetcher, `${baseUrl}/recommendations/${encodeURIComponent(record_id)}/decisions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+export function get_recommendation_api_recommendations__record_id__versions__version__get(baseUrl: string, record_id: string, version: string, query: { "before_sequence"?: number | null } = {}, fetcher: typeof fetch = fetch): Promise<RecommendationDetailView> {
+  const queryString = new URLSearchParams();
+  if (query.before_sequence !== undefined && query.before_sequence !== null) queryString.set("before_sequence", String(query.before_sequence));
+  const suffix = queryString.size ? `?${queryString}` : "";
+  return request(fetcher, `${baseUrl}/recommendations/${encodeURIComponent(record_id)}/versions/${encodeURIComponent(version)}${suffix}`);
 }
 
 export function delete_session_api_session_delete(baseUrl: string, fetcher: typeof fetch = fetch): Promise<unknown> {

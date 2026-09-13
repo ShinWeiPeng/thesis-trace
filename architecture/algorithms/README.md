@@ -35,6 +35,11 @@ SPEC-0001 confirms the product behavior, but each record remains `proposed` unti
 | [ALG-0029](ALG-0029-email-delivery.md) | Email retry and idempotency | notification | Required |
 | [ALG-0030](ALG-0030-anomaly-qualification.md) | Anomaly qualification gate | anomaly_assessment | Required |
 | [ALG-0031](ALG-0031-claude-qualification.md) | Claude qualification gate | recommendation | Required |
+| [ALG-0032](ALG-0032-recommendation-publication.md) | Source-bound investment candidate validation and Recommendation publication | recommendation_domain | Required; accepted 2026-09-05; implementation partial |
+| [ALG-0033](ALG-0033-owner-decision-expiry.md) | Append-only Owner Decision and input-bound expiry | recommendation_domain | Required; accepted 2026-09-05; implementation partial |
+| [ALG-0034](ALG-0034-recommendation-action-projection.md) | Recommendation-derived Action Item materialization and reconciliation | workflow_domain | Required; accepted 2026-09-05; Workflow policy/store partial; atomic Recommendation parent pending |
+
+Pending design: [ALG-0035](ALG-0035-source-text-extraction.md), owned by `evidence_collection`, screens real-source text extraction under accepted ADR-0010 (project owner approval, 2026-09-09). Resource calibration and algorithm approval are still pending; no implementation or runtime PASS is claimed.
 
 ## Screened as not applicable
 

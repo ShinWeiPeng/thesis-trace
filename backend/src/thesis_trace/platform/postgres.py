@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import date, datetime
+from dataclasses import asdict
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from hashlib import sha256
 import json
@@ -13,8 +14,15 @@ from typing import Any, Callable, Iterator
 from thesis_trace.platform.database import DatabaseUrlProvider, PostgresUnavailable
 
 from thesis_trace.modules.access.contracts import SecurityContext
+from thesis_trace.modules.research import (
+    ResearchRecommendationSource,
+    ResearchRecordReference,
+)
 
-from thesis_trace.modules.research.evidence_collection.contracts import CollectedSourceSnapshot, ValuationSourceFact
+from thesis_trace.modules.research.evidence_collection.contracts import (
+    CollectedSourceSnapshot,
+    ValuationSourceFact,
+)
 from thesis_trace.modules.research.evidence_intake.contracts import (
     CollectionRequest,
     CompanyRecord,
@@ -636,7 +644,9 @@ def _psycopg() -> Any:
     return psycopg
 
 
-_REQUEST_SECURITY_CONTEXT: ContextVar[SecurityContext | None] = ContextVar("database_security_context", default=None)
+_REQUEST_SECURITY_CONTEXT: ContextVar[SecurityContext | None] = ContextVar(
+    "database_security_context", default=None
+)
 
 
 class _TransactionConnection:
@@ -647,6 +657,11 @@ class _TransactionConnection:
 
     def execute(self, statement: str, parameters: tuple[Any, ...] = ()) -> Any:
         return self._connection.exec_driver_sql(statement, parameters)
+
+    def transaction(self) -> Any:
+        if not self._connection.in_transaction():
+            raise ValueError("active_transaction_required")
+        return self._connection.begin_nested()
 
 
 @contextmanager
@@ -683,9 +698,12 @@ def bootstrap_schema(database_url_provider: DatabaseUrlProvider) -> None:
             applied_at timestamptz NOT NULL DEFAULT now())"""
         )
         connection.execute("SELECT pg_advisory_xact_lock(908177431)")
-        applied = {int(row[0]): (str(row[1]), str(row[2])) for row in connection.execute(
-            "SELECT version,name,checksum FROM research.schema_migrations ORDER BY version"
-        ).fetchall()}
+        applied = {
+            int(row[0]): (str(row[1]), str(row[2]))
+            for row in connection.execute(
+                "SELECT version,name,checksum FROM research.schema_migrations ORDER BY version"
+            ).fetchall()
+        }
         known_versions = {item[0] for item in MIGRATIONS}
         if any(version not in known_versions for version in applied):
             raise RuntimeError("database schema is newer than this application")
@@ -693,7 +711,9 @@ def bootstrap_schema(database_url_provider: DatabaseUrlProvider) -> None:
             checksum = sha256(sql.encode("utf-8")).hexdigest()
             if version in applied:
                 if applied[version] != (name, checksum):
-                    raise RuntimeError(f"migration {version} was changed after application")
+                    raise RuntimeError(
+                        f"migration {version} was changed after application"
+                    )
                 continue
             with connection.transaction():
                 connection.execute(sql)
@@ -764,7 +784,10 @@ def _verify_alembic_schema(database_url_provider: DatabaseUrlProvider) -> None:
         with engine.connect() as connection:
             current_revision = MigrationContext.configure(
                 connection,
-                opts={"version_table": "alembic_version", "version_table_schema": "platform"},
+                opts={
+                    "version_table": "alembic_version",
+                    "version_table_schema": "platform",
+                },
             ).get_current_revision()
     finally:
         engine.dispose()
@@ -773,9 +796,16 @@ def _verify_alembic_schema(database_url_provider: DatabaseUrlProvider) -> None:
 
 
 class PostgresEvidenceStore:
-    def __init__(self, database_url_provider: DatabaseUrlProvider, *, max_attempts: int = 3, lease_seconds: int = 60,
-                 admission_fault_hook: Callable[[], None] | None = None, runtime_role: str | None = None,
-                 transaction_connection: Any | None = None) -> None:
+    def __init__(
+        self,
+        database_url_provider: DatabaseUrlProvider,
+        *,
+        max_attempts: int = 3,
+        lease_seconds: int = 60,
+        admission_fault_hook: Callable[[], None] | None = None,
+        runtime_role: str | None = None,
+        transaction_connection: Any | None = None,
+    ) -> None:
         if not callable(database_url_provider):
             raise TypeError("database URL provider is required")
         self._database_url_provider = database_url_provider
@@ -793,11 +823,20 @@ class PostgresEvidenceStore:
         with _redacted_connection(self._database_url_provider) as connection:
             context = _REQUEST_SECURITY_CONTEXT.get()
             if context is not None:
-                connection.execute("SELECT set_config('app.user_id',%s,true)", (context.user_id,))
-                connection.execute("SELECT set_config('app.role',%s,true)", (context.role.value,))
-                connection.execute("SELECT set_config('app.request_id',%s,true)", (context.ownership_scope,))
+                connection.execute(
+                    "SELECT set_config('app.user_id',%s,true)", (context.user_id,)
+                )
+                connection.execute(
+                    "SELECT set_config('app.role',%s,true)", (context.role.value,)
+                )
+                connection.execute(
+                    "SELECT set_config('app.request_id',%s,true)",
+                    (context.ownership_scope,),
+                )
             elif self._runtime_role in {"collector", "ai_worker"}:
-                connection.execute("SELECT set_config('app.role',%s,true)", (self._runtime_role,))
+                connection.execute(
+                    "SELECT set_config('app.role',%s,true)", (self._runtime_role,)
+                )
             yield connection
 
     def for_transaction(self, connection: Any) -> PostgresEvidenceStore:
@@ -810,6 +849,23 @@ class PostgresEvidenceStore:
             runtime_role=self._runtime_role,
             transaction_connection=connection,
         )
+
+    @staticmethod
+    def _lock_recommendation_evidence(connection: Any, evidence_id: str) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+            (f"recommendation-evidence:{evidence_id}",),
+        )
+
+    def lock_recommendation_inputs(self, evidence_ids: tuple[str, ...]) -> None:
+        if (
+            self._transaction_connection is None
+            or not self._transaction_connection.in_transaction()
+        ):
+            raise ValueError("inactive_transaction")
+        with self._connection() as connection:
+            for evidence_id in sorted(set(evidence_ids)):
+                self._lock_recommendation_evidence(connection, evidence_id)
 
     def create_company(self, ticker: str, name: str) -> CompanyRecord:
         ticker = ticker.strip()
@@ -831,7 +887,10 @@ class PostgresEvidenceStore:
             rows = connection.execute(
                 "SELECT company_id,ticker,name,version FROM research.companies ORDER BY ticker"
             ).fetchall()
-        return [CompanyRecord(str(row[0]), str(row[1]), str(row[2]), int(row[3])) for row in rows]
+        return [
+            CompanyRecord(str(row[0]), str(row[1]), str(row[2]), int(row[3]))
+            for row in rows
+        ]
 
     def get_company(self, company_id: str) -> CompanyRecord | None:
         with self._connection() as connection:
@@ -839,7 +898,11 @@ class PostgresEvidenceStore:
                 "SELECT company_id,ticker,name,version FROM research.companies WHERE company_id=%s",
                 (company_id,),
             ).fetchone()
-        return None if row is None else CompanyRecord(str(row[0]), str(row[1]), str(row[2]), int(row[3]))
+        return (
+            None
+            if row is None
+            else CompanyRecord(str(row[0]), str(row[1]), str(row[2]), int(row[3]))
+        )
 
     def find_accepted(self, idempotency_key: str) -> EvidenceAccepted | None:
         with self._connection() as connection:
@@ -849,9 +912,15 @@ class PostgresEvidenceStore:
             ).fetchone()
         return None if row is None else EvidenceAccepted(str(row[0]), int(row[1]))
 
-    def commit_admission(self, *, idempotency_key: str, record: EvidenceRecord,
-                         audit: EvidenceAuditFact, job: CollectionRequest,
-                         accepted: EvidenceAccepted) -> None:
+    def commit_admission(
+        self,
+        *,
+        idempotency_key: str,
+        record: EvidenceRecord,
+        audit: EvidenceAuditFact,
+        job: CollectionRequest,
+        accepted: EvidenceAccepted,
+    ) -> None:
         with self._connection() as connection:
             with connection.transaction():
                 connection.execute(
@@ -866,17 +935,36 @@ class PostgresEvidenceStore:
                     return
                 connection.execute(
                     "INSERT INTO research.evidence_intakes(evidence_id,version,company_id,company_version,submitted_url,status) VALUES (%s,%s,%s,%s,%s,%s)",
-                    (record.evidence_id, record.version, record.company_id, record.company_version, record.url, record.status.value),
+                    (
+                        record.evidence_id,
+                        record.version,
+                        record.company_id,
+                        record.company_version,
+                        record.url,
+                        record.status.value,
+                    ),
                 )
                 if self._admission_fault_hook is not None:
                     self._admission_fault_hook()
                 connection.execute(
                     "INSERT INTO research.audit_events(event_id,actor_id,action,subject_id,subject_version) VALUES (%s,%s,%s,%s,%s)",
-                    (uuid.uuid4(), audit.actor_id, audit.action, audit.subject_id, audit.subject_version),
+                    (
+                        uuid.uuid4(),
+                        audit.actor_id,
+                        audit.action,
+                        audit.subject_id,
+                        audit.subject_version,
+                    ),
                 )
                 connection.execute(
                     "INSERT INTO research.collection_jobs(job_id,evidence_id,evidence_version,submitted_url,idempotency_key) VALUES (%s,%s,%s,%s,%s)",
-                    (uuid.uuid4(), job.evidence_id, job.evidence_version, job.url, job.idempotency_key),
+                    (
+                        uuid.uuid4(),
+                        job.evidence_id,
+                        job.evidence_version,
+                        job.url,
+                        job.idempotency_key,
+                    ),
                 )
                 connection.execute(
                     "INSERT INTO research.idempotency_receipts(idempotency_key,evidence_id,evidence_version) VALUES (%s,%s,%s)",
@@ -889,7 +977,18 @@ class PostgresEvidenceStore:
                 "SELECT evidence_id,version,company_id,company_version,submitted_url,status FROM research.evidence_intakes WHERE evidence_id=%s",
                 (evidence_id,),
             ).fetchone()
-        return None if row is None else EvidenceRecord(str(row[0]), int(row[1]), str(row[2]), int(row[3]), str(row[4]), EvidenceStatus(row[5]))
+        return (
+            None
+            if row is None
+            else EvidenceRecord(
+                str(row[0]),
+                int(row[1]),
+                str(row[2]),
+                int(row[3]),
+                str(row[4]),
+                EvidenceStatus(row[5]),
+            )
+        )
 
     def get_record_for_validation(self, evidence_id: str) -> EvidenceRecord | None:
         with self._connection() as connection:
@@ -898,8 +997,17 @@ class PostgresEvidenceStore:
                 FROM research.evidence_intakes WHERE evidence_id=%s FOR SHARE""",
                 (evidence_id,),
             ).fetchone()
-        return None if row is None else EvidenceRecord(
-            str(row[0]), int(row[1]), str(row[2]), int(row[3]), str(row[4]), EvidenceStatus(row[5])
+        return (
+            None
+            if row is None
+            else EvidenceRecord(
+                str(row[0]),
+                int(row[1]),
+                str(row[2]),
+                int(row[3]),
+                str(row[4]),
+                EvidenceStatus(row[5]),
+            )
         )
 
     def get_source_snapshot_id(self, evidence_id: str) -> str | None:
@@ -911,6 +1019,58 @@ class PostgresEvidenceStore:
                 (evidence_id,),
             ).fetchone()
         return None if row is None else str(row[0])
+
+    def get_recommendation_source(
+        self, evidence_id: str
+    ) -> ResearchRecommendationSource | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """SELECT e.evidence_id,e.version,e.company_id,s.snapshot_id,s.canonical_url,s.publisher,
+                  s.excerpt,s.source_category,s.lineage,s.published_at,s.observed_at,s.retrieved_at
+                FROM research.evidence_intakes e JOIN research.source_observations o USING(evidence_id)
+                JOIN research.source_snapshots s ON s.snapshot_id=o.snapshot_id
+                WHERE e.evidence_id=%s AND e.status='succeeded'""",
+                (evidence_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            stage = connection.execute(
+                f"{self._stage_select()} WHERE evidence_id=%s ORDER BY version DESC LIMIT 1",
+                (evidence_id,),
+            ).fetchone()
+
+        def encode(value):
+            if isinstance(value, datetime):
+                return value.astimezone(timezone.utc).isoformat()
+            if isinstance(value, uuid.UUID):
+                return str(value)
+            raise ValueError("invalid_stage_snapshot")
+
+        stage_digest = (
+            None
+            if stage is None
+            else sha256(
+                json.dumps(
+                    list(stage), sort_keys=True, separators=(",", ":"), default=encode
+                ).encode()
+            ).hexdigest()
+        )
+        return ResearchRecommendationSource(
+            ResearchRecordReference("evidence", str(row[0]), int(row[1]), str(row[2])),
+            str(row[3]),
+            str(row[4]),
+            str(row[5]),
+            row[6],
+            str(row[7]),
+            row[8],
+            row[9],
+            row[10],
+            row[11],
+            None if stage is None else int(stage[1]),
+            None if stage is None else str(stage[12]),
+            None if stage is None else str(stage[2]),
+            stage_digest,
+        )
 
     def get_source_snapshot_id_for_validation(self, evidence_id: str) -> str | None:
         with self._connection() as connection:
@@ -926,15 +1086,26 @@ class PostgresEvidenceStore:
     @staticmethod
     def _valuation_fact(row: Any) -> ValuationSourceFact:
         return ValuationSourceFact(
-            fact_id=str(row[0]), evidence_id=str(row[1]), evidence_version=int(row[2]),
-            source_snapshot_id=str(row[3]), company_id=str(row[4]), method=str(row[5]),
-            fact_kind=str(row[6]), observed_on=row[7], value=Decimal(row[8]),
-            denominator=None if row[9] is None else Decimal(row[9]), confirmed_at=row[10],
-            next_report_time=row[11], material_event_time=row[12], policy_version=str(row[13]),
+            fact_id=str(row[0]),
+            evidence_id=str(row[1]),
+            evidence_version=int(row[2]),
+            source_snapshot_id=str(row[3]),
+            company_id=str(row[4]),
+            method=str(row[5]),
+            fact_kind=str(row[6]),
+            observed_on=row[7],
+            value=Decimal(row[8]),
+            denominator=None if row[9] is None else Decimal(row[9]),
+            confirmed_at=row[10],
+            next_report_time=row[11],
+            material_event_time=row[12],
+            policy_version=str(row[13]),
             target_date=row[14],
         )
 
-    def get_valuation_fact(self, evidence_id: str, fact_id: str) -> ValuationSourceFact | None:
+    def get_valuation_fact(
+        self, evidence_id: str, fact_id: str
+    ) -> ValuationSourceFact | None:
         with self._connection() as connection:
             row = connection.execute(
                 """SELECT fact_id,evidence_id,evidence_version,source_snapshot_id,company_id,
@@ -945,7 +1116,34 @@ class PostgresEvidenceStore:
             ).fetchone()
         return None if row is None else self._valuation_fact(row)
 
-    def get_valuation_fact_for_validation(self, evidence_id: str, fact_id: str) -> ValuationSourceFact | None:
+    def get_recommendation_fact(
+        self, evidence_id: str, fact_id: str
+    ) -> tuple[ResearchRecordReference, str] | None:
+        fact = self.get_valuation_fact(evidence_id, fact_id)
+        if fact is None:
+            return None
+
+        def encode(value):
+            if isinstance(value, datetime):
+                return value.astimezone(timezone.utc).isoformat()
+            if isinstance(value, date):
+                return value.isoformat()
+            if isinstance(value, Decimal):
+                return str(value)
+            raise ValueError("invalid_valuation_fact")
+
+        digest = sha256(
+            json.dumps(
+                asdict(fact), sort_keys=True, separators=(",", ":"), default=encode
+            ).encode()
+        ).hexdigest()
+        return ResearchRecordReference(
+            "valuation_fact", fact.fact_id, fact.evidence_version, fact.company_id
+        ), digest
+
+    def get_valuation_fact_for_validation(
+        self, evidence_id: str, fact_id: str
+    ) -> ValuationSourceFact | None:
         with self._connection() as connection:
             row = connection.execute(
                 """SELECT fact_id,evidence_id,evidence_version,source_snapshot_id,company_id,
@@ -956,9 +1154,12 @@ class PostgresEvidenceStore:
             ).fetchone()
         return None if row is None else self._valuation_fact(row)
 
-    def save_valuation_facts(self, evidence_id: str, facts: tuple[ValuationSourceFact, ...]) -> None:
+    def save_valuation_facts(
+        self, evidence_id: str, facts: tuple[ValuationSourceFact, ...]
+    ) -> None:
         """Persist facts produced by the trusted collection/normalization boundary."""
         with self._connection() as connection:
+            self._lock_recommendation_evidence(connection, evidence_id)
             evidence = connection.execute(
                 """SELECT e.version,e.company_id,o.snapshot_id FROM research.evidence_intakes e
                 JOIN research.source_observations o USING(evidence_id)
@@ -969,21 +1170,38 @@ class PostgresEvidenceStore:
                 raise ValueError("valuation_source_invalid")
             for fact in facts:
                 if (
-                    fact.evidence_id != evidence_id or fact.evidence_version != int(evidence[0])
-                    or fact.company_id != str(evidence[1]) or fact.source_snapshot_id != str(evidence[2])
+                    fact.evidence_id != evidence_id
+                    or fact.evidence_version != int(evidence[0])
+                    or fact.company_id != str(evidence[1])
+                    or fact.source_snapshot_id != str(evidence[2])
                     or fact.method not in {"pe", "pb"}
-                    or fact.fact_kind not in {"history_multiple", "peer_multiple", "forecast"}
-                    or not fact.value.is_finite() or fact.value <= 0
-                    or (fact.fact_kind != "forecast" and (
-                        fact.denominator is None or not fact.denominator.is_finite() or fact.denominator <= 0
-                    ))
-                    or (fact.fact_kind == "forecast" and (
-                        fact.target_date is None or fact.confirmed_at is None
-                        or fact.confirmed_at.tzinfo is None
-                    ))
-                    or any(value is not None and value.tzinfo is None for value in (
-                        fact.next_report_time, fact.material_event_time,
-                    ))
+                    or fact.fact_kind
+                    not in {"history_multiple", "peer_multiple", "forecast"}
+                    or not fact.value.is_finite()
+                    or fact.value <= 0
+                    or (
+                        fact.fact_kind != "forecast"
+                        and (
+                            fact.denominator is None
+                            or not fact.denominator.is_finite()
+                            or fact.denominator <= 0
+                        )
+                    )
+                    or (
+                        fact.fact_kind == "forecast"
+                        and (
+                            fact.target_date is None
+                            or fact.confirmed_at is None
+                            or fact.confirmed_at.tzinfo is None
+                        )
+                    )
+                    or any(
+                        value is not None and value.tzinfo is None
+                        for value in (
+                            fact.next_report_time,
+                            fact.material_event_time,
+                        )
+                    )
                 ):
                     raise ValueError("valuation_source_invalid")
                 connection.execute(
@@ -992,16 +1210,31 @@ class PostgresEvidenceStore:
                     fact_kind,observed_on,value,denominator,confirmed_at,next_report_time,
                     material_event_time,policy_version,target_date) VALUES(
                     %s,%s,%s,%s::uuid,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (fact.evidence_id, fact.fact_id, fact.evidence_version, fact.source_snapshot_id,
-                     fact.company_id, fact.method, fact.fact_kind, fact.observed_on, fact.value,
-                     fact.denominator, fact.confirmed_at, fact.next_report_time,
-                     fact.material_event_time, fact.policy_version, fact.target_date),
+                    (
+                        fact.evidence_id,
+                        fact.fact_id,
+                        fact.evidence_version,
+                        fact.source_snapshot_id,
+                        fact.company_id,
+                        fact.method,
+                        fact.fact_kind,
+                        fact.observed_on,
+                        fact.value,
+                        fact.denominator,
+                        fact.confirmed_at,
+                        fact.next_report_time,
+                        fact.material_event_time,
+                        fact.policy_version,
+                        fact.target_date,
+                    ),
                 )
 
     @staticmethod
     def _stage_record(row: Any) -> EvidenceStageRecord:
         trace = tuple(
-            GateResult(EvidenceStage(item["gate"]), bool(item["passed"]), str(item["code"]))
+            GateResult(
+                EvidenceStage(item["gate"]), bool(item["passed"]), str(item["code"])
+            )
             for item in row[13]
         )
         facts = DimensionFacts(
@@ -1012,7 +1245,9 @@ class PostgresEvidenceStore:
             identifiable_profit_or_cash_flow=bool(row[10]),
             consecutive_financial_quarters=int(row[11]),
         )
-        confirmed_at = row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4])
+        confirmed_at = (
+            row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4])
+        )
         return EvidenceStageRecord(
             evidence_id=str(row[0]),
             version=int(row[1]),
@@ -1084,16 +1319,24 @@ class PostgresEvidenceStore:
         if trace_data is not None:
             trace = AnomalyDecisionTrace(
                 anomaly_class=AnomalyClass(trace_data["anomaly_class"]),
-                source_tiers=tuple(SourceTier(value) for value in trace_data["source_tiers"]),
+                source_tiers=tuple(
+                    SourceTier(value) for value in trace_data["source_tiers"]
+                ),
                 clue_score=trace_data["clue_score"],
-                clue_route=None if trace_data["clue_route"] is None else ClueRoute(trace_data["clue_route"]),
+                clue_route=None
+                if trace_data["clue_route"] is None
+                else ClueRoute(trace_data["clue_route"]),
                 gates=tuple(
-                    DecisionGate(str(item["gate"]), bool(item["passed"]), str(item["code"]))
+                    DecisionGate(
+                        str(item["gate"]), bool(item["passed"]), str(item["code"])
+                    )
                     for item in trace_data["gates"]
                 ),
                 policy_version=str(trace_data["policy_version"]),
             )
-        requested_at = row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8])
+        requested_at = (
+            row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8])
+        )
         return AnomalyAssessmentRecord(
             assessment_id=str(row[0]),
             version=int(row[1]),
@@ -1136,6 +1379,7 @@ class PostgresEvidenceStore:
     ) -> EvidenceStageRecord:
         with self._connection() as connection:
             with connection.transaction():
+                self._lock_recommendation_evidence(connection, command.evidence_id)
                 connection.execute(
                     "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                     (f"evidence-stage:{command.evidence_id}",),
@@ -1146,7 +1390,9 @@ class PostgresEvidenceStore:
                 ).fetchone()
                 if replay_row is not None:
                     replay = self._stage_record(replay_row)
-                    if not confirmation_matches(replay, command, evaluation, policy_version):
+                    if not confirmation_matches(
+                        replay, command, evaluation, policy_version
+                    ):
                         raise ValueError("idempotency_conflict")
                     return replay
                 target = connection.execute(
@@ -1165,10 +1411,17 @@ class PostgresEvidenceStore:
                 if int(current) != command.expected_version:
                     raise ValueError("version_conflict")
                 version = int(current) + 1
-                trace_json = json.dumps([
-                    {"gate": item.gate.value, "passed": item.passed, "code": item.code}
-                    for item in evaluation.gate_trace
-                ], separators=(",", ":"))
+                trace_json = json.dumps(
+                    [
+                        {
+                            "gate": item.gate.value,
+                            "passed": item.passed,
+                            "code": item.code,
+                        }
+                        for item in evaluation.gate_trace
+                    ],
+                    separators=(",", ":"),
+                )
                 row = connection.execute(
                     f"""INSERT INTO research.evidence_stage_versions(
                     evidence_id,version,source_snapshot_id,actor_id,confirmed_at,reason,
@@ -1176,20 +1429,36 @@ class PostgresEvidenceStore:
                     identifiable_revenue,identifiable_profit_or_cash_flow,consecutive_financial_quarters,
                     stage,policy_version,gate_trace,idempotency_key)
                     VALUES (%s,%s,%s::uuid,%s,%s::timestamptz,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
-                    RETURNING {self._stage_select().split('FROM ')[0].removeprefix('SELECT ')}""",
+                    RETURNING {self._stage_select().split("FROM ")[0].removeprefix("SELECT ")}""",
                     (
-                        command.evidence_id, version, command.source_snapshot_id, command.actor.actor_id,
-                        confirmed_at, command.reason, command.facts.source_confirmation.value,
-                        command.facts.product_established, command.facts.commercialization_established,
-                        command.facts.identifiable_revenue, command.facts.identifiable_profit_or_cash_flow,
-                        command.facts.consecutive_financial_quarters, evaluation.stage.value, policy_version,
-                        trace_json, command.idempotency_key,
+                        command.evidence_id,
+                        version,
+                        command.source_snapshot_id,
+                        command.actor.actor_id,
+                        confirmed_at,
+                        command.reason,
+                        command.facts.source_confirmation.value,
+                        command.facts.product_established,
+                        command.facts.commercialization_established,
+                        command.facts.identifiable_revenue,
+                        command.facts.identifiable_profit_or_cash_flow,
+                        command.facts.consecutive_financial_quarters,
+                        evaluation.stage.value,
+                        policy_version,
+                        trace_json,
+                        command.idempotency_key,
                     ),
                 ).fetchone()
                 connection.execute(
                     """INSERT INTO research.audit_events(event_id,actor_id,action,subject_id,subject_version,occurred_at)
                     VALUES (%s,%s,'evidence.stage.confirmed',%s,%s,%s::timestamptz)""",
-                    (uuid.uuid4(), command.actor.actor_id, command.evidence_id, version, confirmed_at),
+                    (
+                        uuid.uuid4(),
+                        command.actor.actor_id,
+                        command.evidence_id,
+                        version,
+                        confirmed_at,
+                    ),
                 )
         return self._stage_record(row)
 
@@ -1230,13 +1499,20 @@ class PostgresEvidenceStore:
                         replay.evidence_id != command.evidence_id
                         or replay.evidence_version != command.expected_evidence_version
                         or replay.actor_id != command.actor_id
-                        or replay.source_snapshot_ids != tuple(source.source_snapshot_id for source in command.sources)
-                        or not self._source_characteristics_match(replay_sources, command.sources)
+                        or replay.source_snapshot_ids
+                        != tuple(
+                            source.source_snapshot_id for source in command.sources
+                        )
+                        or not self._source_characteristics_match(
+                            replay_sources, command.sources
+                        )
                         or replay.reason != command.reason
                     ):
                         raise ValueError("idempotency_conflict")
                     return replay
-                source_ids = tuple(source.source_snapshot_id for source in command.sources)
+                source_ids = tuple(
+                    source.source_snapshot_id for source in command.sources
+                )
                 target = connection.execute(
                     "SELECT version,status,company_id FROM research.evidence_intakes "
                     "WHERE evidence_id=%s FOR UPDATE",
@@ -1247,7 +1523,11 @@ class PostgresEvidenceStore:
                     or str(target[1]) != "succeeded"
                     or int(target[0]) != command.expected_evidence_version
                 ):
-                    raise ValueError("version_conflict") if target is not None else LookupError("resource_unavailable")
+                    raise (
+                        ValueError("version_conflict")
+                        if target is not None
+                        else LookupError("resource_unavailable")
+                    )
                 linked_rows = connection.execute(
                     """SELECT DISTINCT ON (s.snapshot_id) s.snapshot_id::text,s.canonical_url,s.publisher,
                     s.retrieved_at::text,s.published_at::text,s.observed_at::text,s.excerpt,
@@ -1277,7 +1557,8 @@ class PostgresEvidenceStore:
                             attributed_author=category == "B",
                             verifiable_primary_evidence=category == "B",
                             underlying_evidence_id=(
-                                None if linked[8] is None or not str(linked[8]).strip()
+                                None
+                                if linked[8] is None or not str(linked[8]).strip()
                                 else str(linked[8])
                             ),
                             canonical_url=str(linked[1]),
@@ -1293,14 +1574,17 @@ class PostgresEvidenceStore:
                     assessment_id,version,evidence_id,evidence_version,actor_id,source_snapshot_ids,
                     source_characteristics,status,reason,requested_at,idempotency_key)
                     VALUES (%s,1,%s,%s,%s,%s::uuid[],%s::jsonb,'pending',%s,%s::timestamptz,%s)
-                    RETURNING {self._anomaly_select().split('FROM ')[0].removeprefix('SELECT ')}""",
+                    RETURNING {self._anomaly_select().split("FROM ")[0].removeprefix("SELECT ")}""",
                     (
                         assessment_id,
                         command.evidence_id,
                         command.expected_evidence_version,
                         command.actor_id,
                         list(source_ids),
-                        json.dumps([self._source_values(source) for source in stored_sources], separators=(",", ":")),
+                        json.dumps(
+                            [self._source_values(source) for source in stored_sources],
+                            separators=(",", ":"),
+                        ),
                         command.reason,
                         requested_at,
                         command.idempotency_key,
@@ -1314,11 +1598,18 @@ class PostgresEvidenceStore:
                     critic_model_version)
                     VALUES (%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
-                        uuid.uuid4(), assessment_id, command.evidence_id,
-                        command.expected_evidence_version, versions.build_version, policy_version,
-                        versions.candidate_schema_version, versions.candidate_prompt_version,
-                        versions.provider_model_version, versions.critic_schema_version,
-                        versions.critic_prompt_version, versions.critic_model_version,
+                        uuid.uuid4(),
+                        assessment_id,
+                        command.evidence_id,
+                        command.expected_evidence_version,
+                        versions.build_version,
+                        policy_version,
+                        versions.candidate_schema_version,
+                        versions.candidate_prompt_version,
+                        versions.provider_model_version,
+                        versions.critic_schema_version,
+                        versions.critic_prompt_version,
+                        versions.critic_model_version,
                     ),
                 )
                 connection.execute(
@@ -1351,12 +1642,21 @@ class PostgresEvidenceStore:
         if row is None:
             return None
         return AnomalyAnalysisJob(
-            job_id=str(row[0]), assessment_id=str(row[1]), assessment_version=int(row[2]),
-            evidence_id=str(row[3]), evidence_version=int(row[4]), lease_token=str(lease_token),
-            attempt=int(row[5]), build_version=str(row[6]), policy_version=str(row[7]),
-            candidate_schema_version=str(row[8]), candidate_prompt_version=str(row[9]),
-            provider_model_version=str(row[10]), critic_schema_version=str(row[11]),
-            critic_prompt_version=str(row[12]), critic_model_version=str(row[13]),
+            job_id=str(row[0]),
+            assessment_id=str(row[1]),
+            assessment_version=int(row[2]),
+            evidence_id=str(row[3]),
+            evidence_version=int(row[4]),
+            lease_token=str(lease_token),
+            attempt=int(row[5]),
+            build_version=str(row[6]),
+            policy_version=str(row[7]),
+            candidate_schema_version=str(row[8]),
+            candidate_prompt_version=str(row[9]),
+            provider_model_version=str(row[10]),
+            critic_schema_version=str(row[11]),
+            critic_prompt_version=str(row[12]),
+            critic_model_version=str(row[13]),
         )
 
     def load_anomaly_sources(
@@ -1384,11 +1684,19 @@ class PostgresEvidenceStore:
                     if item.get("underlying_evidence_id") is None
                     else str(item["underlying_evidence_id"])
                 ),
-                canonical_url=None if item.get("canonical_url") is None else str(item["canonical_url"]),
+                canonical_url=None
+                if item.get("canonical_url") is None
+                else str(item["canonical_url"]),
                 excerpt=None if item.get("excerpt") is None else str(item["excerpt"]),
-                retrieved_at=None if item.get("retrieved_at") is None else str(item["retrieved_at"]),
-                published_at=None if item.get("published_at") is None else str(item["published_at"]),
-                observed_at=None if item.get("observed_at") is None else str(item["observed_at"]),
+                retrieved_at=None
+                if item.get("retrieved_at") is None
+                else str(item["retrieved_at"]),
+                published_at=None
+                if item.get("published_at") is None
+                else str(item["published_at"]),
+                observed_at=None
+                if item.get("observed_at") is None
+                else str(item["observed_at"]),
             )
             for item in row[0]
         )
@@ -1417,22 +1725,34 @@ class PostgresEvidenceStore:
                 ).fetchone()
                 if job is None:
                     raise ValueError("lease_unavailable")
-                source_ids = tuple(source.source_snapshot_id for source in command.sources)
+                source_ids = tuple(
+                    source.source_snapshot_id for source in command.sources
+                )
                 if source_ids != current.source_snapshot_ids:
                     raise ValueError("source_version_conflict")
                 evidence_version = connection.execute(
                     "SELECT version FROM research.evidence_intakes WHERE evidence_id=%s",
                     (current.evidence_id,),
                 ).fetchone()[0]
-                stale = int(evidence_version) != current.evidence_version or int(job[0]) != current.evidence_version
-                status = AssessmentStatus.SUPERSEDED if stale else AssessmentStatus.SUCCEEDED
+                stale = (
+                    int(evidence_version) != current.evidence_version
+                    or int(job[0]) != current.evidence_version
+                )
+                status = (
+                    AssessmentStatus.SUPERSEDED if stale else AssessmentStatus.SUCCEEDED
+                )
                 failure_code = "stale_input" if stale else None
                 updated = connection.execute(
                     f"""UPDATE research.anomaly_assessments
                     SET version=version+1,status=%s,trace=%s::jsonb,failure_code=%s
                     WHERE assessment_id=%s::uuid
-                    RETURNING {self._anomaly_select().split('FROM ')[0].removeprefix('SELECT ')}""",
-                    (status.value, json.dumps(self._trace_values(trace), separators=(",", ":")), failure_code, command.assessment_id),
+                    RETURNING {self._anomaly_select().split("FROM ")[0].removeprefix("SELECT ")}""",
+                    (
+                        status.value,
+                        json.dumps(self._trace_values(trace), separators=(",", ":")),
+                        failure_code,
+                        command.assessment_id,
+                    ),
                 ).fetchone()
                 connection.execute(
                     """UPDATE research.anomaly_analysis_jobs
@@ -1447,7 +1767,9 @@ class PostgresEvidenceStore:
                 )
         return self._anomaly_record(updated)
 
-    def get_anomaly_assessment(self, assessment_id: str) -> AnomalyAssessmentRecord | None:
+    def get_anomaly_assessment(
+        self, assessment_id: str
+    ) -> AnomalyAssessmentRecord | None:
         with self._connection() as connection:
             row = connection.execute(
                 f"{self._anomaly_context_select()} WHERE a.assessment_id=%s::uuid",
@@ -1474,25 +1796,55 @@ class PostgresEvidenceStore:
             ).fetchone()
             if row is None:
                 return None
+            self._lock_recommendation_evidence(connection, str(row[1]))
             connection.execute(
                 "UPDATE research.evidence_intakes SET status='processing',version=version+1,updated_at=now() WHERE evidence_id=%s",
                 (row[1],),
             )
-        return LeasedCollectionJob(str(row[0]), str(row[1]), int(row[2]), str(row[3]), str(row[4]), str(lease_token), int(row[5]))
+        return LeasedCollectionJob(
+            str(row[0]),
+            str(row[1]),
+            int(row[2]),
+            str(row[3]),
+            str(row[4]),
+            str(lease_token),
+            int(row[5]),
+        )
 
     def transition(self, evidence_id: str, status: EvidenceStatus) -> None:
         with self._connection() as connection:
-            connection.execute("UPDATE research.evidence_intakes SET status=%s,version=version+1,updated_at=now() WHERE evidence_id=%s", (status.value, evidence_id))
+            self._lock_recommendation_evidence(connection, evidence_id)
+            connection.execute(
+                "UPDATE research.evidence_intakes SET status=%s,version=version+1,updated_at=now() WHERE evidence_id=%s",
+                (status.value, evidence_id),
+            )
 
-    def complete_collection(self, evidence_id: str, snapshot: CollectedSourceSnapshot,
-                            lease_token: str | None = None) -> bool:
+    def complete_collection(
+        self,
+        evidence_id: str,
+        snapshot: CollectedSourceSnapshot,
+        lease_token: str | None = None,
+    ) -> bool:
         if lease_token is None:
             return False
         with self._connection() as connection:
             with connection.transaction():
+                locked = connection.execute(
+                    "SELECT job_id FROM research.collection_jobs WHERE evidence_id=%s AND state='processing' AND lease_token::text=%s FOR UPDATE",
+                    (evidence_id, lease_token),
+                ).fetchone()
+                if locked is None:
+                    return False
+                self._lock_recommendation_evidence(connection, evidence_id)
                 canonical_key = f"{snapshot.normalization_policy_version}\x1f{snapshot.canonical_url}"
-                connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (canonical_key,))
-                connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (snapshot.content_hash,))
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (canonical_key,),
+                )
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (snapshot.content_hash,),
+                )
                 result = connection.execute(
                     "UPDATE research.collection_jobs SET state='succeeded',lease_token=NULL,lease_expires_at=NULL,updated_at=now() WHERE evidence_id=%s AND state='processing' AND lease_token::text=%s",
                     (evidence_id, lease_token),
@@ -1508,22 +1860,37 @@ class PostgresEvidenceStore:
                     "SELECT snapshot_id FROM research.source_snapshots WHERE content_hash=%s",
                     (snapshot.content_hash,),
                 ).fetchone()
-                snapshot_id = existing_snapshot[0] if existing_snapshot else uuid.uuid4()
+                snapshot_id = (
+                    existing_snapshot[0] if existing_snapshot else uuid.uuid4()
+                )
                 if existing_snapshot is None:
                     connection.execute(
                         """INSERT INTO research.source_snapshots(snapshot_id,canonical_url,normalization_policy_version,publisher,content_hash,retrieved_at,published_at,observed_at,excerpt,source_category,lineage)
                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (snapshot_id, snapshot.canonical_url, snapshot.normalization_policy_version,
-                         snapshot.publisher, snapshot.content_hash, snapshot.retrieved_at,
-                         snapshot.published_at, snapshot.observed_at, snapshot.excerpt,
-                         snapshot.source_category, snapshot.lineage),
+                        (
+                            snapshot_id,
+                            snapshot.canonical_url,
+                            snapshot.normalization_policy_version,
+                            snapshot.publisher,
+                            snapshot.content_hash,
+                            snapshot.retrieved_at,
+                            snapshot.published_at,
+                            snapshot.observed_at,
+                            snapshot.excerpt,
+                            snapshot.source_category,
+                            snapshot.lineage,
+                        ),
                     )
                 if existing_source is None:
                     source_id = uuid.uuid4()
                     connection.execute(
                         """INSERT INTO research.canonical_sources(source_id,normalization_policy_version,canonical_url)
                         VALUES (%s,%s,%s)""",
-                        (source_id, snapshot.normalization_policy_version, snapshot.canonical_url),
+                        (
+                            source_id,
+                            snapshot.normalization_policy_version,
+                            snapshot.canonical_url,
+                        ),
                     )
                 else:
                     source_id = existing_source[0]
@@ -1533,14 +1900,31 @@ class PostgresEvidenceStore:
                     ON CONFLICT (evidence_id) DO NOTHING""",
                     (source_id, snapshot_id, evidence_id),
                 )
-                connection.execute("UPDATE research.evidence_intakes SET status='succeeded',version=version+1,updated_at=now() WHERE evidence_id=%s", (evidence_id,))
+                connection.execute(
+                    "UPDATE research.evidence_intakes SET status='succeeded',version=version+1,updated_at=now() WHERE evidence_id=%s",
+                    (evidence_id,),
+                )
         return True
 
-    def fail_collection(self, job: LeasedCollectionJob, lease_token: str, failure_code: str,
-                        *, retryable: bool) -> bool:
+    def fail_collection(
+        self,
+        job: LeasedCollectionJob,
+        lease_token: str,
+        failure_code: str,
+        *,
+        retryable: bool,
+    ) -> bool:
         terminal = not retryable or job.attempt >= self._max_attempts
-        job_state = "dead_letter" if terminal and retryable else ("failed" if terminal else "retrying")
-        evidence_state = EvidenceStatus.DEAD_LETTER.value if job_state == "dead_letter" else job_state
+        job_state = (
+            "dead_letter"
+            if terminal and retryable
+            else ("failed" if terminal else "retrying")
+        )
+        evidence_state = (
+            EvidenceStatus.DEAD_LETTER.value
+            if job_state == "dead_letter"
+            else job_state
+        )
         with self._connection() as connection:
             with connection.transaction():
                 result = connection.execute(
@@ -1551,7 +1935,11 @@ class PostgresEvidenceStore:
                 )
                 if result.rowcount != 1:
                     return False
-                connection.execute("UPDATE research.evidence_intakes SET status=%s,failure_code=%s,version=version+1,updated_at=now() WHERE evidence_id=%s", (evidence_state, failure_code, job.evidence_id))
+                self._lock_recommendation_evidence(connection, job.evidence_id)
+                connection.execute(
+                    "UPDATE research.evidence_intakes SET status=%s,failure_code=%s,version=version+1,updated_at=now() WHERE evidence_id=%s",
+                    (evidence_state, failure_code, job.evidence_id),
+                )
         return True
 
     def ping(self) -> bool:
@@ -1580,11 +1968,21 @@ class PostgresEvidenceStore:
 
     def count_audit_events(self, evidence_id: str) -> int:
         with self._connection() as connection:
-            return int(connection.execute("SELECT count(*) FROM research.audit_events WHERE subject_id=%s", (evidence_id,)).fetchone()[0])
+            return int(
+                connection.execute(
+                    "SELECT count(*) FROM research.audit_events WHERE subject_id=%s",
+                    (evidence_id,),
+                ).fetchone()[0]
+            )
 
     def count_collection_jobs(self, evidence_id: str) -> int:
         with self._connection() as connection:
-            return int(connection.execute("SELECT count(*) FROM research.collection_jobs WHERE evidence_id=%s", (evidence_id,)).fetchone()[0])
+            return int(
+                connection.execute(
+                    "SELECT count(*) FROM research.collection_jobs WHERE evidence_id=%s",
+                    (evidence_id,),
+                ).fetchone()[0]
+            )
 
     def count_anomaly_jobs(self, assessment_id: str) -> int:
         with self._connection() as connection:
@@ -1597,17 +1995,36 @@ class PostgresEvidenceStore:
 
     def count_source_snapshots(self) -> int:
         with self._connection() as connection:
-            return int(connection.execute("SELECT count(*) FROM research.source_snapshots").fetchone()[0])
+            return int(
+                connection.execute(
+                    "SELECT count(*) FROM research.source_snapshots"
+                ).fetchone()[0]
+            )
 
     def count_canonical_sources(self) -> int:
         with self._connection() as connection:
-            return int(connection.execute("SELECT count(*) FROM research.canonical_sources").fetchone()[0])
+            return int(
+                connection.execute(
+                    "SELECT count(*) FROM research.canonical_sources"
+                ).fetchone()[0]
+            )
 
     def count_source_observations(self) -> int:
         with self._connection() as connection:
-            return int(connection.execute("SELECT count(*) FROM research.source_observations").fetchone()[0])
+            return int(
+                connection.execute(
+                    "SELECT count(*) FROM research.source_observations"
+                ).fetchone()[0]
+            )
 
-    def get_source_provenance(self, evidence_id: str) -> tuple[str, str, str, str, str, str | None, str | None, str | None, str, str | None] | None:
+    def get_source_provenance(
+        self, evidence_id: str
+    ) -> (
+        tuple[
+            str, str, str, str, str, str | None, str | None, str | None, str, str | None
+        ]
+        | None
+    ):
         with self._connection() as connection:
             row = connection.execute(
                 """SELECT c.canonical_url,c.normalization_policy_version,s.publisher,s.content_hash,s.retrieved_at::text,
@@ -1615,6 +2032,11 @@ class PostgresEvidenceStore:
                 FROM research.source_observations o
                 JOIN research.canonical_sources c USING(source_id)
                 JOIN research.source_snapshots s ON s.snapshot_id=o.snapshot_id
-                WHERE o.evidence_id=%s""", (evidence_id,)
+                WHERE o.evidence_id=%s""",
+                (evidence_id,),
             ).fetchone()
-        return None if row is None else tuple(None if value is None else str(value) for value in row)
+        return (
+            None
+            if row is None
+            else tuple(None if value is None else str(value) for value in row)
+        )

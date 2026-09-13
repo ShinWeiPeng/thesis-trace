@@ -17,11 +17,18 @@
 | `collector_worker_process` | process | default | [] | 1 | {'memory': 'bounded by deployment profile'} |
 | `ai_worker_process` | process | default | [] | 1 | {'memory': 'bounded by deployment profile'} |
 | `email_worker_process` | process | default | [] | 1 | {'memory': 'bounded by deployment profile'} |
+| `investment_transport_thread` | worker-pool | default | [] | 1 | {'memory': 'One bounded request and one bounded response per composed adapter'} |
 
 ## Workload mappings
 
 | ID | Workload | Steps | Units | Serialization | Reentrant | WCET |
 |---|---|---|---|---|---|---|
+| `anomaly_transport_mapping` | `owner_anomaly_assessment_workload` | `owner_anomaly_assessment.analyze` | `investment_transport_thread` | Same adapter-local single-flight gate as investment calls; a slow anomaly response cannot hold the caller past the deadline. | False | not established |
+| `investment_transport_mapping` | `owner_recommendation_analysis_workload` | `owner_recommendation_analysis.analyze` | `investment_transport_thread` | Adapter-local single-flight admission remains held until I/O returns; timed-out results are discarded. | False | not established |
+| `recommendation_admission_api_mapping` | `owner_recommendation_analysis_workload` | `owner_recommendation_analysis.authorize`, `owner_recommendation_analysis.resolve`, `owner_recommendation_analysis.admit`, `owner_recommendation_analysis.present` | `api_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
+| `recommendation_analysis_worker_mapping` | `owner_recommendation_analysis_workload` | `owner_recommendation_analysis.analyze`, `owner_recommendation_analysis.evaluate`, `owner_recommendation_analysis.publish` | `ai_worker_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
+| `recommendation_decision_api_mapping` | `owner_recommendation_decision_workload` | `owner_recommendation_decision.authorize`, `owner_recommendation_decision.preview`, `owner_recommendation_decision.commit`, `owner_recommendation_decision.present` | `api_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
+| `recommendation_expiry_worker_mapping` | `recommendation_expiry_reconciliation_workload` | `recommendation_expiry_reconciliation.select`, `recommendation_expiry_reconciliation.resolve`, `recommendation_expiry_reconciliation.commit` | `ai_worker_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
 | `production_database_migration_mapping` | `production_database_migration_workload` | `production_database_migration.apply` | `migration_job_process` | one migration process per deployment | False | not established |
 | `intake_api_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.authorize`, `owner_evidence_intake.map`, `owner_evidence_intake.commit`, `owner_evidence_intake.query` | `api_process` | one transaction per Evidence stream | False | not established |
 | `collection_worker_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.collect` | `collector_worker_process` | leased per Evidence stream | False | not established |
@@ -37,6 +44,8 @@
 
 | ID | From | To | Contracts | Capacity | Ordering | Copy | Timeout | Overload |
 |---|---|---|---|---|---|---|---|---|
+| `investment_transport_result_channel` | `investment_transport_thread` | `ai_worker_process` | `application.investment_provider`, `application.investment_critic` | 1 | One private result mailbox per synchronous attempt; no late-result reuse | Bounded untrusted UTF-8 response or redacted error only; no domain state or database handles | 30000 | `fail-safe` |
+| `recommendation_analysis_job_channel` | `api_process` | `ai_worker_process` | `recommendation.store`, `application.process_recommendation` | 1000 | Planned ADR-0009 available_at then stable ID; serialized per Owner/Thesis cycle; shared worker capacity remains unvalidated. | Persist immutable input refs/version tuple; load only admitted bounded context; never mix partial attempts. | 300000 | `backpressure` |
 | `collection_job_channel` | `api_process` | `collector_worker_process` | `research.collection_jobs`, `research.evidence_received` | 1000 | serialized per Evidence stream | persist semantic payload once and map on claim | 300000 | `backpressure` |
 | `anomaly_analysis_job_channel` | `api_process` | `ai_worker_process` | `research.anomaly_assessment_store`, `application.process_anomaly_job` | 1000 | serialized per assessment concurrency key; unrelated subjects may run in parallel | persist identifiers and exact input/version tuple once; load immutable snapshots on claim | 300000 | `fail-safe` |
 

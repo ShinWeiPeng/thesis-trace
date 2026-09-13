@@ -26,9 +26,9 @@ flowchart TD
 - **擁有狀態:** 無
 - **副作用:** Persist owner-scoped current and append-only Portfolio state through a demand-owned port. (`-`)
 - **異常:** `portfolio_domain-error-1`: Reject incomplete or over-allocated trades. → `application.evidence_submission_completed` → Reject incomplete or over-allocated trades.
-- **不變條件:** Risk aggregates all buckets for a security.
+- **不變條件:** Risk aggregates all buckets for a security.; DCA sizing uses explicit buy price and CostProfileSnapshot; cash includes buy fees and exposures use official close, with exact cap comparisons before presentation rounding.
 - **程式入口:** [`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)
-- **公開 Symbols:** [`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)<br>[`PortfolioStorePort`](../../backend/src/thesis_trace/modules/portfolio/ports.py) (port)<br>[`PortfolioRecord`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)<br>[`TradePreview`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)
+- **公開 Symbols:** [`PortfolioRecommendationSnapshot`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (class)<br>[`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)<br>[`PortfolioStorePort`](../../backend/src/thesis_trace/modules/portfolio/ports.py) (port)<br>[`PortfolioRecord`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)<br>[`TradePreview`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)
 
 ## Port 契約
 
@@ -45,12 +45,13 @@ flowchart TD
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
+| `portfoliorecommendationsnapshot` | `portfolio_domain` | `PortfolioRecommendationSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application`, `postgres_portfolio_adapter` | `portfoliosnapshot`, `costprofilesnapshot`, `exposuresnapshot`, `dcaselection`, `officialsecuritysnapshot` |
 | `tradeside` | `portfolio_domain` | `TradeSide` (enum, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
 | `officialsecuritysnapshot` | `portfolio_domain` | `OfficialSecuritySnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | 無 |
 | `holdingsnapshot` | `portfolio_domain` | `HoldingSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
-| `portfoliosnapshot` | `portfolio_domain` | `PortfolioSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain` | `holdingsnapshot` |
-| `exposuresnapshot` | `portfolio_domain` | `ExposureSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application` | 無 |
-| `dcaselection` | `portfolio_domain` | `DcaSelection` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain` | 無 |
+| `portfoliosnapshot` | `portfolio_domain` | `PortfolioSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `holdingsnapshot` |
+| `exposuresnapshot` | `portfolio_domain` | `ExposureSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application`, `postgres_portfolio_adapter` | 無 |
+| `dcaselection` | `portfolio_domain` | `DcaSelection` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `exposuresnapshot` |
 | `canonicaltrade` | `portfolio_domain` | `CanonicalTrade` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | `tradeside` |
 | `canonicalcsvissue` | `portfolio_domain` | `CanonicalCsvIssue` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application` | 無 |
 | `canonicalcsvpreview` | `portfolio_domain` | `CanonicalCsvPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application` | `canonicaltrade`, `canonicalcsvissue` |
@@ -71,7 +72,7 @@ flowchart TD
 | `confirmtradecorrectioncommand` | `portfolio_domain` | `ConfirmTradeCorrectionCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain`, `backend_composition` | `portfolioactorcontext`, `tradecorrectionpreview` |
 | `companyactionpreview` | `portfolio_domain` | `CompanyActionPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application`, `backend_composition` | `companyactionallocation`, `portfoliosnapshot`, `exposuresnapshot` |
 | `confirmcompanyactioncommand` | `portfolio_domain` | `ConfirmCompanyActionCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain`, `backend_composition` | `portfolioactorcontext`, `companyactionpreview` |
-| `portfoliostoreport` | `portfolio_domain` | `PortfolioStorePort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain`, `postgres_portfolio_adapter` | `portfoliorecord` |
+| `portfoliostoreport` | `portfolio_domain` | `PortfolioStorePort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain`, `postgres_portfolio_adapter` | `portfoliorecord`, `portfoliorecommendationsnapshot` |
 | `brokerstatementparserport` | `portfolio_domain` | `BrokerStatementParserPort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain` | `canonicalcsvpreview` |
 | `portfolioservice` | `portfolio_domain` | `PortfolioService` (class, `backend/src/thesis_trace/modules/portfolio/service.py`) | module-public | policy | `backend_composition`, `thesis_trace_application` | `portfoliostoreport`, `portfoliorecord`, `tradepreview` |
 

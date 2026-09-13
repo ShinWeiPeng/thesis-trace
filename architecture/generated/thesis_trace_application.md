@@ -11,7 +11,7 @@ flowchart TD
     n_research_domain["research_domain (L1)<br/>管理公司與研究證據"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
-    n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
+    n_recommendation_domain["recommendation_domain (L1)<br/>管理不可變建議、Owner 決策與資料綁定逾期"]
     n_workflow_domain["workflow_domain (L1)<br/>管理人工行動收件匣"]
     n_notification_domain["notification_domain (L1)<br/>管理通知分類與安全內容"]
     n_thesis_trace_application -.->|depends| n_access_domain
@@ -39,7 +39,7 @@ flowchart TD
 | `research_domain` | L1 | domain | `thesis_trace_application` | implemented | Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts. |
 | `thesis_domain` | L1 | domain | `thesis_trace_application` | implemented | Own personal Thesis lifecycle cycles, valuation drafts and immutable publications, invalidation conditions, Evidence links, Outcomes and Reflections. |
 | `portfolio_domain` | L1 | domain | `thesis_trace_application` | implemented | Own versioned Cost Profiles, investable cash, canonical Trades, bucket allocations, holdings and deterministic exposure snapshots. |
-| `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own immutable recommendations |
+| `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions under accepted ADR-0009; no trading authority. |
 | `workflow_domain` | L1 | domain | `thesis_trace_application` | implemented | Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries. |
 | `notification_domain` | L1 | domain | `thesis_trace_application` | planned | Own notification classification |
 
@@ -48,15 +48,15 @@ flowchart TD
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **父模組:** `-`
 - **實作狀態:** `implemented`
-- **輸入 Ports:** `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`, `application.request_anomaly_assessment`, `application.query_anomaly_assessment`, `application.process_anomaly_job`, `application.create_anomaly_review_action`, `application.query_action_inbox`, `application.query_action_item`, `application.transition_action_item`, `application.create_personal_thesis`, `application.query_personal_theses`, `application.save_personal_thesis`, `application.transition_personal_thesis`, `application.save_thesis_outcome`, `application.autosave_thesis_reflection`, `application.complete_thesis_reflection`, `application.save_valuation_draft`, `application.publish_valuation`, `application.manage_portfolio`, `application.confirm_portfolio_trade`
-- **輸出 Ports:** `application.events`, `application.recommendation_provider`, `application.recommendation_critic`
-- **輸出 Events:** `application.evidence_submission_completed`, `application.action_item_operation_failed`, `application.thesis_operation_failed`
+- **輸入 Ports:** `application.request_recommendation`, `application.query_recommendation`, `application.decide_recommendation`, `application.process_recommendation`, `application.reconcile_recommendation_expiry`, `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`, `application.request_anomaly_assessment`, `application.query_anomaly_assessment`, `application.process_anomaly_job`, `application.create_anomaly_review_action`, `application.query_action_inbox`, `application.query_action_item`, `application.transition_action_item`, `application.create_personal_thesis`, `application.query_personal_theses`, `application.save_personal_thesis`, `application.transition_personal_thesis`, `application.save_thesis_outcome`, `application.autosave_thesis_reflection`, `application.complete_thesis_reflection`, `application.save_valuation_draft`, `application.publish_valuation`, `application.manage_portfolio`, `application.confirm_portfolio_trade`
+- **輸出 Ports:** `application.recommendation_transaction`, `application.investment_provider`, `application.investment_critic`, `application.events`, `application.recommendation_provider`, `application.recommendation_critic`
+- **輸出 Events:** `application.recommendation_operation_resolved`, `application.evidence_submission_completed`, `application.action_item_operation_failed`, `application.thesis_operation_failed`
 - **擁有狀態:** 無
 - **副作用:** Coordinate child commands and map child events. (`-`)
 - **異常:** `thesis_trace_application-error-1`: Reject unauthenticated or unauthorized commands → `application.evidence_submission_completed` → Reject unauthenticated or unauthorized commands; `thesis_trace_application-error-2`: Propagate child admission failures. → `application.evidence_submission_completed` → Propagate child admission failures.
 - **不變條件:** Sibling domains communicate only through this parent; Domain state remains child-owned.
 - **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)
-- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`AnomalyAssessmentFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`AnomalyJobProcessor`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`RequestAnomalyAssessment`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalySourceInput`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyAssessmentResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyGateResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyTraceResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`CreateAnomalyReviewActionRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionInboxRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`TransitionActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionItemResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ThesisLifecycleFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`ThesisLifecycleRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`ThesisLifecycleResult`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`ValuationFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`PortfolioFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`ThesisConfirmedTransitionPort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`ValuationConfirmedPublicationPort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`PortfolioConfirmedTradePort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`RecommendationProviderPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationCriticPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationProviderRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`RecommendationCriticRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`AnalysisSource`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`ValidatedAnomalyCandidate`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)
+- **公開 Symbols:** [`RecommendationFlow`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationTransactionPort`](../../backend/src/thesis_trace/application/contracts.py) (protocol)<br>[`RecommendationView`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`InvestmentAnalysisRequest`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationPublicationCommand`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationAdmissionCommand`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationDecisionCommand`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationDecisionPreview`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`AnomalyAssessmentFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`AnomalyJobProcessor`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`RequestAnomalyAssessment`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalySourceInput`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyAssessmentResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyGateResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyTraceResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`CreateAnomalyReviewActionRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionInboxRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`TransitionActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionItemResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ThesisLifecycleFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`ThesisLifecycleRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`ThesisLifecycleResult`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`ValuationFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`PortfolioFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`ThesisConfirmedTransitionPort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`ValuationConfirmedPublicationPort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`PortfolioConfirmedTradePort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`RecommendationProviderPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationCriticPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationProviderRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`RecommendationCriticRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`AnalysisSource`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`ValidatedAnomalyCandidate`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)
 
 ### `access_domain`
 
@@ -86,7 +86,7 @@ flowchart TD
 - **異常:** `research_domain-error-1`: Reject invalid URLs or stale company versions → `research.evidence_received` → Reject invalid URLs or stale company versions; `research_domain-error-2`: Record safe retry and terminal failures. → `research.evidence_received` → Record safe retry and terminal failures.
 - **不變條件:** State commits before success events; Evidence streams are serialized; Source records are immutable.
 - **程式入口:** [`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
-- **公開 Symbols:** [`ResearchActorContext`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchStageConfirmationRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageQuery`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacts`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchAnomalySource`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchValidatedAnomalyCandidate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyJob`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyTrace`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecordReference`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
+- **公開 Symbols:** [`ResearchActorContext`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchStageConfirmationRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageQuery`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacts`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchAnomalySource`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchValidatedAnomalyCandidate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyJob`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyTrace`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecordReference`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecommendationSource`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecommendationQueryPort`](../../backend/src/thesis_trace/modules/research/__init__.py) (port)<br>[`ResearchRecommendationFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
 
 ### `thesis_domain`
 
@@ -114,24 +114,24 @@ flowchart TD
 - **擁有狀態:** 無
 - **副作用:** Persist owner-scoped current and append-only Portfolio state through a demand-owned port. (`-`)
 - **異常:** `portfolio_domain-error-1`: Reject incomplete or over-allocated trades. → `application.evidence_submission_completed` → Reject incomplete or over-allocated trades.
-- **不變條件:** Risk aggregates all buckets for a security.
+- **不變條件:** Risk aggregates all buckets for a security.; DCA sizing uses explicit buy price and CostProfileSnapshot; cash includes buy fees and exposures use official close, with exact cap comparisons before presentation rounding.
 - **程式入口:** [`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)
-- **公開 Symbols:** [`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)<br>[`PortfolioStorePort`](../../backend/src/thesis_trace/modules/portfolio/ports.py) (port)<br>[`PortfolioRecord`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)<br>[`TradePreview`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)
+- **公開 Symbols:** [`PortfolioRecommendationSnapshot`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (class)<br>[`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)<br>[`PortfolioStorePort`](../../backend/src/thesis_trace/modules/portfolio/ports.py) (port)<br>[`PortfolioRecord`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)<br>[`TradePreview`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)
 
 ### `recommendation_domain`
 
-- **目的:** Own immutable recommendations
+- **目的:** Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions under accepted ADR-0009; no trading authority.
 - **父模組:** `thesis_trace_application`
 - **實作狀態:** `planned`
-- **輸入 Ports:** 無
-- **輸出 Ports:** 無
+- **輸入 Ports:** `recommendation.request`, `recommendation.query`, `recommendation.decide`, `recommendation.reconcile_expiry`
+- **輸出 Ports:** `recommendation.store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** 無
-- **異常:** `recommendation_domain-error-1`: Abstain when validation or risk inputs fail. → `application.evidence_submission_completed` → Abstain when validation or risk inputs fail.
-- **不變條件:** AI cannot override deterministic policy.
-- **程式入口:** [`recommendation_domain_contract`](../../backend/src/thesis_trace/modules/recommendation/service.py) (boundary)
-- **公開 Symbols:** [`recommendation_domain_contract`](../../backend/src/thesis_trace/modules/recommendation/service.py) (boundary)
+- **副作用:** Planned owner-scoped request/job, immutable recommendation/decision and audit writes through demand ports. (`-`)
+- **異常:** 無
+- **不變條件:** DEC-105 expires only unfinalized recommendations; accepted/rejected history is immutable.; AI cannot override valuation, risk, Owner authority or formal-Hard activation.; Cross-domain state is mapped by L0 and atomically persisted by owner adapters; no sibling access.; ADR-0009 and ALG-0032/0033/0034 accepted by project owner on 2026-09-05; Wave 7 remains planned until integration and validation complete.
+- **程式入口:** [`RecommendationService`](../../backend/src/thesis_trace/modules/recommendation/service.py) (service)
+- **公開 Symbols:** [`RecommendationActor`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`BoundRecommendationInput`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationSource`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationInputSnapshot`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationCandidate`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationRecord`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`OwnerDecision`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationJob`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationStorePort`](../../backend/src/thesis_trace/modules/recommendation/ports.py) (protocol)<br>[`RecommendationService`](../../backend/src/thesis_trace/modules/recommendation/service.py) (service)
 
 ### `workflow_domain`
 
@@ -167,6 +167,20 @@ flowchart TD
 
 | ID | Owner | Direction | Kind | Timing | Description | Symbols |
 |---|---|---|---|---|---|---|
+| `recommendation.request` | `recommendation_domain` | input | command | sync | Admit exact immutable inputs and typed analysis work.: Owner, active Thesis/cycle, immutable bound input identities and explicit source intent. | `RecommendationInputSnapshot` |
+| `recommendation.query` | `recommendation_domain` | input | query | sync | Return immutable history and current input validity without mutating on read.: Authorized Owner, exact Recommendation identity/version. | `RecommendationRecord` |
+| `recommendation.decide` | `recommendation_domain` | input | command | sync | Append a legal Owner Decision under ALG-0033.: Expected decision sequence, reason, action and exact confirmation when consequential. | `OwnerDecision` |
+| `recommendation.reconcile_expiry` | `recommendation_domain` | input | command | sync | Evaluate DEC-105 against current parent-resolved bound inputs.: Exact current versions and transaction time; never accepted/rejected history. | `BoundRecommendationInput` |
+| `recommendation.store` | `recommendation_domain` | output | dependency | sync | Persist normalized Recommendation state, immutable decisions and leased version-bound work.: Owner-scoped semantic request/job/record/decision values; no SQL handles. | `RecommendationStorePort` |
+| `research.recommendation_query` | `research_domain` | output | dependency | sync | Read immutable source provenance and current Evidence/stage identities through their Research owner.: ResearchRecommendationSource; no Recommendation DTO or SQL row crosses this boundary. | `ResearchRecommendationQueryPort`, `ResearchRecommendationSource` |
+| `application.request_recommendation` | `thesis_trace_application` | input | command | sync | Resolve Owner intent and immutable child inputs for planned Wave 7 admission.: Thesis/valuation/source identities, expected versions, selection reason and idempotency. | `RecommendationFlow` |
+| `application.query_recommendation` | `thesis_trace_application` | input | query | sync | Return one role-safe Recommendation workspace projection.: Owner-visible exact record, decision history, validity, reasons and allowed actions. | `RecommendationView` |
+| `application.decide_recommendation` | `thesis_trace_application` | input | command | sync | Coordinate preview and atomic Owner decision with Workflow outcome.: Exact action/target/version, reason, reminder and optional single-use challenge. | `RecommendationFlow` |
+| `application.process_recommendation` | `thesis_trace_application` | input | command | async | Lease and process one investment-analysis job outside API execution.: Pinned source/model/prompt/schema/build tuple and fenced publication. | `RecommendationFlow` |
+| `application.reconcile_recommendation_expiry` | `thesis_trace_application` | input | command | async | Coordinate bounded owner-port expiry and reminder reconciliation.: Stable cursor and exact critical-input versions; no network I/O. | `RecommendationFlow` |
+| `application.recommendation_transaction` | `thesis_trace_application` | output | command | sync | Commit owner-valid admission/publication/decision/expiry and Workflow state atomically.: SQL-free application intent, bound versions, lease/challenge, reason and idempotency. | `RecommendationTransactionPort` |
+| `application.investment_provider` | `thesis_trace_application` | output | query | async | Request an untrusted investment candidate from pinned sources, not an anomaly label.: Bound research/valuation context, candidate schema/model/prompt/build; no final financial authority. | `InvestmentAnalysisRequest` |
+| `application.investment_critic` | `thesis_trace_application` | output | query | async | Request claim-exact independent critic evidence for the investment candidate.: Pinned sources, exact candidate digest/claims and critic versions. | `InvestmentAnalysisRequest` |
 | `application.submit_evidence` | `thesis_trace_application` | input | command | async | Submit an authenticated Evidence URL intent.: Actor | `SubmitEvidenceRequest` |
 | `application.confirm_evidence_stage` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner intent to confirm dimension facts for one Evidence snapshot.: Actor, Evidence and snapshot identity, expected version, facts, reason and idempotency key. | `EvidenceStageFlow`, `ConfirmEvidenceStageRequest`, `EvidenceStageResult` |
 | `application.query_evidence_stage` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative Evidence stage projection.: Authenticated actor and Evidence identity. | `EvidenceStageFlow`, `QueryEvidenceStageRequest`, `EvidenceStageResult` |
@@ -196,7 +210,7 @@ flowchart TD
 | `portfolio.store` | `portfolio_domain` | output | dependency | sync | Persist/query owner Portfolio state atomically.: PortfolioRecord and command receipt primitives. | `PortfolioStorePort`, `PortfolioRecord` |
 | `application.recommendation_provider` | `thesis_trace_application` | output | dependency | async | Request one provider-neutral source-bound structured analysis candidate from an immutable snapshot.: Exact snapshot/version tuple and bounded schema/model/prompt identifiers; output remains untrusted bytes until validation. | `RecommendationProviderPort`, `RecommendationProviderRequest` |
 | `application.recommendation_critic` | `thesis_trace_application` | output | dependency | async | Independently verify availability, citation support, subject, time, invalidation, B independence, and newer-A conflict for one candidate.: Immutable source snapshot and candidate; output is an exact structured PASS or non-PASS result. | `RecommendationCriticPort`, `RecommendationCriticRequest` |
-| `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible evidence submission results.: Record identity | `SubmitEvidenceRequest` |
+| `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible committed outcomes and safe resolved errors; never a durable Workflow delivery channel.: Record identity | `SubmitEvidenceRequest` |
 | `access.authorize_owner` | `access_domain` | input | query | sync | Decide whether the actor may submit Owner evidence.: Immutable authenticated actor snapshot. | `AuthenticatedActor` |
 | `access.events` | `access_domain` | output | event | sync | Publish authorization facts after validation.: Actor ID and authorization purpose. | `AuthenticatedActor` |
 | `access.security_context` | `access_domain` | output | dependency | sync | Bind server-derived user, role, and ownership scope to one PostgreSQL transaction for RLS.: SecurityContext without client-supplied authority fields. | `SecurityContext` |
@@ -223,6 +237,7 @@ flowchart TD
 
 | ID | Owner | Delivery | Emitted when | Purpose | Consumers |
 |---|---|---|---|---|---|
+| `application.recommendation_operation_resolved` | `thesis_trace_application` | at-most-once | After commit or completed rejection/rollback; result_code distinguishes those outcomes and never implies a state change on rejection. | Optional refresh hint for a resolved Recommendation operation, not authoritative state or a durable task trigger. | `fastapi_entrypoint` |
 | `research.evidence_received` | `research_domain` | at-least-once | The atomic intake transaction has committed. | Report that received evidence | `thesis_trace_application`, `research_domain` |
 | `research.collection_succeeded` | `research_domain` | at-least-once | The snapshot and succeeded state have committed. | Report a committed immutable source snapshot. | `thesis_trace_application` |
 | `research.collection_failed` | `research_domain` | at-least-once | Failure state and retry metadata have committed. | Report a committed retryable or terminal safe failure. | `thesis_trace_application` |
@@ -243,7 +258,38 @@ flowchart TD
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
-| `researchrecordreference` | `research_domain` | `ResearchRecordReference` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `recommendationactor` | `recommendation_domain` | `RecommendationActor` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `boundrecommendationinput` | `recommendation_domain` | `BoundRecommendationInput` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationsource` | `recommendation_domain` | `RecommendationSource` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationinputsnapshot` | `recommendation_domain` | `RecommendationInputSnapshot` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationactor`, `boundrecommendationinput`, `recommendationsource` |
+| `recommendationcandidate` | `recommendation_domain` | `RecommendationCandidate` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationrecord` | `recommendation_domain` | `RecommendationRecord` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationinputsnapshot`, `recommendationcandidate` |
+| `ownerdecision` | `recommendation_domain` | `OwnerDecision` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationjob` | `recommendation_domain` | `RecommendationJob` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationstoreport` | `recommendation_domain` | `RecommendationStorePort` (protocol, `backend/src/thesis_trace/modules/recommendation/ports.py`) | module-public | port | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationinputsnapshot`, `recommendationrecord`, `ownerdecision`, `recommendationjob` |
+| `recommendationservice` | `recommendation_domain` | `RecommendationService` (class, `backend/src/thesis_trace/modules/recommendation/service.py`) | module-public | descriptor | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationstoreport` |
+| `recommendationflow` | `thesis_trace_application` | `RecommendationFlow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | composition-mapping | `thesis_trace_application`, `postgres_atomic_adapter`, `backend_composition` | `recommendationdecisioncommand`, `recommendationdecisionpreview`, `accessconfirmationservice`, `ownerdecision`, `recommendationadmissioncommand`, `recommendationpublicationcommand`, `recommendationview`, `thesisstoreport`, `portfoliostoreport`, `researchrecommendationqueryport`, `actionitemstoreport`, `workflowservice`, `workflowactorcontext`, `actionsourceref`, `createactionitemcommand`, `investmentanalysisrequest`, `recommendationtransactionport`, `recommendationstoreport`, `recommendationjob`, `recommendationsource`, `researchrecommendationfacade`, `researchrecommendationsource`, `researchactorcontext`, `recommendationservice`, `recommendationinputsnapshot`, `recommendationrecord`, `recommendationactor`, `boundrecommendationinput`, `portfoliorecommendationsnapshot`, `portfolioservice`, `portfolioactorcontext`, `thesisservice`, `thesisactorcontext`, `authenticatedactor`, `thesisresearchqueryport` |
+| `recommendationtransactionport` | `thesis_trace_application` | `RecommendationTransactionPort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | module-public | port | `thesis_trace_application`, `postgres_atomic_adapter`, `backend_composition` | `recommendationadmissioncommand`, `recommendationpublicationcommand`, `recommendationdecisioncommand`, `recommendationdecisionpreview`, `recommendationview` |
+| `recommendationview` | `thesis_trace_application` | `RecommendationView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `recommendationfieldview` | `thesis_trace_application` | `RecommendationFieldView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationsourceview` | `thesis_trace_application` | `RecommendationSourceView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationclaimview` | `thesis_trace_application` | `RecommendationClaimView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationdecisionhistoryview` | `thesis_trace_application` | `RecommendationDecisionHistoryView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `recommendationfieldview` |
+| `recommendationriskrow` | `thesis_trace_application` | `RecommendationRiskRow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationrequestview` | `thesis_trace_application` | `RecommendationRequestView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationrequestpage` | `thesis_trace_application` | `RecommendationRequestPage` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `recommendationrequestview` |
+| `recommendationdetailview` | `thesis_trace_application` | `RecommendationDetailView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `recommendationfieldview`, `recommendationsourceview`, `recommendationclaimview`, `recommendationdecisionhistoryview`, `recommendationriskrow`, `recommendationview` |
+| `recommendationdecisioncommand` | `thesis_trace_application` | `RecommendationDecisionCommand` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `recommendationdecisionpreview` | `thesis_trace_application` | `RecommendationDecisionPreview` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `postgres_atomic_adapter` | `recommendationview` |
+| `accessconfirmationservice` | `access_domain` | `AccessConfirmationService` (class, `backend/src/thesis_trace/modules/access/orchestration.py`) | module-public | composition-mapping | `access_domain`, `thesis_trace_application`, `postgres_access_adapter` | `confirmationservice`, `authenticatedactor`, `role` |
+| `recommendationadmissioncommand` | `thesis_trace_application` | `RecommendationAdmissionCommand` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `recommendationpublicationcommand` | `thesis_trace_application` | `RecommendationPublicationCommand` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `investmentanalysisrequest` | `thesis_trace_application` | `InvestmentAnalysisRequest` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `openai_recommendation_adapter` | 無 |
+| `portfoliorecommendationsnapshot` | `portfolio_domain` | `PortfolioRecommendationSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application`, `postgres_portfolio_adapter` | `portfoliosnapshot`, `costprofilesnapshot`, `exposuresnapshot`, `dcaselection`, `officialsecuritysnapshot` |
+| `researchrecordreference` | `research_domain` | `ResearchRecordReference` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application`, `postgres_research_adapter` | 無 |
+| `researchrecommendationsource` | `research_domain` | `ResearchRecommendationSource` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application`, `postgres_research_adapter` | `researchrecordreference` |
+| `researchrecommendationqueryport` | `research_domain` | `ResearchRecommendationQueryPort` (protocol, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | port | `research_domain`, `postgres_research_adapter` | `researchrecommendationsource`, `researchrecordreference` |
+| `researchrecommendationfacade` | `research_domain` | `ResearchRecommendationFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application`, `backend_composition` | `researchactorcontext`, `researchrecommendationqueryport`, `researchrecommendationsource`, `researchrecordreference` |
 | `thesisstatus` | `thesis_domain` | `ThesisStatus` (enum, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | policy | `thesis_domain`, `postgres_thesis_adapter` | 無 |
 | `thesisactorcontext` | `thesis_domain` | `ThesisActorContext` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `thesis_trace_application` | 無 |
 | `thesisresearchreference` | `thesis_domain` | `ThesisResearchReference` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | composition-mapping | `thesis_domain`, `thesis_trace_application`, `postgres_thesis_adapter` | 無 |
@@ -275,9 +321,9 @@ flowchart TD
 | `tradeside` | `portfolio_domain` | `TradeSide` (enum, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
 | `officialsecuritysnapshot` | `portfolio_domain` | `OfficialSecuritySnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | 無 |
 | `holdingsnapshot` | `portfolio_domain` | `HoldingSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
-| `portfoliosnapshot` | `portfolio_domain` | `PortfolioSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain` | `holdingsnapshot` |
-| `exposuresnapshot` | `portfolio_domain` | `ExposureSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application` | 無 |
-| `dcaselection` | `portfolio_domain` | `DcaSelection` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain` | 無 |
+| `portfoliosnapshot` | `portfolio_domain` | `PortfolioSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `holdingsnapshot` |
+| `exposuresnapshot` | `portfolio_domain` | `ExposureSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application`, `postgres_portfolio_adapter` | 無 |
+| `dcaselection` | `portfolio_domain` | `DcaSelection` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `exposuresnapshot` |
 | `canonicaltrade` | `portfolio_domain` | `CanonicalTrade` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | `tradeside` |
 | `canonicalcsvissue` | `portfolio_domain` | `CanonicalCsvIssue` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application` | 無 |
 | `canonicalcsvpreview` | `portfolio_domain` | `CanonicalCsvPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application` | `canonicaltrade`, `canonicalcsvissue` |
@@ -298,7 +344,7 @@ flowchart TD
 | `confirmtradecorrectioncommand` | `portfolio_domain` | `ConfirmTradeCorrectionCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain`, `backend_composition` | `portfolioactorcontext`, `tradecorrectionpreview` |
 | `companyactionpreview` | `portfolio_domain` | `CompanyActionPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application`, `backend_composition` | `companyactionallocation`, `portfoliosnapshot`, `exposuresnapshot` |
 | `confirmcompanyactioncommand` | `portfolio_domain` | `ConfirmCompanyActionCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain`, `backend_composition` | `portfolioactorcontext`, `companyactionpreview` |
-| `portfoliostoreport` | `portfolio_domain` | `PortfolioStorePort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain`, `postgres_portfolio_adapter` | `portfoliorecord` |
+| `portfoliostoreport` | `portfolio_domain` | `PortfolioStorePort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain`, `postgres_portfolio_adapter` | `portfoliorecord`, `portfoliorecommendationsnapshot` |
 | `brokerstatementparserport` | `portfolio_domain` | `BrokerStatementParserPort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain` | `canonicalcsvpreview` |
 | `portfolioservice` | `portfolio_domain` | `PortfolioService` (class, `backend/src/thesis_trace/modules/portfolio/service.py`) | module-public | policy | `backend_composition`, `thesis_trace_application` | `portfoliostoreport`, `portfoliorecord`, `tradepreview` |
 | `valuationmethod` | `thesis_domain` | `ValuationMethod` (enum, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
@@ -395,6 +441,11 @@ flowchart TD
 
 | Interaction | Producer | Consumer | Parent | Producer contract | Consumer contract | Mapping owner | State accessed | Allowed edges | Forbidden edges |
 |---|---|---|---|---|---|---|---|---|---|
+| `owner-to-recommendation`: Map authenticated Owner capability. | `access_domain` | `recommendation_domain` | `thesis_trace_application` | `authenticatedactor` | `recommendationactor` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->recommendation_domain` | `access_domain->recommendation_domain`, `recommendation_domain->access_domain` |
+| `research-to-recommendation`: Map immutable provenance and exact source versions. | `research_domain` | `recommendation_domain` | `thesis_trace_application` | `researchanomalysource` | `recommendationsource` | `thesis_trace_application` | 無 | `thesis_trace_application->research_domain`, `thesis_trace_application->recommendation_domain` | `research_domain->recommendation_domain`, `recommendation_domain->research_domain` |
+| `thesis-to-recommendation`: Map active personal Thesis cycle, conditions and published valuation binding. | `thesis_domain` | `recommendation_domain` | `thesis_trace_application` | `thesisrecord` | `recommendationinputsnapshot` | `thesis_trace_application` | 無 | `thesis_trace_application->thesis_domain`, `thesis_trace_application->recommendation_domain` | `thesis_domain->recommendation_domain`, `recommendation_domain->thesis_domain` |
+| `portfolio-to-recommendation`: Map immutable Portfolio-owned sizing/risk snapshot identity and trusted gate values. | `portfolio_domain` | `recommendation_domain` | `thesis_trace_application` | `portfoliorecommendationsnapshot` | `recommendationinputsnapshot` | `thesis_trace_application` | 無 | `thesis_trace_application->portfolio_domain`, `thesis_trace_application->recommendation_domain` | `portfolio_domain->recommendation_domain`, `recommendation_domain->portfolio_domain` |
+| `recommendation-to-workflow`: Map immutable Recommendation/decision source identity into Workflow-owned task intent. | `recommendation_domain` | `workflow_domain` | `thesis_trace_application` | `recommendationrecord` | `actionsourceref` | `thesis_trace_application` | 無 | `thesis_trace_application->recommendation_domain`, `thesis_trace_application->workflow_domain` | `recommendation_domain->workflow_domain`, `workflow_domain->recommendation_domain` |
 | `access-response-to-react-view`: Deliver server-authoritative role-discriminated Access projections to responsive React routes through generated transport contracts. | `thesis_trace_application` | `access_domain` | `thesis_trace_application` | `-` | `-` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain` | `access_domain->thesis_trace_application` |
 | `authenticated-owner-to-stage-command`: Map a revalidated Owner actor and HTTP intent into a semantic confirmed-dimension command without granting Access-to-Research dependency. | `access_domain` | `research_domain` | `thesis_trace_application` | `authenticatedactor` | `researchactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->research_domain` | `access_domain->research_domain`, `research_domain->access_domain`, `evidence_stage->access_domain`, `evidence_stage->fastapi_entrypoint` |
 | `authenticated-personal-actor-to-thesis`: Map a revalidated Owner or Learner into personal Thesis capabilities without importing Access contracts into Thesis. | `access_domain` | `thesis_domain` | `thesis_trace_application` | `authenticatedactor` | `thesisactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->thesis_domain` | `access_domain->thesis_domain`, `thesis_domain->access_domain`, `fastapi_entrypoint->thesis_domain` |
@@ -407,6 +458,123 @@ flowchart TD
 | `action-item-to-application-result`: Map Workflow-owned Action Item summaries, rows, detail, and allowed transitions into application-owned primitives before HTTP presentation. | `workflow_domain` | `thesis_trace_application` | `thesis_trace_application` | `actioninboxpage` | `actioninboxresult` | `thesis_trace_application` | 無 | `thesis_trace_application->workflow_domain`, `fastapi_entrypoint->thesis_trace_application` | `react_workflow_adapter->workflow_domain`, `react_workflow_adapter->postgres_workflow_adapter`, `fastapi_entrypoint->workflow_domain`, `fastapi_entrypoint->postgres_workflow_adapter` |
 
 ## 端到端 Flows
+
+### `owner_recommendation_analysis`
+
+Planned ADR-0009 source-bound investment analysis and immutable Recommendation/Workflow publication; existing anomaly contracts stay separate.
+
+#### Flow 圖
+
+```mermaid
+sequenceDiagram
+    participant n_thesis_trace_application as thesis_trace_application<br/>協調跨領域產品流程
+    participant n_access_domain as access_domain<br/>管理身分與應用授權
+    participant n_recommendation_domain as recommendation_domain<br/>管理不可變建議、Owner 決策與資料綁定逾期
+    n_thesis_trace_application->>+n_access_domain: Revalidate Owner role and actor scope.
+    n_access_domain-->>-n_thesis_trace_application: step 1
+    n_access_domain->>+n_thesis_trace_application: Map exact Research/Thesis/Portfolio input versions and explicit source selection; reject missing authority.
+    n_thesis_trace_application-->>-n_access_domain: step 2
+    n_thesis_trace_application->>+n_recommendation_domain: Atomically persist frozen input bindings, request/audit and bounded typed job.
+    n_recommendation_domain-->>-n_thesis_trace_application: step 3
+    n_recommendation_domain->>+n_thesis_trace_application: Lease one version-bound job and strictly validate distinct investment candidate and claim-exact critic outside database transactions.
+    n_thesis_trace_application-->>-n_recommendation_domain: step 4
+    n_thesis_trace_application->>n_thesis_trace_application: Ask Thesis/Portfolio owners to validate final-size fees, annualized return, cash and exposure, then map immutable results to Recommendation.
+    n_thesis_trace_application->>n_thesis_trace_application: Revalidate actor, lease and every bound critical version; atomically append Portfolio risk snapshot, Recommendation and Workflow task through owner services.
+    n_thesis_trace_application->>n_thesis_trace_application: Return Owner-only immutable results, validity and human-readable recovery reasons.
+    Note right of n_thesis_trace_application: application.recommendation_operation_resolved
+    n_thesis_trace_application-->>-n_thesis_trace_application: recommendation.query result
+```
+
+#### 執行步驟
+
+| # | Module | Action | Receives | Emits | State changes | Side effects |
+|---|---|---|---|---|---|---|
+| 1 | `access_domain` | Revalidate Owner role and actor scope. | `application.request_recommendation` | 無 | 無 | 無 |
+| 2 | `thesis_trace_application` | Map exact Research/Thesis/Portfolio input versions and explicit source selection; reject missing authority. | `recommendation.request` | 無 | 無 | 無 |
+| 3 | `recommendation_domain` | Atomically persist frozen input bindings, request/audit and bounded typed job. | `recommendation.request`, `recommendation.store`, `application.recommendation_transaction` | 無 | Request and durable analysis job commit together. | One owner-adapter transaction. |
+| 4 | `thesis_trace_application` | Lease one version-bound job and strictly validate distinct investment candidate and claim-exact critic outside database transactions. | `application.process_recommendation`, `application.investment_provider`, `application.investment_critic`, `recommendation.store` | 無 | Lease token/attempt advances; failures preserve safe attempt evidence. | Bounded provider and critic HTTPS in isolated AI worker. |
+| 5 | `thesis_trace_application` | Ask Thesis/Portfolio owners to validate final-size fees, annualized return, cash and exposure, then map immutable results to Recommendation. | `portfolio.store`, `thesis.lifecycle_store` | 無 | 無 | Owner-scoped reads; no broker order or cash reservation. |
+| 6 | `thesis_trace_application` | Revalidate actor, lease and every bound critical version; atomically append Portfolio risk snapshot, Recommendation and Workflow task through owner services. | `application.recommendation_transaction`, `recommendation.store`, `workflow.action_item_store` | 無 | Immutable risk/recommendation snapshot and one source-bound human task; stale work superseded without publication. | One cross-adapter transaction, owner writes only. |
+| 7 | `thesis_trace_application` | Return Owner-only immutable results, validity and human-readable recovery reasons. | `application.query_recommendation`, `recommendation.query` | `application.recommendation_operation_resolved` | 無 | 無 |
+
+- **成功結果:** Owner observes immutable buy/hold/abstain result or explicit failed/superseded analysis, never unvalidated actionable advice.
+- **異常:** Schema, critic, source or risk gate fails. → `application.recommendation_operation_resolved` → No unsafe buy; show safe reasons and retain immutable attempt/trace.
+- **異常:** Lease or critical input changes before publication. → `application.recommendation_operation_resolved` → Preserve stale evidence without current Recommendation/Workflow effects.
+
+#### Execution efficiency
+
+- Workload `owner_recommendation_analysis_workload`: `best-effort`; steps `owner_recommendation_analysis.authorize`, `owner_recommendation_analysis.resolve`, `owner_recommendation_analysis.admit`, `owner_recommendation_analysis.analyze`, `owner_recommendation_analysis.evaluate`, `owner_recommendation_analysis.publish`, `owner_recommendation_analysis.present`; profiles [`linux_server_functional`](execution-linux_server_functional.md).
+
+### `owner_recommendation_decision`
+
+Planned ADR-0009 atomic Owner Decision, exact confirmation and Workflow resolution under DEC-105.
+
+#### Flow 圖
+
+```mermaid
+sequenceDiagram
+    participant n_thesis_trace_application as thesis_trace_application<br/>協調跨領域產品流程
+    participant n_access_domain as access_domain<br/>管理身分與應用授權
+    n_thesis_trace_application->>+n_access_domain: Revalidate Owner identity and scope.
+    n_access_domain-->>-n_thesis_trace_application: step 1
+    n_access_domain->>+n_thesis_trace_application: Load current bound inputs and exact decision sequence; show impact and issue a five-minute challenge for accept/reject.
+    n_thesis_trace_application-->>-n_access_domain: recommendation.query result
+    n_access_domain->>+n_thesis_trace_application: Recheck role, all critical inputs, sequence, payload and challenge; call Recommendation and Workflow owner services in one transaction.
+    n_thesis_trace_application-->>-n_access_domain: step 3
+    n_thesis_trace_application->>n_thesis_trace_application: Return committed result or explicit expiry/conflict/re-preview reason and preserve Inbox return context.
+    Note right of n_thesis_trace_application: application.recommendation_operation_resolved
+    n_thesis_trace_application-->>-n_thesis_trace_application: application.query_recommendation result
+```
+
+#### 執行步驟
+
+| # | Module | Action | Receives | Emits | State changes | Side effects |
+|---|---|---|---|---|---|---|
+| 1 | `access_domain` | Revalidate Owner identity and scope. | `application.decide_recommendation` | 無 | 無 | 無 |
+| 2 | `thesis_trace_application` | Load current bound inputs and exact decision sequence; show impact and issue a five-minute challenge for accept/reject. | `recommendation.query`, `recommendation.decide` | 無 | 無 | Owner-scoped reads and Access challenge admission. |
+| 3 | `thesis_trace_application` | Recheck role, all critical inputs, sequence, payload and challenge; call Recommendation and Workflow owner services in one transaction. | `application.recommendation_transaction`, `recommendation.decide`, `workflow.action_item_store` | 無 | One append-only Decision, current projection, task outcome, receipt and audits; exact challenge consumption if valid consequential action. | Atomic commit or rollback; no Trade, order or cash reservation. |
+| 4 | `thesis_trace_application` | Return committed result or explicit expiry/conflict/re-preview reason and preserve Inbox return context. | `application.query_recommendation` | `application.recommendation_operation_resolved` | 無 | 無 |
+
+- **成功結果:** One immutable legal decision and consistent task outcome; accepted/rejected history remains unchanged by later expiry.
+- **異常:** Bound valuation invalid or critical input version changed. → `application.recommendation_operation_resolved` → Append expiry only for unfinalized recommendation; never accept stale input.
+- **異常:** Challenge alone expired with still-valid inputs. → `application.recommendation_operation_resolved` → Require new preview, not a Recommendation expiry.
+
+#### Execution efficiency
+
+- Workload `owner_recommendation_decision_workload`: `best-effort`; steps `owner_recommendation_decision.authorize`, `owner_recommendation_decision.preview`, `owner_recommendation_decision.commit`, `owner_recommendation_decision.present`; profiles [`linux_server_functional`](execution-linux_server_functional.md).
+
+### `recommendation_expiry_reconciliation`
+
+Planned bounded expiry persistence; command safety independently rechecks validity even when the background worker is delayed.
+
+#### Flow 圖
+
+```mermaid
+sequenceDiagram
+    participant n_thesis_trace_application as thesis_trace_application<br/>協調跨領域產品流程
+    participant n_recommendation_domain as recommendation_domain<br/>管理不可變建議、Owner 決策與資料綁定逾期
+    n_thesis_trace_application->>+n_recommendation_domain: Select a stable cursor-bounded unfinalized recommendation; accepted/rejected/expired history is excluded.
+    n_recommendation_domain-->>-n_thesis_trace_application: step 1
+    n_recommendation_domain->>+n_thesis_trace_application: Revalidate source/Thesis/Portfolio critical bindings through owner ports; no cross-schema Recommendation query.
+    n_thesis_trace_application-->>-n_recommendation_domain: step 2
+    n_thesis_trace_application->>n_thesis_trace_application: Evaluate DEC-105 and atomically append expired Decision with cause and Workflow outcome if still unfinalized; duplicate attempts do nothing.
+    Note right of n_thesis_trace_application: application.recommendation_operation_resolved
+```
+
+#### 執行步驟
+
+| # | Module | Action | Receives | Emits | State changes | Side effects |
+|---|---|---|---|---|---|---|
+| 1 | `recommendation_domain` | Select a stable cursor-bounded unfinalized recommendation; accepted/rejected/expired history is excluded. | `recommendation.reconcile_expiry`, `recommendation.store` | 無 | Advance one durable Recommendation-owned cursor over the indexed unfinalized candidate projection; wrap after the last key. | Worker-only owner function exposes opaque actor/record/version/sequence metadata; no runtime table grant or cross-schema source query. |
+| 2 | `thesis_trace_application` | Revalidate source/Thesis/Portfolio critical bindings through owner ports; no cross-schema Recommendation query. | `application.reconcile_recommendation_expiry` | 無 | 無 | 無 |
+| 3 | `thesis_trace_application` | Evaluate DEC-105 and atomically append expired Decision with cause and Workflow outcome if still unfinalized; duplicate attempts do nothing. | `application.recommendation_transaction`, `recommendation.reconcile_expiry`, `workflow.action_item_store` | `application.recommendation_operation_resolved` | At most one terminal expiry and task-resolution transition. | One owner-adapter transaction; no provider I/O. |
+
+- **成功結果:** Expired unfinalized recommendations cannot be accepted and eventually have one persisted expiry/audit/task result.
+- **異常:** Input authority unavailable or concurrent version changes. → `application.recommendation_operation_resolved` → Do not infer validity; retry bounded reconciliation; acceptance remains fail closed.
+
+#### Execution efficiency
+
+- Workload `recommendation_expiry_reconciliation_workload`: `best-effort`; steps `recommendation_expiry_reconciliation.select`, `recommendation_expiry_reconciliation.resolve`, `recommendation_expiry_reconciliation.commit`; profiles [`linux_server_functional`](execution-linux_server_functional.md).
 
 ### `access_session_bootstrap`
 

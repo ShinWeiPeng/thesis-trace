@@ -21,6 +21,7 @@ class ActionPriority(str, Enum):
 
 class ActionItemType(str, Enum):
     ANOMALY_REVIEW = "anomaly_review"
+    RECOMMENDATION_DECISION = "recommendation_decision"
 
 
 @dataclass(frozen=True, slots=True)

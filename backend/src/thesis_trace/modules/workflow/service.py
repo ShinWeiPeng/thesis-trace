@@ -15,6 +15,7 @@ from .contracts import (
     ActionPriorityEvaluation,
     CreateActionItemCommand,
     TransitionActionItemCommand,
+    WorkflowActorContext,
 )
 from .ports import ActionItemStorePort
 
@@ -62,6 +63,7 @@ def _aware_datetime(value: str, error_code: str) -> datetime:
 class WorkflowService:
     POLICY_VERSION = "action-priority-v1"
     CREATION_RULE_VERSION = "manual-anomaly-review-v1"
+    RECOMMENDATION_RULE_VERSION = "workflow.recommendation-decision-v1"
 
     def __init__(
         self,
@@ -98,7 +100,12 @@ class WorkflowService:
             if item.status is ActionItemStatus.IN_PROGRESS:
                 return (ActionItemStatus.PENDING,)
             return ()
-        return _NON_SAFETY_TRANSITIONS[item.status]
+        allowed = _NON_SAFETY_TRANSITIONS[item.status]
+        if item.item_type is ActionItemType.RECOMMENDATION_DECISION:
+            return tuple(
+                status for status in allowed if status is not ActionItemStatus.COMPLETED
+            )
+        return allowed
 
     @classmethod
     def _project(cls, item: ActionItem) -> ActionItem:
@@ -106,40 +113,72 @@ class WorkflowService:
 
     def create(self, command: CreateActionItemCommand) -> ActionItem:
         source = command.source
-        if not command.actor.may_create or command.actor.actor_id != source.source_owner_id:
+        if (
+            not command.actor.may_create
+            or command.actor.actor_id != source.source_owner_id
+        ):
             raise PermissionError("forbidden")
         if (
-            source.source_domain != "anomaly_assessment"
-            or source.trigger_kind != self.CREATION_RULE_VERSION
+            type(source.source_version) is not int
             or source.source_version < 1
+            or not source.source_record_id.strip()
             or not command.reason.strip()
             or not command.idempotency_key.strip()
         ):
             raise ValueError("invalid_source")
+        if source.source_domain == "recommendation":
+            creation_rule = self.RECOMMENDATION_RULE_VERSION
+            item_type = ActionItemType.RECOMMENDATION_DECISION
+            if source.required_handling not in {"buy", "hold"}:
+                raise ValueError("invalid_source")
+            priority = ActionPriorityEvaluation(
+                ActionPriority.NORMAL,
+                ActionPriority.NORMAL,
+                None,
+                False,
+                (self.RECOMMENDATION_RULE_VERSION,),
+                self.POLICY_VERSION,
+                "Published Recommendation requires an explicit Owner decision.",
+            )
+        elif source.source_domain == "anomaly_assessment":
+            creation_rule = self.CREATION_RULE_VERSION
+            item_type = ActionItemType.ANOMALY_REVIEW
+            priority = self._priority(source.required_handling)
+        else:
+            raise ValueError("invalid_source")
+        if source.trigger_kind != creation_rule:
+            raise ValueError("invalid_source")
         if command.due_at is not None:
             _aware_datetime(command.due_at, "invalid_due_at")
-        priority = self._priority(source.required_handling)
-        fingerprint = _digest((
-            self.CREATION_RULE_VERSION,
-            source.source_domain,
-            source.source_record_id,
-            source.source_version,
-            source.trigger_kind,
-            source.required_handling,
-        ))
-        material_fingerprint = _digest((
-            self.CREATION_RULE_VERSION,
-            source.source_domain,
-            source.source_record_id,
-            source.trigger_kind,
-            source.required_handling,
-        ))
-        command_digest = _digest((fingerprint, command.reason.strip(), command.due_at or ""))
+        fingerprint = _digest(
+            (
+                creation_rule,
+                source.source_domain,
+                source.source_record_id,
+                source.source_version,
+                source.trigger_kind,
+                source.required_handling,
+            )
+        )
+        material_fingerprint = _digest(
+            (
+                creation_rule,
+                source.source_domain,
+                source.source_record_id,
+                source.trigger_kind,
+                source.required_handling,
+            )
+        )
+        if item_type is ActionItemType.RECOMMENDATION_DECISION:
+            material_fingerprint = fingerprint
+        command_digest = _digest(
+            (fingerprint, command.reason.strip(), command.due_at or "")
+        )
         now = self._clock()
         item = ActionItem(
             item_id=self._id_generator(),
             version=1,
-            item_type=ActionItemType.ANOMALY_REVIEW,
+            item_type=item_type,
             source_domain=source.source_domain,
             source_record_id=source.source_record_id,
             source_version=source.source_version,
@@ -156,33 +195,124 @@ class WorkflowService:
             defer_until=None,
             recurrence_of=None,
         )
-        return self._project(self._store.create(
-            item,
-            fingerprint=fingerprint,
-            material_fingerprint=material_fingerprint,
-            creation_rule_version=self.CREATION_RULE_VERSION,
-            trigger_kind=source.trigger_kind,
-            idempotency_key=command.idempotency_key,
-            command_digest=command_digest,
-        ))
+        return self._project(
+            self._store.create(
+                item,
+                fingerprint=fingerprint,
+                material_fingerprint=material_fingerprint,
+                creation_rule_version=creation_rule,
+                trigger_kind=source.trigger_kind,
+                idempotency_key=command.idempotency_key,
+                command_digest=command_digest,
+            )
+        )
 
     def get(self, actor, item_id: str) -> ActionItem:
         if not actor.may_read:
             raise PermissionError("forbidden")
         return self._project(self._store.get(actor.actor_id, item_id))
 
+    def reconcile_recommendation(
+        self,
+        *,
+        actor: WorkflowActorContext,
+        source_record_id: str,
+        source_version: int,
+        decision_sequence: int,
+        decision_status: str,
+        reason: str,
+        server_time: str,
+        defer_until: str | None = None,
+    ) -> ActionItem | None:
+        """Source-authoritative seam; the parent must bind it to the Decision transaction."""
+        if (
+            not actor.actor_id
+            or actor.may_transition is not True
+            or actor.may_read is not True
+        ):
+            raise PermissionError("forbidden")
+        if (
+            not source_record_id.strip()
+            or type(source_version) is not int
+            or source_version < 1
+            or type(decision_sequence) is not int
+            or decision_sequence < 1
+            or decision_status not in {"accepted", "rejected", "deferred", "expired"}
+            or not reason.strip()
+        ):
+            raise ValueError("invalid_transition")
+        now = _aware_datetime(server_time, "invalid_transition")
+        if decision_status == "deferred":
+            if (
+                defer_until is None
+                or _aware_datetime(defer_until, "invalid_transition") <= now
+            ):
+                raise ValueError("invalid_transition")
+        elif defer_until is not None:
+            raise ValueError("invalid_transition")
+        current = self._store.get_by_source(
+            actor.actor_id, "recommendation", source_record_id, source_version
+        )
+        if current is None:
+            return None
+        if (
+            current.assignee_user_id != actor.actor_id
+            or current.item_type is not ActionItemType.RECOMMENDATION_DECISION
+        ):
+            raise LookupError("resource_unavailable")
+        if current.status in _TERMINAL:
+            return self._project(current)
+        status = (
+            ActionItemStatus.DEFERRED
+            if decision_status == "deferred"
+            else ActionItemStatus.COMPLETED
+        )
+        key = _digest(
+            (
+                "recommendation-decision",
+                source_record_id,
+                source_version,
+                decision_sequence,
+            )
+        )
+        digest = _digest(
+            (key, decision_status, reason.strip(), defer_until or "", server_time)
+        )
+        updated = self._store.transition(
+            current,
+            expected_version=current.version,
+            target_status=status,
+            reason=f"Recommendation {decision_status}: {reason.strip()}",
+            defer_until=defer_until,
+            idempotency_key=key,
+            command_digest=digest,
+            occurred_at=server_time,
+        )
+        return self._project(updated)
+
     def query(self, query: ActionInboxQuery) -> ActionInboxPage:
         if not query.actor.may_read:
             raise PermissionError("forbidden")
         if query.page_size < 1 or query.page_size > 100:
             raise ValueError("invalid_query")
-        if query.item_type is not None and query.item_type not in {value.value for value in ActionItemType}:
+        if query.item_type is not None and query.item_type not in {
+            value.value for value in ActionItemType
+        }:
             raise ValueError("invalid_query")
-        if query.status is not None and query.status not in {value.value for value in ActionItemStatus}:
+        if query.status is not None and query.status not in {
+            value.value for value in ActionItemStatus
+        }:
             raise ValueError("invalid_query")
-        if query.priority is not None and query.priority not in ({value.value for value in ActionPriority} | {"urgent"}):
+        if query.priority is not None and query.priority not in (
+            {value.value for value in ActionPriority} | {"urgent"}
+        ):
             raise ValueError("invalid_query")
-        for value in (query.created_from, query.created_to, query.due_from, query.due_to):
+        for value in (
+            query.created_from,
+            query.created_to,
+            query.due_from,
+            query.due_to,
+        ):
             if value is not None:
                 _aware_datetime(value, "invalid_query")
         page = self._store.query(query)
@@ -196,15 +326,19 @@ class WorkflowService:
         server_time = _aware_datetime(command.server_time, "invalid_transition")
         parsed_defer_until = None
         if command.defer_until is not None:
-            parsed_defer_until = _aware_datetime(command.defer_until, "invalid_transition")
-        command_digest = _digest((
-            command.item_id,
-            command.expected_version,
-            command.target_status.value,
-            command.reason.strip(),
-            command.defer_until or "",
-            command.underlying_resolved,
-        ))
+            parsed_defer_until = _aware_datetime(
+                command.defer_until, "invalid_transition"
+            )
+        command_digest = _digest(
+            (
+                command.item_id,
+                command.expected_version,
+                command.target_status.value,
+                command.reason.strip(),
+                command.defer_until or "",
+                command.underlying_resolved,
+            )
+        )
         current = self._store.get(command.actor.actor_id, command.item_id)
         # Preserve exact retry replay: a stale expected version must reach the
         # store receipt check before optimistic concurrency is rejected.
@@ -215,7 +349,8 @@ class WorkflowService:
                     current.priority.safety_locked
                     and command.target_status is ActionItemStatus.COMPLETED
                     and command.underlying_resolved
-                    and current.status in {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
+                    and current.status
+                    in {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
                 ):
                     raise ValueError("invalid_transition")
             if command.target_status is ActionItemStatus.DEFERRED:

@@ -106,6 +106,7 @@ modules:
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/application/contracts.py
+  - backend/src/thesis_trace/application/contracts.py
   - backend/src/thesis_trace/application/flows/evidence_stage.py
   - backend/src/thesis_trace/application/flows/anomaly_assessment.py
   - backend/src/thesis_trace/application/ai_ports.py
@@ -115,6 +116,11 @@ modules:
     diagram_summaries:
       zh-TW: 協調跨領域產品流程
     input_ports:
+    - application.request_recommendation
+    - application.query_recommendation
+    - application.decide_recommendation
+    - application.process_recommendation
+    - application.reconcile_recommendation_expiry
     - application.submit_evidence
     - application.confirm_evidence_stage
     - application.query_evidence_stage
@@ -137,10 +143,14 @@ modules:
     - application.manage_portfolio
     - application.confirm_portfolio_trade
     output_ports:
+    - application.recommendation_transaction
+    - application.investment_provider
+    - application.investment_critic
     - application.events
     - application.recommendation_provider
     - application.recommendation_critic
     emitted_events:
+    - application.recommendation_operation_resolved
     - application.evidence_submission_completed
     - application.action_item_operation_failed
     - application.thesis_operation_failed
@@ -167,6 +177,14 @@ modules:
     symbol: EvidenceStageFlow
     kind: orchestrator
   public_symbols:
+  - {"path":"backend/src/thesis_trace/application/contracts.py","symbol":"RecommendationFlow","kind":"class"}
+  - {"path":"backend/src/thesis_trace/application/contracts.py","symbol":"RecommendationTransactionPort","kind":"protocol"}
+  - {"path":"backend/src/thesis_trace/application/contracts.py","symbol":"RecommendationView","kind":"class"}
+  - {"path":"backend/src/thesis_trace/application/contracts.py","symbol":"InvestmentAnalysisRequest","kind":"class"}
+  - {"path":"backend/src/thesis_trace/application/contracts.py","symbol":"RecommendationPublicationCommand","kind":"class"}
+  - {"path":"backend/src/thesis_trace/application/contracts.py","symbol":"RecommendationAdmissionCommand","kind":"class"}
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationDecisionCommand, kind: class}
+  - {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationDecisionPreview, kind: class}
   - path: backend/src/thesis_trace/application/contracts.py
     symbol: SubmitEvidenceRequest
     kind: contract
@@ -270,6 +288,8 @@ modules:
   - backend/src/thesis_trace/bootstrap
   parent: null
   depends_on:
+  - recommendation_domain
+  - postgres_recommendation_adapter
   - thesis_trace_application
   - fastapi_entrypoint
   - access_domain
@@ -491,6 +511,9 @@ modules:
   - path: backend/src/thesis_trace/modules/research/__init__.py
     symbol: ResearchRecordReference
     kind: contract
+  - {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecommendationSource, kind: contract}
+  - {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecommendationQueryPort, kind: port}
+  - {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecommendationFacade, kind: orchestrator}
   - path: backend/src/thesis_trace/modules/research/evidence_intake/contracts.py
     symbol: EvidenceRecord
     kind: contract
@@ -826,11 +849,13 @@ modules:
       handling: Reject incomplete or over-allocated trades.
     invariants:
     - Risk aggregates all buckets for a security.
+    - DCA sizing uses explicit buy price and CostProfileSnapshot; cash includes buy fees and exposures use official close, with exact cap comparisons before presentation rounding.
   entrypoints:
   - path: backend/src/thesis_trace/modules/portfolio/service.py
     symbol: PortfolioService
     kind: service
   public_symbols:
+  - {"path":"backend/src/thesis_trace/modules/portfolio/contracts.py","symbol":"PortfolioRecommendationSnapshot","kind":"class"}
   - {path: backend/src/thesis_trace/modules/portfolio/service.py, symbol: PortfolioService, kind: service}
   - {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: PortfolioStorePort, kind: port}
   - {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioRecord, kind: contract}
@@ -846,32 +871,65 @@ modules:
   implements_ports: []
   public_headers:
   - backend/src/thesis_trace/modules/recommendation/contracts.py
+  - backend/src/thesis_trace/modules/recommendation/ports.py
   description:
-    purpose: Own immutable recommendations
-    critic decisions: null
-    and Owner decisions.: null
+    purpose: Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions
+      under accepted ADR-0009; no trading authority.
     diagram_summaries:
-      zh-TW: 管理建議與 Owner 決策
-    input_ports: []
-    output_ports: []
+      zh-TW: 管理不可變建議、Owner 決策與資料綁定逾期
+    input_ports:
+    - recommendation.request
+    - recommendation.query
+    - recommendation.decide
+    - recommendation.reconcile_expiry
+    output_ports:
+    - recommendation.store
     emitted_events: []
     owned_state: []
-    side_effects: []
-    errors:
-    - id: recommendation_domain-error-1
-      condition: Abstain when validation or risk inputs fail.
-      event: application.evidence_submission_completed
-      handling: Abstain when validation or risk inputs fail.
+    side_effects:
+    - description: Planned owner-scoped request/job, immutable recommendation/decision and audit writes through
+        demand ports.
+    errors: []
     invariants:
-    - AI cannot override deterministic policy.
+    - DEC-105 expires only unfinalized recommendations; accepted/rejected history is immutable.
+    - AI cannot override valuation, risk, Owner authority or formal-Hard activation.
+    - Cross-domain state is mapped by L0 and atomically persisted by owner adapters; no sibling access.
+    - ADR-0009 and ALG-0032/0033/0034 accepted by project owner on 2026-09-05; Wave 7 remains planned until integration and validation complete.
   entrypoints:
   - path: backend/src/thesis_trace/modules/recommendation/service.py
-    symbol: recommendation_domain_contract
-    kind: boundary
+    symbol: RecommendationService
+    kind: service
   public_symbols:
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationActor
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: BoundRecommendationInput
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationSource
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationInputSnapshot
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationCandidate
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationRecord
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: OwnerDecision
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationJob
+    kind: class
+  - path: backend/src/thesis_trace/modules/recommendation/ports.py
+    symbol: RecommendationStorePort
+    kind: protocol
   - path: backend/src/thesis_trace/modules/recommendation/service.py
-    symbol: recommendation_domain_contract
-    kind: boundary
+    symbol: RecommendationService
+    kind: service
 - id: workflow_domain
   level: L1
   role: domain
@@ -984,6 +1042,9 @@ modules:
   depends_on:
   - thesis_trace_application
   implements_ports:
+  - application.request_recommendation
+  - application.query_recommendation
+  - application.decide_recommendation
   - application.confirm_evidence_stage
   - application.query_evidence_stage
   - application.request_anomaly_assessment
@@ -1163,6 +1224,7 @@ modules:
     - Confirmed trade state, versions, receipts and audit commit atomically.
     - Current cash, Cost Profile, holdings, Trades, allocations, corrections and company actions use relational owner rows rather than one aggregate JSON document.
     - General Portfolio persistence uses declared SQLAlchemy Core mappings and the legacy aggregate JSON tables are removed after transactional migration backfill.
+    - Recommendation analytical snapshots use append-only owner-scoped header, holding and exposure rows; snapshot replay never reads mutable current Portfolio inputs.
     - Request-scoped SQLAlchemy connections never cross a functional Port or use process-global transaction binding.
   entrypoints:
   - {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: PostgresPortfolioStore, kind: adapter}
@@ -1175,12 +1237,15 @@ modules:
   paths: [backend/src/thesis_trace/adapters/postgres_atomic]
   parent: null
   depends_on:
+  - postgres_recommendation_adapter
+  - postgres_workflow_adapter
   - thesis_trace_application
   - postgres_access_adapter
   - postgres_research_adapter
   - postgres_thesis_adapter
   - postgres_portfolio_adapter
   implements_ports:
+  - application.recommendation_transaction
   - application.thesis_confirmed_transition
   - application.portfolio_confirmed_trade
   - application.valuation_confirmed_publication
@@ -1202,6 +1267,7 @@ modules:
   - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedPortfolioTrade, kind: adapter}
   - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedValuationPublication, kind: adapter}
   public_symbols:
+  - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresRecommendationTransaction, kind: adapter}
   - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedThesisTransition, kind: adapter}
   - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedPortfolioTrade, kind: adapter}
   - {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresConfirmedValuationPublication, kind: adapter}
@@ -1213,12 +1279,14 @@ modules:
   - backend/src/thesis_trace/platform/postgres.py
   parent: null
   depends_on:
+  - research_domain
   - postgres_database_support
   - evidence_intake
   - evidence_collection
   - evidence_stage
   - anomaly_assessment
   implements_ports:
+  - research.recommendation_query
   - research.unit_of_work
   - research.collection_jobs
   - research.evidence_stage_store
@@ -1319,11 +1387,13 @@ modules:
     invariants:
     - Database secrets require a file reference.
     - Provider representations are always redacted.
+    - Minimum return is explicitly configured as a Decimal unit fraction with a policy identity; missing or invalid configuration never enables a buy.
   entrypoints:
   - path: backend/src/thesis_trace/platform/runtime.py
     symbol: required_secret_provider
     kind: factory
   public_symbols:
+  - {path: backend/src/thesis_trace/platform/runtime.py, symbol: minimum_return_configuration, kind: factory}
   - path: backend/src/thesis_trace/platform/runtime.py
     symbol: SecretProvider
     kind: port
@@ -1374,6 +1444,8 @@ modules:
   depends_on:
   - thesis_trace_application
   implements_ports:
+  - application.process_recommendation
+  - application.reconcile_recommendation_expiry
   - application.process_anomaly_job
   public_headers:
   - backend/src/thesis_trace/entrypoints/ai_worker.py
@@ -1409,6 +1481,8 @@ modules:
   depends_on:
   - thesis_trace_application
   implements_ports:
+  - application.investment_provider
+  - application.investment_critic
   - application.recommendation_provider
   - application.recommendation_critic
   public_headers:
@@ -1573,7 +1647,11 @@ modules:
   implementation_status: implemented
   paths: [frontend/src/access]
   parent: null
-  depends_on: [react_workflow_adapter, react_thesis_adapter, react_portfolio_adapter]
+  depends_on:
+  - react_recommendation_adapter
+  - react_workflow_adapter
+  - react_thesis_adapter
+  - react_portfolio_adapter
   implements_ports: []
   public_headers: [frontend/src/access/routes.tsx]
   description:
@@ -1655,7 +1733,7 @@ modules:
   level: L3+
   role: adapter
   implementation_status: implemented
-  paths: [infra/postgres/run-production-migrations.py]
+  paths: [infra/postgres/run-production-migrations.py, infra/postgres/alembic]
   parent: null
   depends_on: [postgres_research_adapter, postgres_access_adapter, postgres_workflow_adapter, postgres_thesis_adapter, postgres_portfolio_adapter, postgres_database_support]
   implements_ports: []
@@ -1672,7 +1750,292 @@ modules:
     invariants: [The migration role is the only DDL authority, API and collector roles are non-owner NOBYPASSRLS, Migration never serves runtime traffic.]
   entrypoints: [{path: infra/postgres/run-production-migrations.py, symbol: run_production_migrations, kind: initializer}]
   public_symbols: [{path: infra/postgres/run-production-migrations.py, symbol: run_production_migrations, kind: initializer}]
+- id: postgres_recommendation_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - backend/src/thesis_trace/adapters/postgres_recommendation
+  parent: null
+  depends_on:
+  - recommendation_domain
+  - postgres_database_support
+  implements_ports:
+  - recommendation.store
+  public_headers:
+  - backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py
+  description:
+    purpose: Implement Recommendation-owned normalized persistence, leased jobs, forced RLS and append-only history;
+      accepted ADR-0009; implementation pending.
+    diagram_summaries:
+      zh-TW: 保存建議、決策與具租約的分析工作
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Owner-schema SQLAlchemy transactions and bounded lease claims.
+    errors: []
+    invariants:
+    - No sibling schema writes; transaction connections stay L3-private.
+    - Recommendation/Decision history is append-only; current projection is normalized.
+  entrypoints:
+  - path: backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py
+    symbol: PostgresRecommendationStore
+    kind: adapter
+  public_symbols:
+  - path: backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py
+    symbol: PostgresRecommendationStore
+    kind: adapter
+- id: react_recommendation_adapter
+  level: L3+
+  role: adapter
+  implementation_status: planned
+  paths:
+  - frontend/src/features/recommendations
+  parent: null
+  depends_on: []
+  implements_ports: []
+  public_headers: []
+  description:
+    purpose: Present Owner-only Recommendation, decision, validity and recovery flows from generated HTTP contracts.
+    diagram_summaries:
+      zh-TW: 呈現建議、決策歷史與失效處理
+    input_ports: []
+    output_ports: []
+    emitted_events: []
+    owned_state: []
+    side_effects:
+    - description: Explicit HTTPS intents and volatile route/form state only.
+    errors: []
+    invariants:
+    - No client financial/state authority or offline domain storage.
+    - Accessible human-readable errors and Inbox return context are retained.
+  entrypoints:
+  - path: frontend/src/features/recommendations/RecommendationWorkspace.tsx
+    symbol: RecommendationWorkspace
+    kind: component
+  public_symbols:
+  - path: frontend/src/features/recommendations/RecommendationWorkspace.tsx
+    symbol: RecommendationWorkspace
+    kind: component
 ports:
+- id: recommendation.request
+  owner: recommendation_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/recommendation/contracts.py
+  implemented_by: []
+  description:
+    purpose: Admit exact immutable inputs and typed analysis work.
+    data: Owner, active Thesis/cycle, immutable bound input identities and explicit source intent.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationInputSnapshot
+- id: recommendation.query
+  owner: recommendation_domain
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/modules/recommendation/contracts.py
+  implemented_by: []
+  description:
+    purpose: Return immutable history and current input validity without mutating on read.
+    data: Authorized Owner, exact Recommendation identity/version.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationRecord
+- id: recommendation.decide
+  owner: recommendation_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/recommendation/contracts.py
+  implemented_by: []
+  description:
+    purpose: Append a legal Owner Decision under ALG-0033.
+    data: Expected decision sequence, reason, action and exact confirmation when consequential.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - OwnerDecision
+- id: recommendation.reconcile_expiry
+  owner: recommendation_domain
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/modules/recommendation/contracts.py
+  implemented_by: []
+  description:
+    purpose: Evaluate DEC-105 against current parent-resolved bound inputs.
+    data: Exact current versions and transaction time; never accepted/rejected history.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - BoundRecommendationInput
+- id: recommendation.store
+  owner: recommendation_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/recommendation/ports.py
+  implemented_by:
+  - postgres_recommendation_adapter
+  description:
+    purpose: Persist normalized Recommendation state, immutable decisions and leased version-bound work.
+    data: Owner-scoped semantic request/job/record/decision values; no SQL handles.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationStorePort
+- id: research.recommendation_query
+  owner: research_domain
+  direction: output
+  kind: dependency
+  contract: backend/src/thesis_trace/modules/research/__init__.py
+  implemented_by: [postgres_research_adapter]
+  description:
+    purpose: Read immutable source provenance and current Evidence/stage identities through their Research owner.
+    data: ResearchRecommendationSource; no Recommendation DTO or SQL row crosses this boundary.
+    timing: sync
+    immediate_rejections: [{code: resource_unavailable, condition: Missing unsuccessful or unauthorized Evidence is unavailable.}]
+  symbols: [ResearchRecommendationQueryPort, ResearchRecommendationSource]
+- id: application.request_recommendation
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Resolve Owner intent and immutable child inputs for planned Wave 7 admission.
+    data: Thesis/valuation/source identities, expected versions, selection reason and idempotency.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationFlow
+- id: application.query_recommendation
+  owner: thesis_trace_application
+  direction: input
+  kind: query
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Return one role-safe Recommendation workspace projection.
+    data: Owner-visible exact record, decision history, validity, reasons and allowed actions.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationView
+- id: application.decide_recommendation
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - fastapi_entrypoint
+  description:
+    purpose: Coordinate preview and atomic Owner decision with Workflow outcome.
+    data: Exact action/target/version, reason, reminder and optional single-use challenge.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationFlow
+- id: application.process_recommendation
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - ai_worker_adapter
+  description:
+    purpose: Lease and process one investment-analysis job outside API execution.
+    data: Pinned source/model/prompt/schema/build tuple and fenced publication.
+    timing: async
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationFlow
+- id: application.reconcile_recommendation_expiry
+  owner: thesis_trace_application
+  direction: input
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - ai_worker_adapter
+  description:
+    purpose: Coordinate bounded owner-port expiry and reminder reconciliation.
+    data: Stable cursor and exact critical-input versions; no network I/O.
+    timing: async
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationFlow
+- id: application.recommendation_transaction
+  owner: thesis_trace_application
+  direction: output
+  kind: command
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - postgres_atomic_adapter
+  description:
+    purpose: Commit owner-valid admission/publication/decision/expiry and Workflow state atomically.
+    data: SQL-free application intent, bound versions, lease/challenge, reason and idempotency.
+    timing: sync
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - RecommendationTransactionPort
+- id: application.investment_provider
+  owner: thesis_trace_application
+  direction: output
+  kind: query
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - openai_recommendation_adapter
+  description:
+    purpose: Request an untrusted investment candidate from pinned sources, not an anomaly label.
+    data: Bound research/valuation context, candidate schema/model/prompt/build; no final financial authority.
+    timing: async
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - InvestmentAnalysisRequest
+- id: application.investment_critic
+  owner: thesis_trace_application
+  direction: output
+  kind: query
+  contract: backend/src/thesis_trace/application/contracts.py
+  implemented_by:
+  - openai_recommendation_adapter
+  description:
+    purpose: Request claim-exact independent critic evidence for the investment candidate.
+    data: Pinned sources, exact candidate digest/claims and critic versions.
+    timing: async
+    immediate_rejections:
+    - code: resource_unavailable
+      condition: Actor, target, version or required capability is unavailable; fail closed.
+  symbols:
+  - InvestmentAnalysisRequest
 - id: platform.migration_events
   owner: postgres_migration_entrypoint
   direction: output
@@ -2098,7 +2461,7 @@ ports:
   contract: backend/src/thesis_trace/application/contracts.py
   implemented_by: []
   description:
-    purpose: Publish application-visible evidence submission results.
+    purpose: Publish application-visible committed outcomes and safe resolved errors; never a durable Workflow delivery channel.
     data: Record identity
     version: null
     and committed status.: null
@@ -2687,6 +3050,37 @@ ports:
     immediate_rejections: [{code: conflict, condition: Idempotency, uniqueness or expected-version constraint fails.}, {code: resource_unavailable, condition: RLS scope or persistence is unavailable.}]
   symbols: [ThesisStorePort]
 events:
+- id: application.recommendation_operation_resolved
+  owner: thesis_trace_application
+  output_port: application.events
+  delivery: at-most-once
+  envelope:
+  - event_type
+  - source
+  - correlation_id
+  - stream_id
+  - sequence
+  - payload
+  lifecycle:
+  - received
+  - validated
+  - processing
+  - succeeded
+  - failed
+  description:
+    purpose: Optional refresh hint for a resolved Recommendation operation, not authoritative state or a durable
+      task trigger.
+    emitted_when: After commit or completed rejection/rollback; result_code distinguishes those outcomes and never
+      implies a state change on rejection.
+    payload_fields:
+    - name: record_id
+      type: string
+      meaning: Opaque authorized identity, omitted on non-disclosing denial.
+    - name: result_code
+      type: string
+      meaning: Safe committed/expired/conflict/re-preview/failure category.
+    intended_consumers:
+    - fastapi_entrypoint
 - id: platform.migration_failed
   owner: postgres_migration_entrypoint
   output_port: platform.migration_events
@@ -2997,7 +3391,1005 @@ events:
     intended_consumers:
     - fastapi_entrypoint
 types:
+- id: recommendationactor
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationActor
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationActor; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references: []
+  fields:
+  - name: actor_id
+    type: str
+    role: domain-identity
+    meaning: actor id
+  - name: may_manage
+    type: bool
+    role: contract-control
+    meaning: may manage
+- id: boundrecommendationinput
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: BoundRecommendationInput
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 BoundRecommendationInput; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references: []
+  fields:
+  - name: owner_domain
+    type: str
+    role: domain-value
+    meaning: owner domain
+  - name: record_id
+    type: str
+    role: domain-identity
+    meaning: record id
+  - name: version
+    type: int
+    role: contract-control
+    meaning: version
+  - name: digest
+    type: str
+    role: contract-control
+    meaning: digest
+  - name: valid_until
+    type: datetime | None
+    role: domain-value
+    meaning: valid until
+- id: recommendationsource
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationSource
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationSource; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references: []
+  fields:
+  - name: snapshot_id
+    type: str
+    role: domain-identity
+    meaning: snapshot id
+  - name: publisher
+    type: str
+    role: domain-value
+    meaning: publisher
+  - name: excerpt
+    type: str
+    role: domain-value
+    meaning: excerpt
+  - name: canonical_url
+    type: str
+    role: domain-value
+    meaning: canonical url
+  - name: published_at
+    type: datetime | None
+    role: domain-value
+    meaning: published at
+  - name: observed_at
+    type: datetime | None
+    role: domain-value
+    meaning: observed at
+  - name: retrieved_at
+    type: datetime
+    role: domain-value
+    meaning: retrieved at
+  - {name: source_category, type: "str | None", role: domain-value, meaning: Immutable Research category; never model-authored.}
+  - {name: lineage, type: "str | None", role: domain-value, meaning: Immutable underlying source lineage when known.}
+- id: recommendationinputsnapshot
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationInputSnapshot
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationInputSnapshot; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references:
+  - recommendationactor
+  - boundrecommendationinput
+  - recommendationsource
+  fields:
+  - name: actor
+    type: RecommendationActor
+    role: domain-value
+    meaning: actor
+  - name: thesis_id
+    type: str
+    role: domain-identity
+    meaning: thesis id
+  - name: cycle
+    type: int
+    role: domain-value
+    meaning: cycle
+  - name: bindings
+    type: tuple[BoundRecommendationInput, ...]
+    role: domain-value
+    meaning: bindings
+  - name: sources
+    type: tuple[RecommendationSource, ...]
+    role: domain-value
+    meaning: sources
+  - name: valuation_id
+    type: str
+    role: domain-identity
+    meaning: valuation id
+  - name: portfolio_snapshot_id
+    type: str | None
+    role: domain-identity
+    meaning: portfolio snapshot id
+  - name: source_selection_reason
+    type: str
+    role: domain-value
+    meaning: source selection reason
+  - name: gate_reasons
+    type: tuple[str, ...]
+    role: domain-value
+    meaning: gate reasons
+  - {name: company_id, type: str, role: domain-identity, meaning: Company bound by the parent to the personal Thesis.}
+  - {name: benchmark_source, type: str, role: domain-value, meaning: Explicit Owner-selected published valuation source.}
+  - {name: admitted_at, type: datetime, role: domain-value, meaning: Server time of immutable input admission.}
+  - {name: analysis_context, type: "tuple[tuple[str, str], ...]", role: domain-value, meaning: Frozen bounded Thesis narrative condition and valuation context plus original Thesis source version; never mutable live reads during provider I/O.}
+- id: recommendationcandidate
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationCandidate
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationCandidate; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references: []
+  fields:
+  - name: direction
+    type: str
+    role: domain-value
+    meaning: direction
+  - name: raw_dca_ceiling
+    type: Decimal
+    role: domain-value
+    meaning: raw dca ceiling
+  - name: claims
+    type: tuple[tuple[str, tuple[str, ...]], ...]
+    role: domain-value
+    meaning: claims
+  - name: schema_version
+    type: str
+    role: contract-control
+    meaning: schema version
+  - name: digest
+    type: str
+    role: contract-control
+    meaning: digest
+- id: recommendationrecord
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationRecord
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationRecord; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references:
+  - recommendationinputsnapshot
+  - recommendationcandidate
+  fields:
+  - name: recommendation_id
+    type: str
+    role: domain-identity
+    meaning: recommendation id
+  - name: version
+    type: int
+    role: contract-control
+    meaning: version
+  - name: inputs
+    type: RecommendationInputSnapshot
+    role: domain-value
+    meaning: inputs
+  - name: candidate
+    type: RecommendationCandidate
+    role: domain-value
+    meaning: candidate
+  - name: final_multiplier
+    type: Decimal
+    role: domain-value
+    meaning: final multiplier
+  - name: published_at
+    type: datetime
+    role: domain-value
+    meaning: published at
+  - name: policy_version
+    type: str
+    role: contract-control
+    meaning: policy version
+  - {name: direction, type: str, role: domain-value, meaning: Server-gated buy or hold or abstain result distinct from original candidate.}
+  - {name: reasons, type: 'tuple[str, ...]', role: domain-value, meaning: Ordered fail-closed policy reason codes.}
+  - {name: annualized_return, type: Decimal | None, role: domain-value, meaning: Thesis-owned final-size net annualized return as a unit fraction.}
+  - {name: minimum_return, type: Decimal | None, role: domain-value, meaning: Configured deployment minimum annualized return or explicit absence.}
+  - {name: calculation_trace, type: 'tuple[tuple[str, str], ...]', role: domain-value, meaning: Bounded parent-mapped owner calculation trace.}
+  - {name: provenance, type: 'tuple[tuple[str, str], ...]', role: contract-control, meaning: Exact provider model prompt schema build and policy versions.}
+  - {name: critic_evidence, type: str, role: domain-value, meaning: Strictly validated bounded original investment critic response.}
+- id: ownerdecision
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: OwnerDecision
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 OwnerDecision; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references: []
+  fields:
+  - name: recommendation_id
+    type: str
+    role: domain-identity
+    meaning: recommendation id
+  - name: recommendation_version
+    type: int
+    role: contract-control
+    meaning: recommendation version
+  - name: sequence
+    type: int
+    role: contract-control
+    meaning: sequence
+  - name: status
+    type: str
+    role: domain-value
+    meaning: status
+  - name: reason
+    type: str
+    role: domain-value
+    meaning: reason
+  - name: actor_id
+    type: str
+    role: domain-identity
+    meaning: actor id
+  - name: recorded_at
+    type: datetime
+    role: domain-value
+    meaning: recorded at
+  - name: defer_until
+    type: datetime | None
+    role: domain-value
+    meaning: defer until
+  - name: policy_version
+    type: str
+    role: contract-control
+    meaning: policy version
+  - {name: input_checks, type: 'tuple[tuple[str, str], ...]', role: metadata, meaning: Immutable bounded trace of exact current versions digests and validity at decision time; original bindings remain on the record}
+  - {name: confirmation_id, type: str | None, role: metadata, meaning: Access-owned challenge audit correlation; absent for automatic expiry deferral or legacy records}
+- id: recommendationjob
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/contracts.py
+    symbol: RecommendationJob
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationJob; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references: []
+  fields:
+  - name: job_id
+    type: str
+    role: domain-identity
+    meaning: job id
+  - name: input_id
+    type: str
+    role: domain-identity
+    meaning: input id
+  - name: input_digest
+    type: str
+    role: contract-control
+    meaning: input digest
+  - {name: actor_id, type: str, role: domain-identity, meaning: Admitted Owner identity; worker revalidates active role before publication.}
+  - {name: thesis_id, type: str, role: domain-identity, meaning: Admitted personal Thesis stream.}
+  - {name: cycle, type: int, role: contract-control, meaning: Admitted Thesis cycle used for serialized claims.}
+  - name: lease_token
+    type: str
+    role: contract-control
+    meaning: lease token
+  - name: lease_expires_at
+    type: datetime
+    role: contract-control
+    meaning: lease expires at
+  - name: attempt
+    type: int
+    role: contract-control
+    meaning: attempt
+  - name: versions
+    type: tuple[tuple[str, str], ...]
+    role: contract-control
+    meaning: versions
+- id: recommendationstoreport
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/ports.py
+    symbol: RecommendationStorePort
+    kind: protocol
+  visibility: module-public
+  semantic_kind: port
+  description: Planned ADR-0009 RecommendationStorePort; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references:
+  - recommendationinputsnapshot
+  - recommendationrecord
+  - ownerdecision
+  - recommendationjob
+  fields: []
+- id: recommendationservice
+  owner: recommendation_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/recommendation/service.py
+    symbol: RecommendationService
+    kind: class
+  visibility: module-public
+  semantic_kind: descriptor
+  description: Planned ADR-0009 RecommendationService; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - recommendation_domain
+  - thesis_trace_application
+  - postgres_recommendation_adapter
+  references:
+  - recommendationstoreport
+  fields: []
+- id: recommendationflow
+  owner: thesis_trace_application
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/application/contracts.py
+    symbol: RecommendationFlow
+    kind: class
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Parent-owned Recommendation orchestration; currently plans final-size financial publication through Thesis and Portfolio owners without persistence authority.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - thesis_trace_application
+  - postgres_atomic_adapter
+  - backend_composition
+  references:
+  - recommendationdecisioncommand
+  - recommendationdecisionpreview
+  - accessconfirmationservice
+  - ownerdecision
+  - recommendationadmissioncommand
+  - recommendationpublicationcommand
+  - recommendationview
+  - thesisstoreport
+  - portfoliostoreport
+  - researchrecommendationqueryport
+  - actionitemstoreport
+  - workflowservice
+  - workflowactorcontext
+  - actionsourceref
+  - createactionitemcommand
+  - investmentanalysisrequest
+  - recommendationtransactionport
+  - recommendationstoreport
+  - recommendationjob
+  - recommendationsource
+  - researchrecommendationfacade
+  - researchrecommendationsource
+  - researchactorcontext
+  - recommendationservice
+  - recommendationinputsnapshot
+  - recommendationrecord
+  - recommendationactor
+  - boundrecommendationinput
+  - portfoliorecommendationsnapshot
+  - portfolioservice
+  - portfolioactorcontext
+  - thesisservice
+  - thesisactorcontext
+  - authenticatedactor
+  - thesisresearchqueryport
+  fields: []
+- id: recommendationtransactionport
+  owner: thesis_trace_application
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/application/contracts.py
+    symbol: RecommendationTransactionPort
+    kind: protocol
+  visibility: module-public
+  semantic_kind: port
+  description: Semantic parent demand for source- and lease-fenced atomic Recommendation publication; no SQL handles or provider callbacks.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - thesis_trace_application
+  - postgres_atomic_adapter
+  - backend_composition
+  references: [recommendationadmissioncommand, recommendationpublicationcommand, recommendationdecisioncommand, recommendationdecisionpreview, recommendationview]
+  fields: []
+- id: recommendationview
+  owner: thesis_trace_application
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/application/contracts.py
+    symbol: RecommendationView
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 RecommendationView; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - thesis_trace_application
+  - postgres_atomic_adapter
+  references: []
+  fields:
+  - name: record_id
+    type: str
+    role: domain-identity
+    meaning: record id
+  - name: version
+    type: int
+    role: contract-control
+    meaning: version
+  - name: decision_status
+    type: str | None
+    role: domain-value
+    meaning: decision status
+  - name: input_validity
+    type: str
+    role: domain-value
+    meaning: input validity
+  - name: allowed_actions
+    type: tuple[str, ...]
+    role: domain-value
+    meaning: allowed actions
+  - name: reason_codes
+    type: tuple[str, ...]
+    role: domain-value
+    meaning: reason codes
+  - {name: decision_sequence, type: int, role: contract-control, meaning: Current or explicitly replayed immutable decision sequence; zero means absent}
+- id: recommendationfieldview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationFieldView, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Human-readable immutable metadata pair.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: label, type: 'str', role: domain-value, meaning: 'label in the server-owned read projection'}
+  - {name: value, type: 'str', role: domain-value, meaning: 'value in the server-owned read projection'}
+- id: recommendationsourceview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationSourceView, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Frozen cited source facts; no mutable current-source substitution.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: snapshot_id, type: 'str', role: domain-identity, meaning: 'snapshot id in the server-owned read projection'}
+  - {name: publisher, type: 'str', role: domain-value, meaning: 'publisher in the server-owned read projection'}
+  - {name: excerpt, type: 'str', role: domain-value, meaning: 'excerpt in the server-owned read projection'}
+  - {name: url, type: 'str', role: domain-value, meaning: 'url in the server-owned read projection'}
+  - {name: category, type: 'str | None', role: domain-value, meaning: 'category in the server-owned read projection'}
+  - {name: lineage, type: 'str | None', role: domain-value, meaning: 'lineage in the server-owned read projection'}
+  - {name: published_at, type: 'datetime | None', role: domain-value, meaning: 'published at in the server-owned read projection'}
+  - {name: retrieved_at, type: 'datetime', role: domain-value, meaning: 'retrieved at in the server-owned read projection'}
+- id: recommendationclaimview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationClaimView, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Original candidate statement and exact citation identities.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: text, type: 'str', role: domain-value, meaning: 'text in the server-owned read projection'}
+  - {name: citations, type: 'tuple[str, ...]', role: domain-value, meaning: 'citations in the server-owned read projection'}
+- id: recommendationdecisionhistoryview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationDecisionHistoryView, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Append-only decision facts distinct from present validity.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [recommendationfieldview]
+  fields:
+  - {name: sequence, type: 'int', role: contract-control, meaning: 'sequence in the server-owned read projection'}
+  - {name: status, type: 'str', role: domain-value, meaning: 'status in the server-owned read projection'}
+  - {name: reason, type: 'str', role: domain-value, meaning: 'reason in the server-owned read projection'}
+  - {name: recorded_at, type: 'datetime', role: domain-value, meaning: 'recorded at in the server-owned read projection'}
+  - {name: defer_until, type: 'datetime | None', role: domain-value, meaning: 'defer until in the server-owned read projection'}
+  - {name: confirmation_id, type: 'str | None', role: domain-identity, meaning: 'confirmation id in the server-owned read projection'}
+  - {name: checks, type: 'tuple[RecommendationFieldView, ...]', role: domain-value, meaning: 'checks in the server-owned read projection'}
+- id: recommendationriskrow
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationRiskRow, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Frozen all-bucket concentration comparison; ratios are display-only strings.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: dimension, type: 'str', role: domain-value, meaning: 'dimension in the server-owned read projection'}
+  - {name: subject, type: 'str', role: domain-value, meaning: 'subject in the server-owned read projection'}
+  - {name: current_ratio, type: 'str', role: domain-value, meaning: 'current ratio in the server-owned read projection'}
+  - {name: projected_ratio, type: 'str | None', role: domain-value, meaning: 'projected ratio in the server-owned read projection'}
+  - {name: limit_ratio, type: 'str', role: domain-value, meaning: 'limit ratio in the server-owned read projection'}
+- id: recommendationrequestview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationRequestView, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Owner-visible durable admission state without provider output.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: request_id, type: 'str', role: domain-identity, meaning: 'request id in the server-owned read projection'}
+  - {name: thesis_id, type: 'str', role: domain-identity, meaning: 'thesis id in the server-owned read projection'}
+  - {name: status, type: 'str', role: domain-value, meaning: 'status in the server-owned read projection'}
+  - {name: error_code, type: 'str | None', role: domain-value, meaning: 'error code in the server-owned read projection'}
+  - {name: submitted_at, type: 'datetime', role: domain-value, meaning: 'submitted at in the server-owned read projection'}
+  - {name: result_version, type: 'int | None', role: contract-control, meaning: 'result version in the server-owned read projection'}
+- id: recommendationrequestpage
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationRequestPage, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Bounded stable-key page of Owner-visible requests.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [recommendationrequestview]
+  fields:
+  - {name: items, type: 'tuple[RecommendationRequestView, ...]', role: domain-value, meaning: 'items in the server-owned read projection'}
+  - {name: next_cursor, type: 'str | None', role: domain-value, meaning: 'next cursor in the server-owned read projection'}
+- id: recommendationdetailview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationDetailView, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: L0 read projection separates immutable recommendation and current validity.
+  lifetime: One immutable read response
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, fastapi_entrypoint]
+  references: [recommendationfieldview, recommendationsourceview, recommendationclaimview, recommendationdecisionhistoryview, recommendationriskrow, recommendationview]
+  fields:
+  - {name: view, type: 'RecommendationView', role: domain-value, meaning: 'view in the server-owned read projection'}
+  - {name: company_id, type: 'str', role: domain-identity, meaning: 'company id in the server-owned read projection'}
+  - {name: thesis_id, type: 'str', role: domain-identity, meaning: 'thesis id in the server-owned read projection'}
+  - {name: thesis_title, type: 'str', role: domain-value, meaning: 'thesis title in the server-owned read projection'}
+  - {name: published_at, type: 'datetime', role: domain-value, meaning: 'published at in the server-owned read projection'}
+  - {name: checked_at, type: 'datetime', role: domain-value, meaning: 'checked at in the server-owned read projection'}
+  - {name: direction, type: 'str', role: domain-value, meaning: 'direction in the server-owned read projection'}
+  - {name: publication_reasons, type: 'tuple[str, ...]', role: domain-value, meaning: Persisted publication policy reasons separate from present validity}
+  - {name: raw_ceiling, type: 'str', role: domain-value, meaning: 'raw ceiling in the server-owned read projection'}
+  - {name: final_multiplier, type: 'str', role: domain-value, meaning: 'final multiplier in the server-owned read projection'}
+  - {name: annualized_return, type: 'str | None', role: domain-value, meaning: 'annualized return in the server-owned read projection'}
+  - {name: minimum_return, type: 'str | None', role: domain-value, meaning: 'minimum return in the server-owned read projection'}
+  - {name: benchmark_source, type: 'str', role: domain-value, meaning: 'benchmark source in the server-owned read projection'}
+  - {name: source_selection_reason, type: 'str', role: domain-value, meaning: 'source selection reason in the server-owned read projection'}
+  - {name: valuation_id, type: 'str', role: domain-identity, meaning: 'valuation id in the server-owned read projection'}
+  - {name: portfolio_snapshot_id, type: 'str | None', role: domain-identity, meaning: 'portfolio snapshot id in the server-owned read projection'}
+  - {name: sources, type: 'tuple[RecommendationSourceView, ...]', role: domain-value, meaning: 'sources in the server-owned read projection'}
+  - {name: claims, type: 'tuple[RecommendationClaimView, ...]', role: domain-value, meaning: 'claims in the server-owned read projection'}
+  - {name: decisions, type: 'tuple[RecommendationDecisionHistoryView, ...]', role: domain-value, meaning: 'decisions in the server-owned read projection'}
+  - {name: next_decision_sequence, type: 'int | None', role: contract-control, meaning: Exclusive sequence cursor for older immutable history; at most ten decisions per detail response}
+  - {name: facts, type: 'tuple[RecommendationFieldView, ...]', role: domain-value, meaning: 'facts in the server-owned read projection'}
+  - {name: risk, type: 'tuple[RecommendationRiskRow, ...]', role: domain-value, meaning: 'risk in the server-owned read projection'}
+- id: recommendationadmissionbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: RecommendationAdmissionBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Explicit bounded Recommendation HTTP intent without actor or financial authority.
+  lifetime: One HTTP request
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: thesis_id, type: 'str', role: contract-control, meaning: 'thesis id validated at the HTTP boundary'}
+  - {name: expected_thesis_version, type: 'int', role: contract-control, meaning: 'expected thesis version validated at the HTTP boundary'}
+  - {name: valuation_id, type: 'str', role: contract-control, meaning: 'valuation id validated at the HTTP boundary'}
+  - {name: expected_valuation_version, type: 'int', role: contract-control, meaning: 'expected valuation version validated at the HTTP boundary'}
+  - {name: expected_portfolio_version, type: 'int', role: contract-control, meaning: 'expected portfolio version validated at the HTTP boundary'}
+  - {name: benchmark_source, type: 'Literal', role: contract-control, meaning: 'benchmark source validated at the HTTP boundary'}
+  - {name: source_selection_reason, type: 'str', role: contract-control, meaning: 'source selection reason validated at the HTTP boundary'}
+  - {name: idempotency_key, type: 'str', role: contract-control, meaning: 'idempotency key validated at the HTTP boundary'}
+- id: recommendationdecisionbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: RecommendationDecisionBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Explicit bounded Recommendation HTTP intent without actor or financial authority.
+  lifetime: One HTTP request
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: []
+  fields:
+  - {name: version, type: 'int', role: contract-control, meaning: 'version validated at the HTTP boundary'}
+  - {name: expected_sequence, type: 'int', role: contract-control, meaning: 'expected sequence validated at the HTTP boundary'}
+  - {name: target_status, type: 'Literal', role: contract-control, meaning: 'target status validated at the HTTP boundary'}
+  - {name: reason, type: 'str', role: contract-control, meaning: 'reason validated at the HTTP boundary'}
+  - {name: defer_until, type: 'datetime | None', role: contract-control, meaning: 'defer until validated at the HTTP boundary'}
+  - {name: idempotency_key, type: 'str', role: contract-control, meaning: 'idempotency key validated at the HTTP boundary'}
+- id: recommendationconfirmbody
+  owner: fastapi_entrypoint
+  language: python
+  declaration: {path: backend/src/thesis_trace/api.py, symbol: RecommendationConfirmBody, kind: class}
+  visibility: private
+  semantic_kind: wire-representation
+  description: Explicit bounded Recommendation HTTP intent without actor or financial authority.
+  lifetime: One HTTP request
+  mutability: immutable
+  mutation_authority: []
+  consumers: [fastapi_entrypoint]
+  references: [recommendationdecisionbody]
+  fields:
+  - {name: challenge_token, type: 'str | None', role: contract-control, meaning: 'challenge token validated at the HTTP boundary'}
+- id: recommendationclient
+  owner: react_recommendation_adapter
+  language: typescript
+  declaration: {path: frontend/src/features/recommendations/client.ts, symbol: RecommendationClient, kind: interface}
+  visibility: private
+  semantic_kind: port
+  description: Browser-local generated contract client with stable redacted errors and no domain calculations.
+  lifetime: Browser page
+  mutability: immutable
+  mutation_authority: []
+  consumers: [react_recommendation_adapter]
+  references: []
+  fields: []
+- id: recommendationdecisioncommand
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationDecisionCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Exact Owner decision intent; source validity and challenge authority are server-owned.
+  lifetime: One preview or atomic command
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, postgres_atomic_adapter]
+  references: []
+  fields:
+  - {name: actor_id, type: str, role: domain-identity, meaning: Authenticated Owner}
+  - {name: identity_version, type: int, role: contract-control, meaning: Observed account version}
+  - {name: record_id, type: str, role: domain-identity, meaning: Immutable recommendation}
+  - {name: version, type: int, role: contract-control, meaning: Reviewed recommendation version}
+  - {name: expected_sequence, type: int, role: contract-control, meaning: Reviewed decision sequence}
+  - {name: target_status, type: str, role: domain-value, meaning: Requested accepted rejected or deferred transition}
+  - {name: reason, type: str, role: domain-value, meaning: Explicit human explanation}
+  - {name: defer_until, type: datetime | None, role: domain-value, meaning: Future reminder without validity extension}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Owner-scoped exact retry receipt}
+  - {name: challenge_token, type: str | None, role: contract-control, meaning: Volatile confirmation capability; never persisted as plaintext}
+- id: recommendationdecisionpreview
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationDecisionPreview, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Server-authored impact and validity with optional five-minute confirmation; no decision mutation.
+  lifetime: One volatile preview
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, postgres_atomic_adapter]
+  references: [recommendationview]
+  fields:
+  - {name: view, type: RecommendationView, role: domain-value, meaning: Current decision and input validity}
+  - {name: challenge_token, type: str | None, role: contract-control, meaning: Opaque one-time token only for a valid consequential action}
+  - {name: expires_at, type: datetime | None, role: contract-control, meaning: Challenge expiry independent of recommendation validity}
+  - {name: impact_summary, type: str, role: domain-value, meaning: Human-readable consequences including no automatic trade}
+- id: accessconfirmationservice
+  owner: access_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/access/orchestration.py, symbol: AccessConfirmationService, kind: class}
+  visibility: module-public
+  semantic_kind: composition-mapping
+  description: Access-parent facade maps bounded canonical intent and primitives to the child confirmation service without exposing its DTO to L0.
+  lifetime: One transaction-bound service
+  mutability: immutable
+  mutation_authority: []
+  consumers: [access_domain, thesis_trace_application, postgres_access_adapter]
+  references: [confirmationservice, authenticatedactor, role]
+  fields: []
+- id: recommendationadmissioncommand
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationAdmissionCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Explicit authenticated Owner intent with expected versions, reconfirmed benchmark source and reason; never client-supplied financial/source values.
+  lifetime: One idempotent admission request
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, postgres_atomic_adapter]
+  references: []
+  fields:
+  - {name: actor_id, type: str, role: domain-identity, meaning: Server-authenticated Owner}
+  - {name: identity_version, type: int, role: contract-control, meaning: Observed Access account version}
+  - {name: thesis_id, type: str, role: domain-identity, meaning: Selected personal Thesis}
+  - {name: expected_thesis_version, type: int, role: contract-control, meaning: Explicit current Thesis version}
+  - {name: valuation_id, type: str, role: domain-identity, meaning: Selected immutable valuation}
+  - {name: expected_valuation_version, type: int, role: contract-control, meaning: Explicit current published valuation version}
+  - {name: expected_portfolio_version, type: int, role: contract-control, meaning: Explicit current all-bucket Portfolio version}
+  - {name: benchmark_source, type: str, role: domain-value, meaning: Reconfirmed source choice}
+  - {name: source_selection_reason, type: str, role: domain-value, meaning: Nonblank explicit reconfirmation reason}
+  - {name: idempotency_key, type: str, role: contract-control, meaning: Actor-scoped immutable intent receipt key}
+- id: recommendationpublicationcommand
+  owner: thesis_trace_application
+  language: python
+  declaration: {path: backend/src/thesis_trace/application/contracts.py, symbol: RecommendationPublicationCommand, kind: class}
+  visibility: module-public
+  semantic_kind: command
+  description: Parent-owned immutable lease and output mapping for one atomic publication; no child object or SQL representation crosses this port.
+  lifetime: One worker publication attempt
+  mutability: immutable
+  mutation_authority: []
+  consumers: [thesis_trace_application, postgres_atomic_adapter]
+  references: []
+  fields:
+  - {name: job_id, type: str, role: domain-identity, meaning: Opaque admitted job identity}
+  - {name: input_id, type: str, role: domain-identity, meaning: Immutable input identity}
+  - {name: input_digest, type: str, role: contract-control, meaning: Exact pinned input digest}
+  - {name: actor_id, type: str, role: domain-identity, meaning: Admitted Owner; independently revalidated by Access}
+  - {name: thesis_id, type: str, role: domain-identity, meaning: Admitted personal Thesis stream}
+  - {name: cycle, type: int, role: contract-control, meaning: Admitted cycle}
+  - {name: lease_token, type: str, role: contract-control, meaning: Exact current attempt capability}
+  - {name: lease_expires_at, type: datetime, role: contract-control, meaning: Observed lease time; database remains authority}
+  - {name: attempt, type: int, role: contract-control, meaning: Fenced attempt number}
+  - {name: versions, type: 'tuple[tuple[str, str], ...]', role: contract-control, meaning: Exact pinned execution identities}
+  - {name: raw_candidate, type: str, role: domain-value, meaning: Original bounded untrusted candidate text}
+  - {name: raw_critic, type: str, role: domain-value, meaning: Original bounded untrusted critic text}
+  - {name: now, type: datetime, role: contract-control, meaning: Caller observation; commit uses fresh server clock}
+- id: investmentanalysisrequest
+  owner: thesis_trace_application
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/application/contracts.py
+    symbol: InvestmentAnalysisRequest
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Immutable parent-mapped investment source context with exact candidate and execution identities; no account or Portfolio payload.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - thesis_trace_application
+  - openai_recommendation_adapter
+  references: []
+  fields:
+  - name: input_id
+    type: str
+    role: domain-identity
+    meaning: input id
+  - name: source_context
+    type: tuple[tuple[str, str], ...]
+    role: domain-value
+    meaning: source context
+  - name: candidate_text
+    type: str | None
+    role: domain-value
+    meaning: candidate text
+  - name: candidate_digest
+    type: str | None
+    role: contract-control
+    meaning: candidate digest
+  - name: schema_version
+    type: str
+    role: contract-control
+    meaning: schema version
+  - name: prompt_version
+    type: str
+    role: contract-control
+    meaning: prompt version
+  - name: model_version
+    type: str
+    role: contract-control
+    meaning: model version
+- id: portfoliorecommendationsnapshot
+  owner: portfolio_domain
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/modules/portfolio/contracts.py
+    symbol: PortfolioRecommendationSnapshot
+    kind: class
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Planned ADR-0009 PortfolioRecommendationSnapshot; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - portfolio_domain
+  - thesis_trace_application
+  - postgres_portfolio_adapter
+  references:
+  - portfoliosnapshot
+  - costprofilesnapshot
+  - exposuresnapshot
+  - dcaselection
+  - officialsecuritysnapshot
+  fields:
+  - name: snapshot_id
+    type: str
+    role: domain-identity
+    meaning: snapshot id
+  - name: portfolio
+    type: PortfolioSnapshot
+    role: domain-value
+    meaning: portfolio
+  - name: cost
+    type: CostProfileSnapshot
+    role: domain-value
+    meaning: cost
+  - name: exposure
+    type: ExposureSnapshot
+    role: domain-value
+    meaning: exposure
+  - name: sizing
+    type: DcaSelection
+    role: domain-value
+    meaning: sizing
+  - name: created_at
+    type: datetime
+    role: domain-value
+    meaning: created at
+  - {name: target, type: OfficialSecuritySnapshot, role: domain-value, meaning: Exact official target price classification and theme snapshot.}
+  - {name: base_amount, type: Decimal, role: domain-value, meaning: Published valuation base notional before multiplier.}
+  - {name: buy_price, type: Decimal, role: domain-value, meaning: Analytical buy price used to derive acquired quantity.}
+  - {name: cash_as_of, type: datetime, role: domain-value, meaning: Owner-confirmed cash observation time.}
+- id: postgresrecommendationstore
+  owner: postgres_recommendation_adapter
+  language: python
+  declaration:
+    path: backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py
+    symbol: PostgresRecommendationStore
+    kind: class
+  visibility: private
+  semantic_kind: adapter-binding
+  description: Planned ADR-0009 PostgresRecommendationStore; ownership and behavior in Wave 7 design.
+  lifetime: Immutable input/result or process binding; private implementation dependencies never transfer state
+    authority.
+  mutability: immutable
+  mutation_authority: []
+  consumers:
+  - postgres_recommendation_adapter
+  references:
+  - recommendationstoreport
+  fields: []
 - {id: postgresportfoliosecuritycontext, owner: postgres_portfolio_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: _SecurityContext, kind: protocol}, visibility: private, semantic_kind: adapter-binding, description: "Minimal RLS context projection consumed by Portfolio persistence.", lifetime: One request, mutability: immutable, mutation_authority: [], consumers: [postgres_portfolio_adapter], references: [], fields: []}
+- {id: postgresrecommendationsecuritycontext, owner: postgres_recommendation_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py, symbol: _SecurityContext, kind: protocol}, visibility: private, semantic_kind: adapter-binding, description: "Private request identity role and correlation projection for forced-RLS Recommendation storage.", lifetime: One request, mutability: immutable, mutation_authority: [], consumers: [postgres_recommendation_adapter], references: [], fields: []}
 - {id: postgresportfolioconnection, owner: postgres_portfolio_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: _Connection, kind: class}, visibility: private, semantic_kind: adapter-binding, description: "Transaction-scoped SQLAlchemy or driver execution bridge.", lifetime: One transaction, mutability: immutable, mutation_authority: [], consumers: [postgres_portfolio_adapter], references: [], fields: []}
 - {id: postgresthesissecuritycontext, owner: postgres_thesis_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py, symbol: _SecurityContext, kind: protocol}, visibility: private, semantic_kind: adapter-binding, description: "Minimal RLS context projection consumed by Thesis persistence.", lifetime: One request, mutability: immutable, mutation_authority: [], consumers: [postgres_thesis_adapter], references: [], fields: []}
 - {id: postgresthesisconnection, owner: postgres_thesis_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_thesis/adapter.py, symbol: _Connection, kind: class}, visibility: private, semantic_kind: adapter-binding, description: "Transaction-scoped SQLAlchemy or driver execution bridge.", lifetime: One transaction, mutability: immutable, mutation_authority: [], consumers: [postgres_thesis_adapter], references: [], fields: []}
@@ -3013,13 +4405,42 @@ types:
   lifetime: One synchronous reference-validation result.
   mutability: immutable
   mutation_authority: []
-  consumers: [research_domain, thesis_trace_application]
+  consumers: [research_domain, thesis_trace_application, postgres_research_adapter]
   references: []
   fields:
   - {name: record_type, type: str, role: contract-control, meaning: Company or Evidence discriminator.}
   - {name: record_id, type: str, role: domain-identity, meaning: Stable Research record identity.}
   - {name: version, type: int, role: contract-control, meaning: Current Server-authoritative record version.}
   - {name: company_id, type: str, role: domain-identity, meaning: Owning Company identity for relationship validation.}
+- id: researchrecommendationsource
+  owner: research_domain
+  language: python
+  declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecommendationSource, kind: class}
+  visibility: module-public
+  semantic_kind: domain-value
+  description: Research-owned immutable source provenance plus current canonical Evidence/stage references for parent Recommendation mapping.
+  lifetime: One version-bound read
+  mutability: immutable
+  mutation_authority: []
+  consumers: [research_domain, thesis_trace_application, postgres_research_adapter]
+  references: [researchrecordreference]
+  fields:
+  - {name: evidence, type: ResearchRecordReference, role: domain-identity, meaning: Current Evidence identity version and Company.}
+  - {name: snapshot_id, type: str, role: domain-identity, meaning: Immutable collected source identity.}
+  - {name: canonical_url, type: str, role: domain-value, meaning: Saved source URL.}
+  - {name: publisher, type: str, role: domain-value, meaning: Saved publisher identity.}
+  - {name: excerpt, type: "str | None", role: domain-value, meaning: Necessary excerpt without silent truncation.}
+  - {name: source_category, type: str, role: domain-value, meaning: Server source A B C category; not provider classification.}
+  - {name: lineage, type: "str | None", role: domain-value, meaning: Original underlying source lineage.}
+  - {name: published_at, type: "datetime | None", role: domain-value, meaning: Source publication time.}
+  - {name: observed_at, type: "datetime | None", role: domain-value, meaning: Source event observation time.}
+  - {name: retrieved_at, type: datetime, role: domain-value, meaning: Saved retrieval time.}
+  - {name: stage_version, type: "int | None", role: contract-control, meaning: Current canonical dimension confirmation version if any.}
+  - {name: stage, type: "str | None", role: domain-value, meaning: Current canonical E stage; no new minimum-stage gate.}
+  - {name: stage_source_id, type: "str | None", role: domain-identity, meaning: Exact source used by canonical stage facts.}
+  - {name: stage_digest, type: "str | None", role: contract-control, meaning: Stable digest of the immutable canonical stage record.}
+- {id: researchrecommendationqueryport, owner: research_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecommendationQueryPort, kind: protocol}, visibility: module-public, semantic_kind: port, description: "Research-owned source/provenance and exact valuation-fact reference/digest read demand for Recommendation parent mapping.", lifetime: Process binding, mutability: immutable, mutation_authority: [], consumers: [research_domain, postgres_research_adapter], references: [researchrecommendationsource, researchrecordreference], fields: []}
+- {id: researchrecommendationfacade, owner: research_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/research/__init__.py, symbol: ResearchRecommendationFacade, kind: class}, visibility: module-public, semantic_kind: composition-mapping, description: "Research parent authorizes source/fact-binding reads and exposes only Research-owned semantic values.", lifetime: Process or request binding, mutability: immutable, mutation_authority: [], consumers: [research_domain, thesis_trace_application, backend_composition], references: [researchactorcontext, researchrecommendationqueryport, researchrecommendationsource, researchrecordreference], fields: []}
 - id: thesisstatus
   owner: thesis_domain
   language: python
@@ -3517,6 +4938,19 @@ types:
   consumers: [fastapi_entrypoint, react_thesis_adapter]
   references: []
   fields: []
+- id: postgresrecommendationtransaction
+  owner: postgres_atomic_adapter
+  language: python
+  declaration: {path: backend/src/thesis_trace/adapters/postgres_atomic/adapter.py, symbol: PostgresRecommendationTransaction, kind: class}
+  visibility: module-public
+  semantic_kind: adapter-binding
+  description: Request-scoped owner-store coordination for lease-fenced source-valid Recommendation and Portfolio snapshot plus Workflow publication.
+  lifetime: Process binding with one private transaction per operation; no provider I/O or shared mutable domain state.
+  mutability: immutable
+  mutation_authority: []
+  consumers: [postgres_atomic_adapter, backend_composition]
+  references: [recommendationtransactionport, recommendationadmissioncommand, recommendationpublicationcommand, recommendationdecisioncommand, recommendationdecisionpreview, recommendationview, recommendationflow, postgresaccessadapter, postgresthesisstore, postgresportfoliostore, postgresevidencestore, postgresrecommendationstore, postgresworkflowstore]
+  fields: []
 - id: postgresconfirmedthesistransition
   owner: postgres_atomic_adapter
   language: python
@@ -3565,9 +4999,9 @@ types:
 - {id: tradeside, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: TradeSide, kind: enum}, visibility: module-public, semantic_kind: domain-value, description: "Canonical buy or sell direction.", lifetime: Durable value, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [], fields: [], values: [buy, sell]}
 - {id: officialsecuritysnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: OfficialSecuritySnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Server-resolved official close, price date/source, industry and Owner-confirmed theme snapshot.", lifetime: Durable version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [], fields: []}
 - {id: holdingsnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: HoldingSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "One exact bucket/security holding and classification snapshot.", lifetime: Portfolio version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [], fields: []}
-- {id: portfoliosnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Cash and all holding buckets for one exposure evaluation.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [holdingsnapshot], fields: []}
-- {id: exposuresnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ExposureSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "ALG-0011 security industry theme and feasibility result.", lifetime: Portfolio version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [], fields: []}
-- {id: dcaselection, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: DcaSelection, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "ALG-0012 ordered risk-feasible multiplier result.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [], fields: []}
+- {id: portfoliosnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: PortfolioSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Cash and all holding buckets for one exposure evaluation.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [holdingsnapshot], fields: []}
+- {id: exposuresnapshot, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ExposureSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "ALG-0011 security industry theme and feasibility result.", lifetime: Portfolio version, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application, postgres_portfolio_adapter], references: [], fields: []}
+- {id: dcaselection, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: DcaSelection, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "ALG-0012 ordered risk-feasible multiplier and frozen post-transaction calculation result.", lifetime: One evaluation, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [exposuresnapshot], fields: [{name: post_exposure, type: "ExposureSnapshot | None", role: domain-value, meaning: Exact-policy post-transaction security industry and theme result; legacy absence explicit.}, {name: purchase_outflow, type: "Decimal | None", role: domain-value, meaning: Selected analytical notional plus actual buy fee.}, {name: acquired_quantity, type: "Decimal | None", role: domain-value, meaning: Selected analytical share quantity; not an executable Trade.}]}
 - {id: canonicaltrade, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CanonicalTrade, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Normalized source-bound Trade facts.", lifetime: Durable Trade, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter, thesis_trace_application], references: [tradeside], fields: []}
 - {id: canonicalcsvissue, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CanonicalCsvIssue, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Stable canonical CSV row validation issue.", lifetime: One preview, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [], fields: []}
 - {id: canonicalcsvpreview, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CanonicalCsvPreview, kind: class}, visibility: module-public, semantic_kind: query, description: "Parse-only canonical CSV trades and issues.", lifetime: One preview, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application], references: [canonicaltrade, canonicalcsvissue], fields: []}
@@ -3588,7 +5022,7 @@ types:
 - {id: confirmtradecorrectioncommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ConfirmTradeCorrectionCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed append-only Trade reversal intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, backend_composition], references: [portfolioactorcontext, tradecorrectionpreview], fields: []}
 - {id: companyactionpreview, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: CompanyActionPreview, kind: class}, visibility: module-public, semantic_kind: query, description: "Largest-remainder company-action preview.", lifetime: Five-minute interaction, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, thesis_trace_application, backend_composition], references: [companyactionallocation, portfoliosnapshot, exposuresnapshot], fields: []}
 - {id: confirmcompanyactioncommand, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/contracts.py, symbol: ConfirmCompanyActionCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed company-action allocation intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, backend_composition], references: [portfolioactorcontext, companyactionpreview], fields: []}
-- {id: portfoliostoreport, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: PortfolioStorePort, kind: protocol}, visibility: module-public, semantic_kind: port, description: "Portfolio-owned persistence demand.", lifetime: Process binding, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [portfoliorecord], fields: []}
+- {id: portfoliostoreport, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: PortfolioStorePort, kind: protocol}, visibility: module-public, semantic_kind: port, description: "Portfolio-owned persistence demand, including immutable analytical Recommendation snapshots.", lifetime: Process binding, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain, postgres_portfolio_adapter], references: [portfoliorecord, portfoliorecommendationsnapshot], fields: []}
 - {id: brokerstatementparserport, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/ports.py, symbol: BrokerStatementParserPort, kind: protocol}, visibility: module-public, semantic_kind: port, description: "Reserved broker-specific parser demand; canonical CSV parsing stays domain-owned.", lifetime: Process binding, mutability: immutable, mutation_authority: [], consumers: [portfolio_domain], references: [canonicalcsvpreview], fields: []}
 - {id: portfolioservice, owner: portfolio_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/portfolio/service.py, symbol: PortfolioService, kind: class}, visibility: module-public, semantic_kind: policy, description: "Owner authorization, canonical Trade, allocation and exposure policy service.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition, thesis_trace_application], references: [portfoliostoreport, portfoliorecord, tradepreview], fields: []}
 - {id: postgresportfoliostore, owner: postgres_portfolio_adapter, language: python, declaration: {path: backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py, symbol: PostgresPortfolioStore, kind: class}, visibility: module-public, semantic_kind: adapter-binding, description: "Forced-RLS PostgreSQL Portfolio store.", lifetime: API process, mutability: immutable, mutation_authority: [], consumers: [backend_composition], references: [portfoliostoreport, portfoliorecord], fields: []}
@@ -3600,7 +5034,7 @@ types:
 - {id: valuationbenchmarksnapshot, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationBenchmarkSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Reproducible source-specific distribution, samples, exclusions and period.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationdistribution, valuationsample], fields: []}
 - {id: valuationvalidity, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationValidity, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Target date and fail-closed expiry trace.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [], fields: []}
 - {id: valuationreturn, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationReturn, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Exact target price costs terminal inflow and annualized return.", lifetime: Durable valuation, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [], fields: []}
-- {id: valuationdraft, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationDraft, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Versioned evaluated unpublished valuation draft with separate source traces.", lifetime: Durable version, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationmethod, valuationdistribution, valuationvalidity, valuationreturn, valuationbenchmarksnapshot, peervaluationmember], fields: []}
+- {id: valuationdraft, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationDraft, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Versioned evaluated valuation draft with separate source traces; preserve basis date/horizon for final-size recomputation and leave legacy absence explicit.", lifetime: Durable version, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationmethod, valuationdistribution, valuationvalidity, valuationreturn, valuationbenchmarksnapshot, peervaluationmember], fields: [{name: basis_date, type: date | None, role: domain-value, meaning: Exact Owner-confirmed basis date or absent legacy value.}, {name: horizon_months, type: int | None, role: domain-value, meaning: Selected 6 or 12 or 24 calendar months or absent legacy value.}]}
 - {id: valuationsnapshot, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: ValuationSnapshot, kind: class}, visibility: module-public, semantic_kind: domain-value, description: "Immutable confirmed valuation publication.", lifetime: Durable append-only record, mutability: immutable, mutation_authority: [], consumers: [thesis_domain, postgres_thesis_adapter, thesis_trace_application], references: [valuationdraft], fields: []}
 - {id: savevaluationdraftcommand, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: SaveValuationDraftCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Source and Cost Profile version-bound valuation draft intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [thesis_domain], references: [thesisactorcontext, valuationmethod], fields: []}
 - {id: publishvaluationcommand, owner: thesis_domain, language: python, declaration: {path: backend/src/thesis_trace/modules/thesis/contracts.py, symbol: PublishValuationCommand, kind: class}, visibility: module-public, semantic_kind: command, description: "Exact confirmed valuation publication intent.", lifetime: One command, mutability: immutable, mutation_authority: [], consumers: [thesis_domain], references: [thesisactorcontext], fields: []}
@@ -3662,14 +5096,14 @@ types:
   declaration: {path: backend/src/thesis_trace/modules/workflow/contracts.py, symbol: ActionItemType, kind: enum}
   visibility: module-public
   semantic_kind: policy
-  description: Versioned actionable trigger class; the first implemented class is anomaly review.
+  description: Versioned actionable trigger class for anomaly review and source-authoritative Recommendation decisions.
   lifetime: Durable Action Item lifetime.
   mutability: immutable
   mutation_authority: []
   consumers: [workflow_domain, postgres_workflow_adapter]
   references: []
   fields: []
-  values: [anomaly_review]
+  values: [anomaly_review, recommendation_decision]
 - id: workflowactorcontext
   owner: workflow_domain
   language: python
@@ -4054,10 +5488,10 @@ types:
   visibility: module-public
   semantic_kind: adapter-binding
   description: PostgreSQL implementation of the Workflow-owned atomic store and repeatable-read query port.
-  lifetime: API process lifetime with operation-scoped connections.
+  lifetime: API process binding or immutable request-scoped binding to an active caller-owned transaction.
   mutability: immutable
   mutation_authority: []
-  consumers: [backend_composition]
+  consumers: [backend_composition, postgres_atomic_adapter]
   references: [actionitemstoreport, createactionitemcommand, transitionactionitemcommand, actionpriorityevaluation, actionitem, actioninboxquery, actioninboxpage]
   fields: []
 - id: workflowclient
@@ -5214,7 +6648,7 @@ types:
   declaration: {path: backend/src/thesis_trace/bootstrap/application.py, symbol: AiWorkerRuntime, kind: class}
   visibility: private
   semantic_kind: runtime-state
-  description: Process-lifetime isolated anomaly processor binding.
+  description: Process-lifetime shared AI-worker bindings offering one expiry anomaly and investment opportunity each iteration without short-circuit starvation.
   lifetime: AI worker process lifetime.
   mutability: owner-mutable
   mutation_authority: [backend_composition]
@@ -5222,6 +6656,8 @@ types:
   references: [anomalyprocessor]
   fields:
   - {name: processor, type: AnomalyProcessor, role: runtime-state, meaning: Composition-local fail-closed process command.}
+  - {name: recommendation, type: 'Callable[[], bool] | None', role: runtime-state, meaning: Bound one-job investment operation; no provider I/O until invoked}
+  - {name: expiry, type: 'Callable[[], bool] | None', role: runtime-state, meaning: Bound one-candidate input validity reconciliation}
 - id: postgresevidencestore
   owner: postgres_research_adapter
   language: python
@@ -5507,7 +6943,7 @@ types:
   mutability: immutable
   mutation_authority: []
   consumers: [backend_composition]
-  references: []
+  references: [authenticatedactor, securitycontext]
   fields: []
 - id: accessapiport
   owner: fastapi_entrypoint
@@ -6644,7 +8080,7 @@ types:
   mutability: immutable
   mutation_authority: []
   consumers: [backend_composition]
-  references: [recommendationproviderport, recommendationcriticport, recommendationproviderrequest, recommendationcriticrequest, analysissource]
+  references: [recommendationproviderport, recommendationcriticport, recommendationproviderrequest, recommendationcriticrequest, analysissource, investmentanalysisrequest]
   fields: []
 - id: qualificationcasecategory
   owner: anomaly_assessment
@@ -6702,6 +8138,81 @@ types:
 type_exclusions: []
 state_objects: []
 boundary_mappings:
+- id: owner-to-recommendation
+  interaction: Map authenticated Owner capability.
+  producer: access_domain
+  consumer: recommendation_domain
+  parent: thesis_trace_application
+  producer_contract: authenticatedactor
+  consumer_contract: recommendationactor
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges:
+  - thesis_trace_application->access_domain
+  - thesis_trace_application->recommendation_domain
+  forbidden_edges:
+  - access_domain->recommendation_domain
+  - recommendation_domain->access_domain
+- id: research-to-recommendation
+  interaction: Map immutable provenance and exact source versions.
+  producer: research_domain
+  consumer: recommendation_domain
+  parent: thesis_trace_application
+  producer_contract: researchanomalysource
+  consumer_contract: recommendationsource
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges:
+  - thesis_trace_application->research_domain
+  - thesis_trace_application->recommendation_domain
+  forbidden_edges:
+  - research_domain->recommendation_domain
+  - recommendation_domain->research_domain
+- id: thesis-to-recommendation
+  interaction: Map active personal Thesis cycle, conditions and published valuation binding.
+  producer: thesis_domain
+  consumer: recommendation_domain
+  parent: thesis_trace_application
+  producer_contract: thesisrecord
+  consumer_contract: recommendationinputsnapshot
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges:
+  - thesis_trace_application->thesis_domain
+  - thesis_trace_application->recommendation_domain
+  forbidden_edges:
+  - thesis_domain->recommendation_domain
+  - recommendation_domain->thesis_domain
+- id: portfolio-to-recommendation
+  interaction: Map immutable Portfolio-owned sizing/risk snapshot identity and trusted gate values.
+  producer: portfolio_domain
+  consumer: recommendation_domain
+  parent: thesis_trace_application
+  producer_contract: portfoliorecommendationsnapshot
+  consumer_contract: recommendationinputsnapshot
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges:
+  - thesis_trace_application->portfolio_domain
+  - thesis_trace_application->recommendation_domain
+  forbidden_edges:
+  - portfolio_domain->recommendation_domain
+  - recommendation_domain->portfolio_domain
+- id: recommendation-to-workflow
+  interaction: Map immutable Recommendation/decision source identity into Workflow-owned task intent.
+  producer: recommendation_domain
+  consumer: workflow_domain
+  parent: thesis_trace_application
+  producer_contract: recommendationrecord
+  consumer_contract: actionsourceref
+  mapping_owner: thesis_trace_application
+  state_objects: []
+  allowed_edges:
+  - thesis_trace_application->recommendation_domain
+  - thesis_trace_application->workflow_domain
+  forbidden_edges:
+  - recommendation_domain->workflow_domain
+  - workflow_domain->recommendation_domain
 - id: cloudflare-wire-to-provider-identity
   interaction: Map a cryptographically verified Cloudflare token and token-bound full identity response into a preapproved provider identity.
   producer: access_domain
@@ -6879,6 +8390,236 @@ boundary_mappings:
   allowed_edges: [thesis_trace_application->workflow_domain, fastapi_entrypoint->thesis_trace_application]
   forbidden_edges: [react_workflow_adapter->workflow_domain, react_workflow_adapter->postgres_workflow_adapter, fastapi_entrypoint->workflow_domain, fastapi_entrypoint->postgres_workflow_adapter]
 flows:
+- id: owner_recommendation_analysis
+  owner: thesis_trace_application
+  description: Planned ADR-0009 source-bound investment analysis and immutable Recommendation/Workflow publication;
+    existing anomaly contracts stay separate.
+  trigger:
+    kind: command
+    ref: application.request_recommendation
+    description: Owner explicitly requests analysis of the selected published valuation and active personal Thesis.
+  steps:
+  - id: owner_recommendation_analysis.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate Owner role and actor scope.
+    receives:
+    - application.request_recommendation
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_recommendation_analysis.resolve
+    order: 2
+    module: thesis_trace_application
+    action: Map exact Research/Thesis/Portfolio input versions and explicit source selection; reject missing authority.
+    receives:
+    - recommendation.request
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_recommendation_analysis.admit
+    order: 3
+    module: recommendation_domain
+    action: Atomically persist frozen input bindings, request/audit and bounded typed job.
+    receives:
+    - recommendation.request
+    - recommendation.store
+    - application.recommendation_transaction
+    emits: []
+    state_changes:
+    - Request and durable analysis job commit together.
+    side_effects:
+    - One owner-adapter transaction.
+  - id: owner_recommendation_analysis.analyze
+    order: 4
+    module: thesis_trace_application
+    action: Lease one version-bound job and strictly validate distinct investment candidate and claim-exact critic
+      outside database transactions.
+    receives:
+    - application.process_recommendation
+    - application.investment_provider
+    - application.investment_critic
+    - recommendation.store
+    emits: []
+    state_changes:
+    - Lease token/attempt advances; failures preserve safe attempt evidence.
+    side_effects:
+    - Bounded provider and critic HTTPS in isolated AI worker.
+  - id: owner_recommendation_analysis.evaluate
+    order: 5
+    module: thesis_trace_application
+    action: Ask Thesis/Portfolio owners to validate final-size fees, annualized return, cash and exposure, then
+      map immutable results to Recommendation.
+    receives:
+    - portfolio.store
+    - thesis.lifecycle_store
+    emits: []
+    state_changes: []
+    side_effects:
+    - Owner-scoped reads; no broker order or cash reservation.
+  - id: owner_recommendation_analysis.publish
+    order: 6
+    module: thesis_trace_application
+    action: Revalidate actor, lease and every bound critical version; atomically append Portfolio risk snapshot,
+      Recommendation and Workflow task through owner services.
+    receives:
+    - application.recommendation_transaction
+    - recommendation.store
+    - workflow.action_item_store
+    emits: []
+    state_changes:
+    - Immutable risk/recommendation snapshot and one source-bound human task; stale work superseded without publication.
+    side_effects:
+    - One cross-adapter transaction, owner writes only.
+  - id: owner_recommendation_analysis.present
+    order: 7
+    module: thesis_trace_application
+    action: Return Owner-only immutable results, validity and human-readable recovery reasons.
+    receives:
+    - application.query_recommendation
+    - recommendation.query
+    emits:
+    - application.recommendation_operation_resolved
+    state_changes: []
+    side_effects: []
+  success:
+    result: Owner observes immutable buy/hold/abstain result or explicit failed/superseded analysis, never unvalidated
+      actionable advice.
+    events:
+    - application.recommendation_operation_resolved
+  errors:
+  - condition: Schema, critic, source or risk gate fails.
+    code: recommendation_blocked
+    handling: No unsafe buy; show safe reasons and retain immutable attempt/trace.
+    event: application.recommendation_operation_resolved
+  - condition: Lease or critical input changes before publication.
+    code: superseded
+    handling: Preserve stale evidence without current Recommendation/Workflow effects.
+    event: application.recommendation_operation_resolved
+- id: owner_recommendation_decision
+  owner: thesis_trace_application
+  description: Planned ADR-0009 atomic Owner Decision, exact confirmation and Workflow resolution under DEC-105.
+  trigger:
+    kind: command
+    ref: application.decide_recommendation
+    description: Owner explicitly previews/confirms accept/reject or saves defer.
+  steps:
+  - id: owner_recommendation_decision.authorize
+    order: 1
+    module: access_domain
+    action: Revalidate Owner identity and scope.
+    receives:
+    - application.decide_recommendation
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: owner_recommendation_decision.preview
+    order: 2
+    module: thesis_trace_application
+    action: Load current bound inputs and exact decision sequence; show impact and issue a five-minute challenge
+      for accept/reject.
+    receives:
+    - recommendation.query
+    - recommendation.decide
+    emits: []
+    state_changes: []
+    side_effects:
+    - Owner-scoped reads and Access challenge admission.
+  - id: owner_recommendation_decision.commit
+    order: 3
+    module: thesis_trace_application
+    action: Recheck role, all critical inputs, sequence, payload and challenge; call Recommendation and Workflow
+      owner services in one transaction.
+    receives:
+    - application.recommendation_transaction
+    - recommendation.decide
+    - workflow.action_item_store
+    emits: []
+    state_changes:
+    - One append-only Decision, current projection, task outcome, receipt and audits; exact challenge consumption
+      if valid consequential action.
+    side_effects:
+    - Atomic commit or rollback; no Trade, order or cash reservation.
+  - id: owner_recommendation_decision.present
+    order: 4
+    module: thesis_trace_application
+    action: Return committed result or explicit expiry/conflict/re-preview reason and preserve Inbox return context.
+    receives:
+    - application.query_recommendation
+    emits:
+    - application.recommendation_operation_resolved
+    state_changes: []
+    side_effects: []
+  success:
+    result: One immutable legal decision and consistent task outcome; accepted/rejected history remains unchanged
+      by later expiry.
+    events:
+    - application.recommendation_operation_resolved
+  errors:
+  - condition: Bound valuation invalid or critical input version changed.
+    code: recommendation_expired
+    handling: Append expiry only for unfinalized recommendation; never accept stale input.
+    event: application.recommendation_operation_resolved
+  - condition: Challenge alone expired with still-valid inputs.
+    code: challenge_expired
+    handling: Require new preview, not a Recommendation expiry.
+    event: application.recommendation_operation_resolved
+- id: recommendation_expiry_reconciliation
+  owner: thesis_trace_application
+  description: Planned bounded expiry persistence; command safety independently rechecks validity even when the
+    background worker is delayed.
+  trigger:
+    kind: command
+    ref: application.reconcile_recommendation_expiry
+    description: Existing AI worker offers a bounded reconciliation opportunity each iteration.
+  steps:
+  - id: recommendation_expiry_reconciliation.select
+    order: 1
+    module: recommendation_domain
+    action: Select a stable cursor-bounded unfinalized recommendation; accepted/rejected/expired history is excluded.
+    receives:
+    - recommendation.reconcile_expiry
+    - recommendation.store
+    emits: []
+    state_changes:
+    - Advance one durable Recommendation-owned cursor over the indexed unfinalized candidate projection; wrap after the last key.
+    side_effects:
+    - Worker-only owner function exposes opaque actor/record/version/sequence metadata; no runtime table grant or cross-schema source query.
+  - id: recommendation_expiry_reconciliation.resolve
+    order: 2
+    module: thesis_trace_application
+    action: Revalidate source/Thesis/Portfolio critical bindings through owner ports; no cross-schema Recommendation
+      query.
+    receives:
+    - application.reconcile_recommendation_expiry
+    emits: []
+    state_changes: []
+    side_effects: []
+  - id: recommendation_expiry_reconciliation.commit
+    order: 3
+    module: thesis_trace_application
+    action: Evaluate DEC-105 and atomically append expired Decision with cause and Workflow outcome if still unfinalized;
+      duplicate attempts do nothing.
+    receives:
+    - application.recommendation_transaction
+    - recommendation.reconcile_expiry
+    - workflow.action_item_store
+    emits:
+    - application.recommendation_operation_resolved
+    state_changes:
+    - At most one terminal expiry and task-resolution transition.
+    side_effects:
+    - One owner-adapter transaction; no provider I/O.
+  success:
+    result: Expired unfinalized recommendations cannot be accepted and eventually have one persisted expiry/audit/task
+      result.
+    events:
+    - application.recommendation_operation_resolved
+  errors:
+  - condition: Input authority unavailable or concurrent version changes.
+    code: reconciliation_unavailable
+    handling: Do not infer validity; retry bounded reconciliation; acceptance remains fail closed.
+    event: application.recommendation_operation_resolved
 - id: production_database_migration
   owner: backend_composition
   description: Apply forward-only schema changes and least-privilege runtime grants before API or collector startup.
@@ -7363,6 +9104,50 @@ python_analyzer:
   status: required
   rationale: FastAPI and worker production sources are governed Python modules.
 workloads:
+- id: owner_recommendation_analysis_workload
+  flow: owner_recommendation_analysis
+  steps:
+  - owner_recommendation_analysis.authorize
+  - owner_recommendation_analysis.resolve
+  - owner_recommendation_analysis.admit
+  - owner_recommendation_analysis.analyze
+  - owner_recommendation_analysis.evaluate
+  - owner_recommendation_analysis.publish
+  - owner_recommendation_analysis.present
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: Planned ADR-0009 bounded immutable input references and one Owner recommendation stream; explicit source/claim/job
+      limits in Wave 7 design.
+  budgets: []
+- id: owner_recommendation_decision_workload
+  flow: owner_recommendation_decision
+  steps:
+  - owner_recommendation_decision.authorize
+  - owner_recommendation_decision.preview
+  - owner_recommendation_decision.commit
+  - owner_recommendation_decision.present
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: Planned ADR-0009 bounded immutable input references and one Owner recommendation stream; explicit source/claim/job
+      limits in Wave 7 design.
+  budgets: []
+- id: recommendation_expiry_reconciliation_workload
+  flow: recommendation_expiry_reconciliation
+  steps:
+  - recommendation_expiry_reconciliation.select
+  - recommendation_expiry_reconciliation.resolve
+  - recommendation_expiry_reconciliation.commit
+  timing_class: best-effort
+  activation:
+    kind: command
+  data:
+    volume: Planned ADR-0009 bounded immutable input references and one Owner recommendation stream; explicit source/claim/job
+      limits in Wave 7 design.
+  budgets: []
 - id: production_database_migration_workload
   flow: production_database_migration
   steps: [production_database_migration.apply]
@@ -7566,7 +9351,89 @@ execution_units:
     memory: bounded by deployment profile
   blocking: bounded Gmail I/O
   allocation: static
+- id: investment_transport_thread
+  profile: linux_server_functional
+  kind: worker-pool
+  priority: default
+  affinity: []
+  concurrency: 1
+  resources:
+    memory: One bounded request and one bounded response per composed adapter
+  blocking: HTTPS only; caller abandons after at most 30 seconds; no database or publication authority
+  allocation: dynamic
 execution_mappings:
+- id: anomaly_transport_mapping
+  profile: linux_server_functional
+  workload: owner_anomaly_assessment_workload
+  steps: [owner_anomaly_assessment.analyze]
+  units: [investment_transport_thread]
+  serialization: Same adapter-local single-flight gate as investment calls; a slow anomaly response cannot hold the caller past the deadline.
+  reentrant: false
+  activation: One anomaly candidate or critic call in the existing AI worker
+  wcet: not established
+- id: investment_transport_mapping
+  profile: linux_server_functional
+  workload: owner_recommendation_analysis_workload
+  steps: [owner_recommendation_analysis.analyze]
+  units: [investment_transport_thread]
+  serialization: Adapter-local single-flight admission remains held until I/O returns; timed-out results are discarded.
+  reentrant: false
+  activation: One pinned candidate or critic call from the isolated AI-worker process
+  wcet: not established
+- id: recommendation_admission_api_mapping
+  profile: linux_server_functional
+  workload: owner_recommendation_analysis_workload
+  steps:
+  - owner_recommendation_analysis.authorize
+  - owner_recommendation_analysis.resolve
+  - owner_recommendation_analysis.admit
+  - owner_recommendation_analysis.present
+  units:
+  - api_process
+  serialization: Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions.
+  reentrant: false
+  activation: Authenticated explicit HTTP intent/query
+  wcet: not established
+- id: recommendation_analysis_worker_mapping
+  profile: linux_server_functional
+  workload: owner_recommendation_analysis_workload
+  steps:
+  - owner_recommendation_analysis.analyze
+  - owner_recommendation_analysis.evaluate
+  - owner_recommendation_analysis.publish
+  units:
+  - ai_worker_process
+  serialization: Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions.
+  reentrant: false
+  activation: Bounded cooperative existing AI-worker iteration
+  wcet: not established
+- id: recommendation_decision_api_mapping
+  profile: linux_server_functional
+  workload: owner_recommendation_decision_workload
+  steps:
+  - owner_recommendation_decision.authorize
+  - owner_recommendation_decision.preview
+  - owner_recommendation_decision.commit
+  - owner_recommendation_decision.present
+  units:
+  - api_process
+  serialization: Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions.
+  reentrant: false
+  activation: Authenticated explicit HTTP intent/query
+  wcet: not established
+- id: recommendation_expiry_worker_mapping
+  profile: linux_server_functional
+  workload: recommendation_expiry_reconciliation_workload
+  steps:
+  - recommendation_expiry_reconciliation.select
+  - recommendation_expiry_reconciliation.resolve
+  - recommendation_expiry_reconciliation.commit
+  units:
+  - ai_worker_process
+  serialization: Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions.
+  reentrant: false
+  activation: Bounded cooperative existing AI-worker iteration
+  wcet: not established
 - id: production_database_migration_mapping
   profile: linux_server_functional
   workload: production_database_migration_workload
@@ -7698,6 +9565,32 @@ execution_mappings:
   activation: authenticated HTTP query or command
   wcet: not established
 execution_channels:
+- id: investment_transport_result_channel
+  profile: linux_server_functional
+  from_unit: investment_transport_thread
+  to_unit: ai_worker_process
+  kind: queue
+  contract_refs: [application.investment_provider, application.investment_critic]
+  capacity: 1
+  ordering: One private result mailbox per synchronous attempt; no late-result reuse
+  copy_policy: Bounded untrusted UTF-8 response or redacted error only; no domain state or database handles
+  timeout_ms: 30000
+  overload: fail-safe
+- id: recommendation_analysis_job_channel
+  profile: linux_server_functional
+  from_unit: api_process
+  to_unit: ai_worker_process
+  kind: queue
+  contract_refs:
+  - recommendation.store
+  - application.process_recommendation
+  capacity: 1000
+  ordering: Planned ADR-0009 available_at then stable ID; serialized per Owner/Thesis cycle; shared worker capacity
+    remains unvalidated.
+  copy_policy: Persist immutable input refs/version tuple; load only admitted bounded context; never mix partial
+    attempts.
+  timeout_ms: 300000
+  overload: backpressure
 - id: collection_job_channel
   profile: linux_server_functional
   from_unit: api_process
@@ -7735,6 +9628,7 @@ platform_variants:
   - collector_worker_process
   - ai_worker_process
   - email_worker_process
+  - investment_transport_thread
   data_access_profiles: []
   microarchitecture_profiles: []
   parameters:

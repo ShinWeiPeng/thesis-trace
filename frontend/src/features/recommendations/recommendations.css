@@ -1,0 +1,130 @@
+.recommendation-page {
+  max-width: 1440px;
+  margin-inline: auto;
+}
+.recommendation-panel {
+  padding: 24px;
+  margin-block: 20px;
+  min-width: 0;
+}
+.recommendation-panel h2,
+.recommendation-panel h3 {
+  margin-block: 16px;
+}
+.recommendation-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.recommendation-form label,
+.recommendation-request {
+  display: grid;
+  gap: 8px;
+}
+.recommendation-form input,
+.recommendation-form select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.recommendation-full {
+  grid-column: 1 / -1;
+}
+.recommendation-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.recommendation-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr);
+  gap: 20px;
+  align-items: start;
+}
+.recommendation-request {
+  width: 100%;
+  text-align: left;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #d8deed;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.recommendation-request.selected {
+  background: #eef1ff;
+  border-color: #435bdf;
+}
+.recommendation-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.recommendation-facts dt,
+.recommendation-audit dt {
+  color: #536487;
+}
+.recommendation-facts dd {
+  font-weight: 600;
+  font-size: 1.2rem;
+  margin: 4px 0;
+}
+.recommendation-claim,
+.recommendation-source {
+  padding: 16px;
+  border: 1px solid #d8deed;
+  border-radius: 12px;
+  margin-block: 12px;
+  overflow-wrap: anywhere;
+}
+.recommendation-source small {
+  display: block;
+  margin-top: 8px;
+}
+.recommendation-detail p {
+  overflow-wrap: anywhere;
+}
+.recommendation-detail details {
+  margin-block: 20px;
+}
+.recommendation-detail summary {
+  cursor: pointer;
+  color: #334fc7;
+}
+.recommendation-audit div {
+  border-bottom: 1px solid #e5e9f2;
+  padding-block: 10px;
+}
+.recommendation-audit dd {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.recommendation-table {
+  overflow-x: auto;
+}
+.recommendation-table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.recommendation-table th,
+.recommendation-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #d8deed;
+}
+.recommendation-table td {
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .recommendation-layout,
+  .recommendation-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .recommendation-panel {
+    padding: 18px;
+  }
+  .recommendation-facts {
+    gap: 12px;
+  }
+}

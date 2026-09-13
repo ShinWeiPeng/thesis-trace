@@ -13,6 +13,7 @@ from thesis_trace.modules.thesis.contracts import (
     PeerValuationMember,
     ValuationReturn,
     ValuationValidity,
+    ValuationSnapshot,
 )
 
 
@@ -21,12 +22,18 @@ class ValuationAbstained(ValueError):
 
 
 def _finite(value: Decimal, code: str, *, positive: bool = False) -> Decimal:
-    if not isinstance(value, Decimal) or not value.is_finite() or (positive and value <= 0):
+    if (
+        not isinstance(value, Decimal)
+        or not value.is_finite()
+        or (positive and value <= 0)
+    ):
         raise ValuationAbstained(code)
     return value
 
 
-def _inclusive_percentile(values: tuple[Decimal, ...], percentile: Decimal) -> tuple[Decimal, Decimal, int, int, Decimal]:
+def _inclusive_percentile(
+    values: tuple[Decimal, ...], percentile: Decimal
+) -> tuple[Decimal, Decimal, int, int, Decimal]:
     if not values:
         raise ValuationAbstained("insufficient_samples")
     if len(values) == 1:
@@ -38,7 +45,13 @@ def _inclusive_percentile(values: tuple[Decimal, ...], percentile: Decimal) -> t
     if fraction == 0:
         return lower_value, position, lower, lower, Decimal(0)
     upper_value = values[lower]
-    return lower_value + fraction * (upper_value - lower_value), position, lower, lower + 1, fraction
+    return (
+        lower_value + fraction * (upper_value - lower_value),
+        position,
+        lower,
+        lower + 1,
+        fraction,
+    )
 
 
 def company_history_distribution(samples: tuple[Decimal, ...]) -> ValuationDistribution:
@@ -47,13 +60,25 @@ def company_history_distribution(samples: tuple[Decimal, ...]) -> ValuationDistr
     if len(samples) < 36:
         raise ValuationAbstained("insufficient_company_history")
     try:
-        ordered = tuple(sorted(_finite(value, "invalid_sample", positive=True) for value in samples))
+        ordered = tuple(
+            sorted(_finite(value, "invalid_sample", positive=True) for value in samples)
+        )
     except (InvalidOperation, TypeError) as exc:
         raise ValuationAbstained("invalid_sample") from exc
     middle = len(ordered) // 2
-    median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / Decimal(2)
-    coverage = ValuationCoverage.LIMITED_HISTORY if len(ordered) < 60 else ValuationCoverage.STANDARD_HISTORY
-    p75, position, lower, upper, fraction = _inclusive_percentile(ordered, Decimal("0.75"))
+    median = (
+        ordered[middle]
+        if len(ordered) % 2
+        else (ordered[middle - 1] + ordered[middle]) / Decimal(2)
+    )
+    coverage = (
+        ValuationCoverage.LIMITED_HISTORY
+        if len(ordered) < 60
+        else ValuationCoverage.STANDARD_HISTORY
+    )
+    p75, position, lower, upper, fraction = _inclusive_percentile(
+        ordered, Decimal("0.75")
+    )
     return ValuationDistribution(
         median=median,
         p75=p75,
@@ -68,7 +93,10 @@ def company_history_distribution(samples: tuple[Decimal, ...]) -> ValuationDistr
 
 
 def peer_group_distribution(
-    *, target_company_id: str, peer_company_ids: tuple[str, ...], samples: tuple[Decimal, ...],
+    *,
+    target_company_id: str,
+    peer_company_ids: tuple[str, ...],
+    samples: tuple[Decimal, ...],
 ) -> ValuationDistribution:
     """Apply the confirmed 5–12 unique, target-excluding peer contract."""
 
@@ -83,10 +111,18 @@ def peer_group_distribution(
         or any(not value for value in normalized)
     ):
         raise ValuationAbstained("invalid_peer_group")
-    ordered = tuple(sorted(_finite(value, "invalid_sample", positive=True) for value in samples))
+    ordered = tuple(
+        sorted(_finite(value, "invalid_sample", positive=True) for value in samples)
+    )
     middle = len(ordered) // 2
-    median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / Decimal(2)
-    p75, position, lower, upper, fraction = _inclusive_percentile(ordered, Decimal("0.75"))
+    median = (
+        ordered[middle]
+        if len(ordered) % 2
+        else (ordered[middle - 1] + ordered[middle]) / Decimal(2)
+    )
+    p75, position, lower, upper, fraction = _inclusive_percentile(
+        ordered, Decimal("0.75")
+    )
     return ValuationDistribution(
         median=median,
         p75=p75,
@@ -101,7 +137,10 @@ def peer_group_distribution(
 
 
 def company_history_benchmark(
-    *, method: ValuationMethod, target_company_id: str, samples: tuple[ValuationSample, ...],
+    *,
+    method: ValuationMethod,
+    target_company_id: str,
+    samples: tuple[ValuationSample, ...],
 ) -> ValuationBenchmarkSnapshot:
     if method not in {ValuationMethod.PE, ValuationMethod.PB}:
         raise ValuationAbstained("method_abstained")
@@ -109,7 +148,9 @@ def company_history_benchmark(
     exclusions: list[str] = []
     seen: set[str] = set()
     seen_months: set[tuple[int, int]] = set()
-    for sample in sorted(samples, key=lambda value: (value.observed_on, value.sample_id)):
+    for sample in sorted(
+        samples, key=lambda value: (value.observed_on, value.sample_id)
+    ):
         code = None
         if not sample.sample_id or sample.sample_id in seen:
             code = "duplicate_sample"
@@ -117,7 +158,10 @@ def company_history_benchmark(
             code = "duplicate_month"
         elif sample.company_id != target_company_id:
             code = "wrong_company"
-        elif sample.source.record_type != "evidence" or sample.source.company_id != target_company_id:
+        elif (
+            sample.source.record_type != "evidence"
+            or sample.source.company_id != target_company_id
+        ):
             code = "invalid_source"
         elif not sample.multiple.is_finite() or sample.multiple <= 0:
             code = "invalid_multiple"
@@ -135,15 +179,24 @@ def company_history_benchmark(
         covered_months = (last.year - first.year) * 12 + last.month - first.month + 1
         if covered_months < 36:
             raise ValuationAbstained("insufficient_company_history_period")
-    distribution = company_history_distribution(tuple(value.multiple for value in valid))
+    distribution = company_history_distribution(
+        tuple(value.multiple for value in valid)
+    )
     return ValuationBenchmarkSnapshot(
-        "company_history", distribution, tuple(valid), tuple(exclusions),
-        min(value.observed_on for value in valid), max(value.observed_on for value in valid),
+        "company_history",
+        distribution,
+        tuple(valid),
+        tuple(exclusions),
+        min(value.observed_on for value in valid),
+        max(value.observed_on for value in valid),
     )
 
 
 def peer_group_benchmark(
-    *, method: ValuationMethod, target_company_id: str, members: tuple[PeerValuationMember, ...],
+    *,
+    method: ValuationMethod,
+    target_company_id: str,
+    members: tuple[PeerValuationMember, ...],
 ) -> ValuationBenchmarkSnapshot:
     if method not in {ValuationMethod.PE, ValuationMethod.PB}:
         raise ValuationAbstained("method_abstained")
@@ -166,11 +219,16 @@ def peer_group_benchmark(
             code = "not_taiwan_listed"
         elif not member.owner_confirmed:
             code = "unconfirmed_peer"
-        elif member.sample.company_id != member.company_id or member.sample.source.company_id != member.company_id:
+        elif (
+            member.sample.company_id != member.company_id
+            or member.sample.source.company_id != member.company_id
+        ):
             code = "invalid_source"
         elif not member.sample.multiple.is_finite() or member.sample.multiple <= 0:
             code = "invalid_multiple"
-        elif not member.sample.denominator.is_finite() or member.sample.denominator <= 0:
+        elif (
+            not member.sample.denominator.is_finite() or member.sample.denominator <= 0
+        ):
             code = "nonpositive_denominator"
         if code is None:
             seen.add(member.company_id)
@@ -185,8 +243,12 @@ def peer_group_benchmark(
         samples=tuple(value.multiple for value in valid),
     )
     return ValuationBenchmarkSnapshot(
-        "peer_group", distribution, tuple(valid), tuple(exclusions),
-        min(value.observed_on for value in valid), max(value.observed_on for value in valid),
+        "peer_group",
+        distribution,
+        tuple(valid),
+        tuple(exclusions),
+        min(value.observed_on for value in valid),
+        max(value.observed_on for value in valid),
     )
 
 
@@ -218,7 +280,9 @@ def evaluate_validity(
         ("next_report", next_report_time),
         ("material_event", material_event_time),
     )
-    available = tuple((name, instant) for name, instant in candidates if instant is not None)
+    available = tuple(
+        (name, instant) for name, instant in candidates if instant is not None
+    )
     if any(instant.tzinfo is None for _, instant in available):
         raise ValuationAbstained("ambiguous_timezone")
     expires_at = min(instant for _, instant in available)
@@ -271,7 +335,9 @@ def annualized_net_return(
         purchase_outflow = buy_notional + buy_fee
         sell_notional = target_price * quantity
         sell_fee = max(minimum_sell_fee, sell_notional * sell_rate)
-        terminal_inflow = sell_notional - sell_fee - sell_notional * tax_rate + cash_dividend
+        terminal_inflow = (
+            sell_notional - sell_fee - sell_notional * tax_rate + cash_dividend
+        )
         if purchase_outflow <= 0 or terminal_inflow <= 0:
             raise ValuationAbstained("nonpositive_cash_flow")
         exponent = Decimal(365) / Decimal(holding_days)
@@ -283,3 +349,76 @@ def annualized_net_return(
         annualized_return=annualized,
         tax_disclaimer="Taiwan securities transaction tax is included from the bound Cost Profile.",
     )
+
+
+def final_size_valuation_return(
+    snapshot: ValuationSnapshot,
+    *,
+    multiplier: Decimal,
+    cost_profile_version: int,
+    buy_rate: Decimal,
+    minimum_buy_fee: Decimal,
+    sell_rate: Decimal,
+    minimum_sell_fee: Decimal,
+    tax_rate: Decimal,
+    now: datetime,
+) -> ValuationReturn:
+    """Recalculate the selected immutable valuation at its final analytical size."""
+    draft = snapshot.draft
+    if (
+        not isinstance(now, datetime)
+        or now.utcoffset() is None
+        or snapshot.published_at.utcoffset() is None
+        or now < snapshot.published_at
+    ):
+        raise ValuationAbstained("ambiguous_evaluation_time")
+    if now >= draft.validity.expires_at:
+        raise ValuationAbstained("forecast_expired")
+    if draft.basis_date is None or draft.horizon_months is None:
+        raise ValuationAbstained("valuation_basis_unavailable")
+    if (
+        draft.horizon_months not in (6, 12, 24)
+        or add_calendar_months_clamped(draft.basis_date, draft.horizon_months)
+        != draft.validity.target_date
+    ):
+        raise ValuationAbstained("forecast_target_date_mismatch")
+    if (
+        type(cost_profile_version) is not int
+        or cost_profile_version < 1
+        or cost_profile_version != draft.cost_profile_version
+    ):
+        raise ValuationAbstained("cost_profile_version_conflict")
+    if (
+        not isinstance(multiplier, Decimal)
+        or not multiplier.is_finite()
+        or multiplier not in (Decimal("0.5"), Decimal(1), Decimal("1.5"))
+    ):
+        raise ValuationAbstained("invalid_multiplier")
+    if (
+        draft.method not in (ValuationMethod.PE, ValuationMethod.PB)
+        or draft.distribution is None
+        or draft.result is None
+    ):
+        raise ValuationAbstained("valuation_abstained")
+    if draft.benchmark_variant not in ("median", "p75"):
+        raise ValuationAbstained("invalid_benchmark_variant")
+    multiple = (
+        draft.distribution.median
+        if draft.benchmark_variant == "median"
+        else draft.distribution.p75
+    )
+    with localcontext() as context:
+        context.prec = 28
+        return annualized_net_return(
+            forecast=draft.forecast,
+            multiple=multiple,
+            quantity=draft.quantity * multiplier,
+            buy_price=draft.buy_price,
+            cash_dividend=draft.cash_dividend * multiplier,
+            buy_rate=buy_rate,
+            minimum_buy_fee=minimum_buy_fee,
+            sell_rate=sell_rate,
+            minimum_sell_fee=minimum_sell_fee,
+            tax_rate=tax_rate,
+            holding_days=(draft.validity.target_date - draft.basis_date).days,
+        )

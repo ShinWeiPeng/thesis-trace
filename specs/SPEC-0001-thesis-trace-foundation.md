@@ -1,7 +1,7 @@
 ---
 spec_version: "1"
 spec_id: SPEC-0001
-revision: 93
+revision: 111
 status: confirmed
 change_set: thesis-trace-foundation
 ---
@@ -47,7 +47,7 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | REQ-012 | 舊悠行館 OpenVPN 與 WireGuard 均不得作為 v1 使用者入口。必須先建立覆蓋完整 hostname 及所有 path 的 deny-by-default Cloudflare Access self-hosted public application，再建立 named Cloudflare Tunnel public-hostname route；不得使用 Quick Tunnel、Access Bypass policy 或不受 Access 保護的公開 path。`cloudflared` 只能從本地 Server 主動連出 Cloudflare 所需的 tunnel egress，origin 防火牆不得開放任何 Internet inbound port；tunnel ingress 只能代理至本地 Caddy HTTPS 的 ThesisTrace Web/API，不得路由 SSH、PostgreSQL、Docker API、其他 VM 或管理子網。FastAPI 必須對每個受保護請求獨立驗證 Access JWT 的簽章、issuer、application audience、有效期間及允許 identity，驗證金鑰更新或 Cloudflare 不可用且無可驗證快取時 fail closed；不得只信任可由 client 偽造的 identity header。Access application、tunnel、DNS、token audience、policy、cloudflared credential 與 origin route 必須版本化或可重建，secret 不得提交 Git。 |
 | REQ-013 | PostgreSQL 備份先執行 client-side encryption，再上傳 Backblaze B2。保存 30 份每日與 12 份每月備份，新備份套用 30 天 Object Lock，每月必須實際解密並還原到隔離資料庫。 |
 | REQ-014 | 使用者已決定不啟用全磁碟加密。專案必須記錄實體磁碟遭存取時的資料曝光風險，並實施主機實體安全、鎖定畫面、敏感欄位加密與加密雲端備份，不得宣稱這些控制等同全磁碟加密。 |
-| REQ-031 | 研究閉環必須以明確狀態機及追加式稽核紀錄保存於 PostgreSQL。Thesis 狀態為 draft、active、paused、invalidated、closed；每次 Recommendation 都是不可修改的新版本並連結來源快照、估值假設及失效條件；Owner Decision 為 accepted、rejected、deferred 或 expired；Trade 必須把全部成交股數明確分配至一個或多個 active Thesis 及／或 independent decision 桶，分配合計必須等於成交股數；Recommendation 的建議數量只歸屬指定 Thesis，但證券與產業風控合併該證券全部分配桶。賣出必須由 Owner 指定扣減桶且不得超過其可用股數，不採跨 Thesis 自動 FIFO；交易更正以追加式紀錄修正交易與分配；股票分割、減資及股票股利按各桶持有比例處理。Outcome 保存後續結果；Reflection 保存原假設、判斷錯誤、遺漏證據與改進。系統以正常化資料表保存目前狀態，另以 append-only audit events 保存所有合法轉移。不得覆寫 Recommendation、Decision、Trade 或歷史事件；交易更正必須使用反向或更正紀錄並保存原因。證據可立即使 Thesis invalidated，不得因尚未完成反思而延遲；但系統必須標示 reflection pending，且 Thesis 關閉前必須完成結果與反思。 |
+| REQ-031 | 研究閉環必須以明確狀態機及追加式稽核紀錄保存於 PostgreSQL。Thesis 狀態為 draft、active、paused、invalidated、closed；每次 Recommendation 都是不可修改的新版本並連結來源快照、估值假設及失效條件；Owner Decision 為 accepted、rejected、deferred 或 expired；Trade 必須把全部成交股數明確分配至一個或多個 active Thesis 及／或 independent decision 桶，分配合計必須等於成交股數；Recommendation 的建議數量只歸屬指定 Thesis，但證券與產業風控合併該證券全部分配桶。賣出必須由 Owner 指定扣減桶且不得超過其可用股數，不採跨 Thesis 自動 FIFO；交易更正以追加式紀錄修正交易與分配；股票分割、減資及股票股利按各桶持有比例處理。Outcome 保存後續結果；Reflection 保存原假設、判斷錯誤、遺漏證據與改進。系統以正常化資料表保存目前狀態，另以 append-only audit events 保存所有合法轉移。不得覆寫 Recommendation、Decision、Trade 或歷史事件；交易更正必須使用反向或更正紀錄並保存原因。證據可立即使 Thesis invalidated，不得因尚未完成反思而延遲；但系統必須標示 reflection pending，且 Thesis 關閉前必須完成結果與反思。 未決或 deferred 的 Recommendation 在所綁定估值失效或決策關鍵輸入版本變動時，必須以追加式紀錄將其目前決策狀態標示為 expired，阻擋接受並要求重新產生新版本；不另設固定有效天數。已 accepted 或 rejected 的 Decision 不因後續資料失效或改版改成 expired，所有歷史 Recommendation、Decision 與來源快照均保持不可變。confirmation challenge 逾期只要求重新預覽，不得單獨導致 Recommendation 逾期；延後處理亦不得延長底層資料有效性。 |
 | REQ-032 | UI 必須同時提供跨公司的工作流程入口與單一公司的公司工作區，兩者使用相同 Server 資料與權限，不得形成兩套紀錄。工作流程入口用於呈現跨公司的待辦與狀態；公司工作區至少整合總覽、Evidence、Thesis、Valuation、Recommendation、Trade、Outcome／Reflection 及 History 等研究脈絡。使用者可由工作流程項目開啟對應公司及內容位置，完成處理後回到工作流程。Server 是正式資料與規則的唯一權威，負責 provenance、E0–E6 推導、Thesis 狀態轉移、估值與風控計算、AI orchestration、Recommendation／Decision／Trade／Outcome／Reflection 保存、audit、通知及授權；UI 負責呈現、收集使用者輸入及提交意圖，不得在 client 端自行作出最終 E 階段、Hard anomaly、估值、風控或權限判定。所有改變狀態的要求都必須由 Server 重新驗證並以一致結果回應不同 UI 入口。 |
 | REQ-033 | 工作流程首頁必須提供一個跨公司的統一行動收件匣，只將需要人處理的事項建立為 Action Item，不得把所有系統事件都轉成待辦。Server 必須為需要人工查證的線索、anomaly 審查、失效或過期估值、待決 Recommendation、未完成的交易分配，以及到期的 Outcome／Reflection 建立可追溯 Action Item；使用者亦可建立連結至公司及相關領域紀錄的手動追蹤事項。Action Item 必須保存類型、來源領域紀錄及版本、建立原因、狀態、建立時間、最後變更時間，以及適用時的到期時間；狀態至少包含 pending、in_progress、deferred、completed、dismissed。自動產生規則必須具冪等性，同一觸發條件與來源版本不得產生重複未結項項目。completed 或 dismissed 必須保存操作者、時間及處理理由；dismissed 只結束待辦，不得改寫或隱藏底層 Evidence、anomaly、Thesis、Recommendation、Trade、Outcome、Reflection 或 audit history。所有狀態變更都由 Server 驗證並留下追加式稽核紀錄。 |
 | REQ-034 | 行動收件匣首頁必須使用「摘要卡＋優先清單」。摘要卡至少呈現緊急、今日到期、deferred 及全部未結項 Action Item 的數量，並可作為清單篩選入口；清單必須顯示公司／證券、事項類型、簡短原因、狀態、Server 提供的優先級、建立時間及適用時的到期時間，並支援以公司／證券、事項類型、狀態及時間條件搜尋、篩選與排序。摘要數量、清單結果及分頁資訊必須由相同 Server 查詢契約產生，在相同查詢時間點與權限範圍內一致；UI 不得自行重算優先級或以隱藏資料補算摘要。窄畫面必須將摘要卡與清單改為垂直排列，保留核心資訊、篩選及開啟待辦能力，不得要求水平捲動才能完成主要操作。 |
@@ -71,6 +71,8 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | REQ-052 | Claude 在通過資格閘門前不得接收正式 failover 流量。資格資料集必須版本化並至少包含 30 個由 Owner 核准預期結果的代表案例，涵蓋 A／B／C 來源、獨立性、正反例、abstain、引用缺漏、schema 錯誤、Hard／Soft anomaly、Thesis 影響與 RecommendationCritic；Claude 對 decision-critical structured fields 至少 29／30 與預期一致，且不得有任何 safety-critical discrepancy、錯誤 Hard anomaly、錯誤引用、無來源主張、schema／policy violation 或應 abstain 而未 abstain。離線案例通過後，必須完成連續 10 個 production shadow tasks；一個 shadow task 是同一個 production-eligible immutable input snapshot、prompt、policy 與 schema version 先由主 provider 處理，再由 Claude 獨立重跑，Claude 結果只比較不影響任何正式 Recommendation、Action Item、E 階段或通知。十個 shadow tasks 的 decision-critical fields 不得有 major discrepancy，且所有 safety、citation、schema 與 critic gates 必須 100% 通過；任何失敗都把連續計數歸零。Owner 必須以不可修改 approval record 核准 dataset version、Claude model/version、prompt、policy、schema、結果與日期後才可啟用。自動切換只允許在 OpenAI provider-wide circuit breaker 依版本化 retry／health policy 開啟時發生，不得因單一 timeout、內容不合格、schema 錯誤、critic 拒絕或個別 rate limit 直接切換；每個 job 必須以相同來源快照從頭重跑，不得混合兩個 provider 的部分輸出。Claude 任一輸出未通過 deterministic schema、citation、source、policy、risk、abstain 或 critic validation 時不得發布，必須建立人工 Action Item。OpenAI 恢復且 circuit breaker 關閉後新 job 回到 OpenAI，既有 job 不得在執行中切回。Claude model、prompt、decision-critical schema、policy 或 critic gate 有 material change 時核准自動失效，必須重新完成 30 案例、10 次 shadow 與 Owner approval。 |
 
 | REQ-053 | v1 的共用 React UI 必須使用語意化 HTML5 與 mobile-first 響應式設計，採 Tailwind CSS、Radix Primitives 及 project-owned shared UI wrappers；feature modules 不得直接散佈 Radix imports 或硬編碼主題色。原生 viewport 360–2560 CSS px 的主要流程不得出現 page-level horizontal scrolling、內容／控制項重疊、必要內容截斷或不可達操作；1280 CSS px viewport 在 400% browser zoom 時必須 reflow 至相當於 320 CSS px，並完整符合 WCAG 2.2 AA，包括鍵盤、focus、語意、錯誤識別、非僅依色彩、對比、target size 與 200% 文字放大。多欄研究資料在窄畫面使用摘要加完整詳情；只有意義確實需要二維比較的局部語意化容器可水平捲動，全部授權欄位仍須可達且共用同一 Server record/version。視覺採現代專業研究工作台、Slate 中性基底與 Blue／Indigo 互動強調色、單一自動調整的平衡密度；同時支援 light、dark、system，主題偏好以 system/light/dark 保存於 Server 使用者設定。台灣市場方向為紅漲、綠跌、持平中性且必須搭配符號／文字／accessible name，並與 application success/error/safety tokens 分離。字型只使用各裝置 system UI／繁體中文 fallback，金融數字使用 tabular numerals，不得從第三方載入字型。正式支援 current 與 previous major 的 Windows／Linux Chrome、Edge、Android Chrome，以及 current 與 previous iOS／iPadOS major 的 Safari；Firefox 與 macOS Safari 僅 best effort 並顯示非阻斷未驗證提示。 |
+
+| REQ-054 | 來源摘錄採自動檢查、例外才要求人工介入，不要求每份摘錄都由使用者事先核對；通過已驗證檢查規則者可供後續分析流程使用，但不得跳過既有資料有效性、權限與 AI 啟用閘門。偵測到單位／必要註記缺漏、截斷或欄位關係不清等問題時，必須清楚顯示問題及可核對的來源定位，受影響摘錄在問題未解決前不得供分析使用。依 DEC-109 取消本次新增的後續修改／編輯功能，不要求摘錄編輯器或其草稿／重新發布流程；此範圍縮減不取消原有 Thesis、Evidence fact 更正／撤銷或其他已核准功能。例外操作依 DEC-110 提供查看原文與缺漏原因、重新擷取並重新檢查、排除該摘錄。查看原文不改變檢查結果；重新擷取不保證成功，不得沿用舊通過結果替新結果放行；排除保留來源及歷史，但排除的摘錄不得參與分析。不提供忽略缺漏的人工強制通過或手動修改功能。排除後若缺少必要證據，相關分析仍須阻擋。沿用 ADR-0010 的原始來源與歷史快照不可覆寫、原文摘錄與使用者／AI 衍生內容分離及不自動確認財務事實的限制。 |
 
 ## Decisions
 
@@ -184,6 +186,17 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-102 | 6、12 或 24 個日曆月的 target date 由估值基準日期直接加上所選月數；若目標月份不存在相同日號，target date 截至該目標月份的最後一個日曆日，不將超出日數順延至下一個月。`holding_days` 仍依估值基準時間至此 target date 的實際日數計算。 | 月末截斷符合「日曆月」的使用者預期，且避免 29、30、31 日因月份長度不同而溢位至下一個月、改變估值期間與年化報酬；代價是不同起始日的同月數期間可能相差少數實際日數，因此測試必須涵蓋平年、閏年與月末。 |
 | DEC-103 | 股票分割、減資、股票股利等公司行動後的券商確認整股總數，必須按行動前各 active Thesis 與 independent bucket 的持股比例，以最大餘數法分配：先計算每桶精確 Decimal 配額並取整數下限，再依小數餘額由大到小逐股補足；小數餘額相同時以穩定 bucket ID 升冪決勝。現金補償按相同的行動前比例以 Decimal 分配。規則版本、輸入總數、各桶精確配額、餘額次序及結果必須保存，且以追加式公司行動／分配紀錄更新，不得改寫歷史交易。 | 最大餘數法讓桶合計精確等於券商整股總數，並在無法完全等比例時最小化歸因偏差；相較人工分配或全部歸入 independent bucket，可重現且不會阻塞持股與曝險計算。代價是少數桶可能因決勝規則相差一股，因此必須顯示並保存完整 allocation trace。 |
 | DEC-104 | company_history 有效月樣本少於 36 個時必須 abstain；36 至 59 個時可同時計算中位數與 P75，但兩者都必須標示為 `limited_history`、顯示有效樣本期間／數量與排除原因，且仍須 Owner 明確確認來源選擇及理由；60 個以上才標示為標準五年歷史候選。有限歷史候選不得被系統自動提高信心、與 peer_group 混合或省略樣本不足提示。 | 讓三年門檻可支援上市時間較短或有效資料尚未滿五年的公司，同時不把有限樣本偽裝成標準五年基準；相較完全禁用或只提供 P75，保留基準與樂觀候選的成對可解釋性。代價是 UI、決策 trace 與測試必須明確區分 limited 與 standard coverage。 |
+| DEC-105 | Recommendation 決策採資料有效性綁定的逾期規則，不另設固定有效天數。未決或 deferred 的建議，只要其綁定估值失效或決策關鍵輸入版本變動，就必須追加 expired 紀錄並要求重新產生建議，不得接受舊版或以延後延長有效性。已 accepted／rejected 的歷史 Decision 保持原狀。單次 confirmation challenge 逾期與建議逾期分開處理，前者只要求重新預覽。 | 避免任意固定期限與底層資料有效性不一致，同時保留當時已作成的決策歷史；代價是關鍵資料更新後，未決建議需重新產生。 |
+
+| DEC-106 | 下一輪來源解析隔離原型優先採用同一台 Linux 主機上的獨立 Docker／Compose 解析容器，而非主機常駐隔離服務。解析容器不連外網、不掛資料庫或 AI secrets、不取得 Docker socket，不啟用 privileged 或關閉 seccomp；只經專用本機通道接收受限文件 bytes、回傳待驗證的有界結果。Research 保有 durable job、snapshot 與重試權限。這是原型驗證方向，不是正式部署、最終 ADR／ALG-0035 核准或產品驗收 PASS；通訊邊界、終止／重啟與資源限制須取得實測證據後才可形成正式設計。本機驗收設定與正式 Cloudflare profile 分離，不以更新 hash 取代驗收。 | 使用者在理解 Docker 與 Linux 不是二選一後明確確認此方向；沿用容器管理需增加解析服務及通訊／資源／故障測試，尚不宣稱已證明完整安全或執行可行性。 |
+
+| DEC-107 | 本機解析容器資源驗證選用 Linux perf/ftrace 原生追蹤，使用與正式 Cloudflare 驗收分離的本機設定。追蹤須有界並限縮至測試程序，實際原生追蹤另經權限核准；工具存在不代表已取得執行能力或驗收 PASS。紀錄保留本機，不新增 AI／OCR 呼叫，不藉此降低主機安全設定。沿用 DEC-106 的隔離與權限限制；正式資源預算、ALG-0035、產品接入與正式驗收仍須後續證據及各自關卡。 | 使用者採用待決問題的建議方案，以原生資源證據補足容器／IPC 功能測試；接受有界測試負載及另行權限確認，不表示已批准全系統追蹤或正式部署。 |
+
+| DEC-108 | 摘錄完整性流程採自動檢查，僅例外要求人工介入，並提供後續修改／編輯能力。此決策只確認產品方向與編輯需求；不代表已選定具體檢查算法、支援格式、覆蓋率門檻、可編輯欄位或修改後生效政策。保留 ADR-0010 原文／快照不可覆寫及既有 AI、來源可信度與 E-stage 權限邊界。 | 使用者明確採用例外介入並要求後續可修改或編輯，未另述理由。相較逐份強制核對可減少例行操作，但自動規則可能漏掉未知缺漏；仍須驗證，不能把檢查通過當成事實正確或完整性保證。 |
+
+| DEC-109 | 取代 DEC-108 的現行選擇：保留自動檢查、例外才人工介入；取消本次新增的後續修改／編輯需求及其編輯範圍、草稿、重新檢查／生效設計議題。取消範圍僅限新增摘錄編輯功能，不刪除既有已核准功能。原始來源／歷史不可覆寫、未解決例外不得供分析及既有權限／AI 啟用限制不變；具體例外處理操作與自動檢查算法仍待定。 | 使用者明確撤回修改需求並再次採用例外介入，未另外提供理由。減少新增 UI 與版本流程，但不能以取消編輯推論人工可忽略缺漏強制放行。 |
+
+| DEC-110 | 例外人工介入採查看原文與缺漏原因、重新擷取、排除該摘錄三項操作。查看不自動通過；重新擷取後必須重新檢查，來源暫時故障恢復可能成功，但不支援的表格／格式可能持續失敗；排除保留紀錄與來源歷史，不让該摘錄參與分析。取消新增編輯器、不提供忽略缺漏的強制通過，若缺少必要證據則相關分析繼續阻擋。此決策補足 DEC-109 的例外操作，未核准 ALG-0035 的具體設計／資源預算或付費 AI／OCR。 | 使用者在閱讀漏單位與來源暫時連線失敗情境後明確採用此方案。未另外陳述理由；此流程可讓使用者理解並處理例外，代價是部分來源可能暫時無法用於分析。 |
 
 ## Discussion Context
 
@@ -929,6 +942,132 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 - **User answer:** 1 — provide limited-history median and P75 candidates with explicit labeling and Owner confirmation; abstain below three years.
 - **Explicit rationale:** The user selected the recommended option; no additional rationale was stated.
 - **Resulting impact:** Adds DEC-104 and refines REQ-005 and AC-005. ALG-0008 must distinguish 36–59 valid monthly samples from the standard 60-or-more path and preserve coverage in its decision trace.
+### DISC-087: Define Recommendation decision expiry before Wave 7
+
+- **Situation:** DEC-096 places Recommendation/Owner Decision after the completed valuation/portfolio checkpoint. The Recommendation service is still a reserved seam. REQ-031 and AC-025 require accepted, rejected, deferred and expired decisions, but neither the canonical spec nor accepted ALG-0013 defines Recommendation expiry. ALG-0013 explicitly excludes Recommendation changes. REQ-005 defines forecast validity and REQ-048 defines a separate five-minute confirmation challenge; neither establishes a general Recommendation lifetime.
+- **Question:** Should an undecided/deferred Recommendation expire when its decision-critical inputs cease to be valid/current, without a separate fixed lifetime, or should the Owner also choose an explicit decision deadline at issuance?
+- **Options and tradeoffs:** Input-bound expiry avoids inventing a fixed duration and prevents acceptance of stale recommendations, but may require regeneration after relevant data changes. An additional Owner-selected deadline provides an independent decision window but adds a required input and can expire otherwise-valid recommendations; stale-input acceptance remains forbidden in either option. Already accepted/rejected decisions remain immutable history under either option. A challenge expiring requires a new preview and must not by itself expire a Recommendation.
+- **User answer:** 採用 — adopt input-bound expiry without a separate fixed lifetime; undecided/deferred recommendations expire when the bound valuation becomes invalid or decision-critical input versions change, and accepted/rejected historical decisions remain unchanged.
+- **Explicit rationale:** The user adopted the recommended rule; no additional rationale was stated.
+- **Resulting impact:** Adds DEC-105 and refines REQ-031 and AC-025, depending on REQ-005, REQ-006, REQ-033 and REQ-048. No existing DEC is replaced. The expiry decision is resolved. A later ADR/Algorithm package must bind this policy, version checks, append-only decisions, atomic confirmation and Workflow behavior before source changes; adopting the rule does not approve that future architecture package.
+
+#### Wave 7 discovery and ambiguity ledger
+
+| Area | Evidence / status |
+| --- | --- |
+| Goal and scope | DEC-096 fixes the next vertical slice as Recommendation/Owner Decision; no SPEC-0002 work. |
+| User authority | REQ-008/039/042: Owner-only personalized Recommendation and Portfolio; non-disclosing Learner/Admin denial. |
+| Ownership and compatibility | DEC-079/080 and ADR-0008 fix L0 mappings, child-owned state and one transaction for user-visible invariants; existing historical snapshots cannot be rewritten. |
+| AI and risk authority | REQ-004/005/006/007/052: strict provider/critic validation, deterministic valuation/risk, shadow-only Hard until qualified, no automatic broker order. Existing application AI request types currently serve anomaly and cannot silently be treated as a validated Recommendation candidate. |
+| Decision expiry | Resolved by the user's adoption in DISC-087 and persisted in DEC-105; input-bound, no fixed lifetime, accepted/rejected history unchanged. |
+| Deployment values | Minimum annualized return and provider credentials remain fail-closed deployment inputs, not a reason to invent values or reopen settled requirements. |
+| Validation | DEC-095: deterministic/Fake Clock policy tests; real PostgreSQL atomicity/RLS/concurrency; provider contract tests; API/generated client; responsive Owner user flow. No Wave 7 product evidence exists yet. |
+| Formal design | Boundary/type/state matrices, planned manifest, complete algorithm records and ADR approval follow resolution; no architecture or product edits in this discovery checkpoint. |
+
+### DISC-088: Supply the local-acceptance minimum annualized return
+
+- **Situation:** The accepted Wave 7 publication policy requires an explicitly configured minimum annualized net total return. The value was deliberately left as a deployment input; missing configuration must not enable a buy. Core publication and Workflow participant tests exist, but the end-to-end Recommendation flow is not yet implemented.
+- **Question:** What minimum annualized net total return percentage should the local acceptance environment use?
+- **Options and tradeoffs:** Supply the Owner's explicit threshold for local acceptance, or leave the setting absent and retain zero-multiplier/no-buy behavior. A higher threshold admits fewer otherwise eligible buys; no threshold guarantees realized performance. This is an environment value, not a universal product default or permission to bypass other gates.
+- **User answer:** 5%.
+- **Explicit rationale:** The user supplied the value; no additional rationale was stated.
+- **Resulting impact:** Record a local-acceptance deployment value of `0.05` as a Decimal unit fraction. Apply it through the version-bound minimum-return policy required by REQ-005, REQ-006 and ADR-0009; equality satisfies the return gate, while any lower value fails it without display rounding. Existing source/critic/valuation/fee/risk/authority checks remain mandatory. REQ/DEC/AC definitions and accepted ADRs/algorithms are unchanged. Other environments remain unconfigured/fail closed unless explicitly configured; this answer does not authorize production activation, provider spending, commit or push.
+
+### DISC-089: Select the independent Docker extraction prototype
+
+- **Situation:** Existing host extraction diagnostics passed, but the existing backend container lacks bubblewrap and refused the nested namespace probe. The collector mounts its own database credential, so untrusted document parsing cannot simply be moved into that privileged data-access process. The user asked what the decision meant and how Docker differs from Linux; after requesting adoption, the user explicitly confirmed that the intended choice was the independent Docker parser container.
+- **Question:** 下一輪隔離原型要優先驗證哪一種部署邊界？現況：既有 collector 容器內 unshare 被拒絕，且 collector 掛載資料庫憑證；不能把不可信 HTML/PDF 直接放進同一程序。共同約束：parser 無外網、無資料庫／AI secrets、無 Docker socket、不啟用 privileged 或關閉 seccomp；只處理有限 bytes／結果，Research 保有 job、snapshot 與重試權限。此次只選原型驗證方向，不是最終 ADR／ALG 核准或正式部署。待驗證：通訊權限與大小界線、子程序終止／重啟、資源上限、獨立本機 validation profile。另發現 compose.yaml collector 僅接 internal data network，正式下載 egress 仍須獨立核對，不能直接替整個 data network 放行。
+- **Options and tradeoffs:** 獨立解析容器（建議先驗證）：在同一台主機增加無網路、无 secrets 的 Compose 解析服務，經專用本機通道收 bytes、回傳不可信的有限結果；保留既有容器安全設定及 Research 權限。適合沿用容器化部署；代價是新增服務、IPC 權限、映像／重啟／資源測試，完整可行性尚未證明。不適合完全不能增加服務的環境。
+
+主機隔離服務：由 Linux 主機上的受限服務建立 bubblewrap 解析子程序，collector 只走專用本機通道；不把主機或 Docker 管理權交給應用程式。可沿用已通過的 host 隔離原型方向，但新增 Compose 以外的服務帳號、套件、啟停與主機相容性管理。適合願意維護主機服務的環境；不適合要求所有服務都由 Compose 管理的部署。
+- **User answer:** 對
+- **Explicit rationale:** No separate rationale was stated. The answer confirms the immediately preceding clarification: use the independent Docker extraction container on the same Linux host, without external network or database credentials.
+- **Resulting impact:** Add DEC-106, refining REQ-002 and REQ-045 while preserving all existing requirements, acceptance criteria and accepted ADRs. Resolve Q-EXTRACTION-ISOLATION-001@99; only the next prototype direction is selected. Formal parser deployment, IPC parameters, resource calibration, ALG-0035 acceptance and browser integration are not approved by this answer. Paid AI/OCR, production activation, original database changes and commit/push remain unauthorized.
+
+#### Extraction prototype scope and evidence ledger
+
+| Area | Confirmed scope / evidence still needed |
+| --- | --- |
+| Goal and users | Same real Evidence workflow for the selected company; no synthetic financial claims or automatic investment decisions. |
+| Deployment direction | Independent local Docker parser container is the next candidate to validate, not an approved release architecture. |
+| Safety and authority | No external network, secrets or Docker socket for parser; no privileged mode or disabled seccomp. Research retains jobs, persistence and retry authority. |
+| Compatibility and data | Preserve URL/raw-content identity and old snapshots; bounded extraction results remain untrusted. No database migration in the prototype. |
+| Algorithm and resources | ALG-0035 remains proposed. Existing prototype limits are experimental inputs, not final acceptance budgets; validate actual container behavior before choosing production parameters. |
+| Flow and operational cost | Additional local IPC and service lifecycle must be measured and fault-tested; no latency, throughput or memory-headroom winner has been established. |
+| Validation | Verify isolated input/output, denied network/secret access, bounded CPU/memory/output, timeout/termination/reap and fault recovery. Keep per-change tests separate from formal runtime evidence. |
+| Environment | Create a separate local validation setup when execution is authorized; preserve formal Cloudflare profile. Collector-only download egress remains a discoverable configuration gap, not permission to open the internal data network. |
+| Delivery | This answer resolves the prototype direction only. Request renewed exact execution authorization before non-spec changes; any new consequential design choice requires its own governance checkpoint. |
+
+
+### DISC-090: Select local native parser resource evidence
+
+- **Situation:** The development-only IPC prototype recorded 46 matching request/recovery observations and a separate six-request recycle run. These functional observations do not establish resource calibration or production acceptance. The existing Cloudflare structured-log profile is inapplicable and bound to a stale architecture hash. Local perf and trace-cmd executables were found, but no native capture has run and capture permissions remain unverified.
+- **Question:** 下一階段本機解析容器的 CPU／記憶體／程序回收驗證，要選用 Linux perf/ftrace 原生追蹤，還是暫緩這項驗證？目前功能測試已通過，但不能取代系統層資源證據；既有 Cloudflare profile 不適用。
+- **Options and tradeoffs:** 選用本機 perf/ftrace（建議）：先建立獨立本機驗收設定與有界、限縮至測試程序的追蹤；可補足資源證據，但會增加測試負載並需另經原生權限核准。工具已存在，不新增 AI/OCR 呼叫，不外傳紀錄；適合繼續推進解析器驗證。
+
+暫緩原生資源驗證：保留已通過的容器／IPC 功能原型，不啟動系統追蹤；可避免目前的追蹤負載與權限操作，但資源驗收及正式解析流程維持未完成，不適合直接進入網頁驗收。
+- **User answer:** 採用
+- **Explicit rationale:** No additional rationale was stated. The answer adopts the recommended local perf/ftrace option in Q-EXTRACTION-NATIVE-001@102.
+- **Resulting impact:** Add DEC-107, refining DEC-106, REQ-002 and REQ-045; resolve Q-EXTRACTION-NATIVE-001@102. Prepare a separate local native-evidence profile and bounded test-process capture after renewed execution authorization. Native capture requires its own permission approval. Preserve existing REQ/AC definitions and accepted ADRs; do not alter the formal Cloudflare profile, lower host security, transmit traces, call paid AI/OCR, mutate the original database, activate production, commit or push. ALG-0035 and final resource budgets remain unapproved; no runtime PASS is inferred.
+
+### DISC-091: Adopt exception-only excerpt review and require later editing
+
+- **Situation:** Six local HTML probes exposed missing captions, units and notes despite a complete flag. Q-EXTRACTION-CONTEXT-001@106 broadened the original mandatory-review proposal; no product algorithm or editing workflow has been implemented.
+- **Question:** 第一版的摘錄流程，你希望人工核對介入到什麼程度？
+- **Options and tradeoffs:** Compared per-excerpt human review (repeated user effort and human omissions), automatic checks with exception-only intervention (less routine work but requires validated rules and unknown-gap handling), and limited supported-format automation (less manual work but narrower coverage and format maintenance). These were comparison directions, not validated implementations.
+- **User answer:** 採用自動檢查，例外才人工介入 ，但是要提供可後續修改或是編輯的功能。
+- **Explicit rationale:** No separate rationale was stated. The user explicitly selected automatic checks with exception-only intervention and added the requirement for subsequent modification or editing.
+- **Resulting impact:** Add REQ-054, DEC-108 and AC-048, refining REQ-002 and REQ-044 and depending on REQ-003 and REQ-047. Resolve Q-EXTRACTION-CONTEXT-001@106 without treating this answer as execution authorization. Editing scope, revision activation/rechecking, check algorithm/coverage and final ALG-0035 design remain unresolved; preserve immutable source/history and all accepted ADRs.
+
+#### Historical excerpt review and editing ambiguity ledger (superseded by DISC-092)
+
+| Area | State |
+| --- | --- |
+| Human involvement | Resolved: automatic checks with human intervention required only for exceptions. Voluntary later editing must remain available. |
+| Editable content | Unresolved: which source-bound selections/metadata and separate user annotations are editable; no authority to overwrite source-of-record text is inferred. |
+| Edit lifecycle | Unresolved: when a revised draft is saved/rechecked/activated and how affected downstream results are shown; immutable historical results and existing validity gates remain binding. |
+| Check method and acceptance | Unresolved: precise rules, support coverage, resource parameters and representative validation; six counterexamples do not validate a general completeness detector. |
+| Compatibility | Preserve ADR-0010 original identity/history and source versus derived-content distinction, REQ-003 fact authority, and REQ-047 version checks. CONTEXT.md is absent; no conflicting domain-context document was found. |
+| Evidence and delivery | Prior container smoke PASS is preserved, not rerun or expanded into content acceptance. No product edits, paid AI/OCR, DB operations, production activation, commit or push authorized. |
+
+### DISC-092: Withdraw excerpt editing while retaining exception-only review
+
+- **Situation:** DISC-091 added later editing alongside exception-only review. Q-EXTRACTION-EDIT-001@108 asked which content should be editable. The user has now withdrawn that added capability rather than selecting editable fields.
+- **Question:** 你希望後續能修改哪些內容？可以用一個實際例子說明。
+- **Options and tradeoffs:** Prior clarification suggested source-bound selection/context corrections and separate notes while preserving source/history. The user instead withdraws new editing; this reduces new UI/version lifecycle scope but does not decide how an exception can be resolved without editing.
+- **User answer:** 修改部分不需要好了。採用自動檢查，例外才人工介入
+- **Explicit rationale:** No separate rationale was stated. The user explicitly cancels the modification part and reaffirms automatic checking with exception-only human intervention.
+- **Resulting impact:** Add DEC-109 superseding DEC-108, update REQ-054 and AC-048, and resolve Q-EXTRACTION-EDIT-001@108 by explicit withdrawal. Close the editing-scope and editing-lifecycle questions; retain automatic-check design/acceptance and clarify exception actions without assuming manual override. Preserve REQ-002, REQ-003, REQ-044, REQ-047 and ADR-0010 constraints and all existing approved functionality. No product execution authorization is inferred.
+
+#### Historical excerpt scope after editing withdrawal (see DISC-093 for current state)
+
+| Area | State |
+| --- | --- |
+| Automatic checks | Selected; normal items do not require per-item review. Check method, support coverage and final acceptance remain unresolved. |
+| Later editing | Withdrawn for this added excerpt feature; no new editor or edit-draft publication workflow. DISC-091 records the prior answer only. |
+| Exception handling | Human intervention remains required only for exceptions. Precise non-editing review/retry/exclusion actions are not yet selected; manual force-pass is not authorized. |
+| Evidence and authority | Preserve immutable source/history, raw excerpt versus derived-content separation, existing validity and AI gates, proposed ALG-0035 and prior container smoke evidence. No implementation or runtime PASS is inferred. |
+
+### DISC-093: Adopt view, re-extract and exclude exception handling
+
+- **Situation:** After withdrawing later editing, the user asked for concrete exception examples. The explanation distinguished omitted units from transient source connectivity failures, described view/re-extract/exclude controls and noted that necessary-evidence loss keeps analysis blocked. Examples were illustrative, not MediaTek financial facts or completed UI.
+- **Question:** 例外出現時，你希望人工介入能完成什麼操作？
+- **Options and tradeoffs:** The presented workflow provides viewing the original and missing-context reason without passing the check, re-extraction followed by fresh checks without a success guarantee, and exclusion from analysis without deleting records. No editor or force-pass is provided; some sources may remain unusable and missing necessary evidence continues to block analysis.
+- **User answer:** 採用此方案
+- **Explicit rationale:** No separate rationale was stated. The answer adopts the immediately preceding explained workflow as a whole.
+- **Resulting impact:** Add DEC-110 refining DEC-109 and REQ-054, update AC-048, and resolve Q-EXTRACTION-EXCEPTION-001@110. Preserve REQ-002, REQ-003, REQ-044 and REQ-047 and accepted ADR-0010. User-facing review/edit/exception choices are settled. Reclassify the prior broad algorithm/resource placeholder as mandatory downstream design/evidence gates, not an unanswerable product-choice question; no algorithm, numeric budget, support reduction or release claim is approved.
+
+#### Current excerpt workflow and downstream gates
+
+| Area | State |
+| --- | --- |
+| User-facing workflow | Confirmed: automatic checks; exception-only intervention; view original/reasons, re-extract and recheck, or exclude while retaining history. No new editor or force-pass. |
+| Source and admission authority | Preserve ADR-0010 and existing fact/validity gates. Check success is not financial fact confirmation or proof of general semantic completeness. |
+| Engineering method | Continue the already-recorded deterministic local-extraction direction and independent isolated-parser prototype. Do not select AI-based reconstruction or unsupported financial inference. |
+| Remaining design gate | Exact context-preservation/exception rules, support coverage, resource budgets and ALG-0035 approval are incomplete. They must be authored and calibrated against evidence before dependent production source; the current adoption supplies no values or approval. |
+| Remaining validation gate | Reproduce existing caption/unit/note and row-locator counterexamples, add supported normal/fault cases, preserve immutable identity and require real-source/UI acceptance plus existing runtime/release gates. Prior smoke proves only its tested isolation/control scope. |
+| Next work boundary | After fresh execution authorization, prepare and validate the design/prototype within existing restrictions. Reopen before any newly discovered user-facing policy, tunable acceptance choice, scope reduction or discretionary failure policy; do not bypass design gates to reach production. |
+
 ## Acceptance Criteria
 
 | ID | Requirements | Scenario | Validation Method | Evidence |
@@ -946,7 +1085,7 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | AC-011 | REQ-012 | 以未登入、允許 identity、拒絕 identity、過期／錯誤 audience／錯誤 issuer／偽造 header／失效簽章 JWT 存取所有 Web/API path；移除或誤設 Access application、加入 Bypass path、停止 cloudflared、輪替 signing key／tunnel credential，並嘗試由 Internet 直連 origin、SSH、PostgreSQL、Docker API 與管理子網。 | Cloudflare Access policy export/schema check、tunnel ingress validation、JWT verifier contract/integration tests、secret scan、故障注入與 Internet/LAN port scan；未通過完整 Access 與 app JWT 驗證一律拒絕，不得存在 Bypass／未覆蓋 path，key 更新須正確且不可驗證時 fail closed，只有本地 Caddy Web/API 可由 tunnel 抵達，所有 origin inbound 與非 Web service 必須不可達。 | Pending execution |
 | AC-012 | REQ-013 | 從一份受 Object Lock 保護的加密備份復原至全新隔離 PostgreSQL。 | 每月 restore drill，記錄解密、migration、資料列數、關聯與雜湊驗證結果。 | Pending execution |
 | AC-013 | REQ-014 | 主機磁碟未加密且秘密與敏感欄位採補償控制。 | Security checklist、秘密掃描、欄位加密測試及風險揭露人工簽核。 | Pending execution |
-| AC-025 | REQ-031 | 建立、暫停、恢復、失效及關閉 Thesis；產生多版 Recommendation；接受、拒絕、延後及逾期；將買進分配至單一／多個 Thesis 與 independent 桶；指定賣出桶；測試分配不足、超額、超賣、交易更正、股票分割、減資及股票股利；保存 Outcome 與 Reflection。 | Domain state-machine unit/property tests、PostgreSQL constraint/transaction integration tests 及 API tests；非法轉移與分配合計不等於成交股數必須拒絕，不得跨桶超賣或自動 FIFO，不可變紀錄不得更新或刪除，更正與公司行動後各桶及證券總部位必須正確，風控合併全部桶，Outcome 可按桶歸因，所有目前狀態均可追溯至完整 audit events，失效不得被 reflection pending 阻塞，關閉不得缺少 Outcome 與 Reflection。 | Pending execution |
+| AC-025 | REQ-031 | 建立、暫停、恢復、失效及關閉 Thesis；產生多版 Recommendation；接受、拒絕、延後及逾期；將買進分配至單一／多個 Thesis 與 independent 桶；指定賣出桶；測試分配不足、超額、超賣、交易更正、股票分割、減資及股票股利；保存 Outcome 與 Reflection。 | Domain state-machine unit/property tests、PostgreSQL constraint/transaction integration tests 及 API tests；非法轉移與分配合計不等於成交股數必須拒絕，不得跨桶超賣或自動 FIFO，不可變紀錄不得更新或刪除，更正與公司行動後各桶及證券總部位必須正確，風控合併全部桶，Outcome 可按桶歸因，所有目前狀態均可追溯至完整 audit events，失效不得被 reflection pending 阻塞，關閉不得缺少 Outcome 與 Reflection。 以 Fake Clock 驗證估值失效邊界前／當下／之後，以及決策關鍵輸入版本變動：未決／deferred 必須逾期且不得接受；仍有效且版本未變時不得僅因固定天數逾期。accepted／rejected 的歷史決策不得被改寫。確認 challenge 過期但輸入仍有效時可重新預覽，不得誤設 expired；重複逾期處理不得重複追加事件，與接受同時發生時必須在交易內重驗有效性及版本。 | Pending execution |
 | AC-026 | REQ-032 | 同一項跨公司待辦可從工作流程開啟對應公司的正確 Evidence／Thesis／Recommendation 等位置，處理後回到工作流程；另以直接公司入口查看同一紀錄。模擬 client 偽造 E 階段、Hard anomaly、估值、風控、狀態轉移或權限結果，以及兩個 UI 入口同時提交互相衝突的更新。 | Navigation component tests、Playwright E2E、API contract/integration tests 與 PostgreSQL transaction tests；兩入口必須讀取同一 record/version ID 且處理狀態一致，不得複製領域紀錄；重新整理或改用另一入口後結果不得分歧；Server 必須拒絕 client 偽造或過期版本並回傳可辨識的衝突，不得信任 client 計算或權限判定。 | Pending execution |
 | AC-027 | REQ-033 | 對每一種需人工處理的觸發建立 Action Item，重送相同事件及版本，完成、忽略、延後與重新開啟事項，建立手動追蹤事項，並產生不需要處理的一般資訊事件。 | Deterministic rule unit/property tests、PostgreSQL uniqueness/transaction tests、API tests 與 Playwright E2E；同一觸發與來源版本最多一個未結項 Action Item，一般事件不得出現在行動收件匣，所有合法狀態轉移及處理理由可稽核，dismissed 不得刪除或改寫底層領域紀錄，從待辦開啟的公司及紀錄版本必須正確。 | Pending execution |
 | AC-028 | REQ-034 | 以多家公司、多類型、不同狀態、優先級及到期時間的 Action Items 載入首頁，依序點擊各摘要卡並組合搜尋、篩選、排序及分頁；在寬與窄畫面重複主要操作，並於查詢期間新增或完成一項待辦。 | API contract tests 與 Playwright responsive E2E；相同查詢時間點下摘要數量必須等於對應清單總數，權限外項目不得計入，篩選／排序／分頁結果必須穩定且由 Server 欄位決定；窄畫面不得水平捲動即可辨識並開啟待辦，並保留搜尋與核心篩選功能。 | Pending execution |
@@ -970,6 +1109,8 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | AC-046 | REQ-052 | 執行 30 案例於 28／29／30 個 decision-field 一致、各種 safety／Hard anomaly／citation／schema／abstain 錯誤；執行 10 個 shadow tasks 並在第 1／9／10 個注入 major discrepancy；測試無 Owner 核准、model／prompt／schema／policy 改版、單次 timeout、個別 rate limit、provider-wide circuit breaker、Claude invalid output、OpenAI 恢復與重送。 | Versioned golden-suite runner、provider contract tests、shadow comparator、Fake Clock、circuit-breaker/fault-injection integration tests、PostgreSQL approval/audit/idempotency tests；未達 29／30、任何 safety 類錯誤、未連續通過 10 次或缺 Owner approval 都不得啟用；只有 provider-wide breaker 可觸發完整快照重跑，兩 provider 輸出不得混合，Claude 驗證失敗不得發布且必須建人工待辦，material change 必須撤銷核准並重新驗證。 | Pending execution |
 
 | AC-047 | REQ-053 | 以具代表性的 Inbox、Action Item detail、Company Overview、Evidence Chain、Thesis cards、Valuation comparison、Recommendation confirmation、Trades、Outcome／Reflection、History、長繁體中文、長 URL、極端數字、錯誤、loading、empty、offline 及權限拒絕狀態，依序測試 360、390、768、1024、1440、1920、2560 CSS px；在 1280px 執行 200% text resize 與 400% browser zoom／320px-equivalent reflow；測試 light/dark/system、跨兩裝置保存主題、鍵盤-only、focus、screen reader、觸控、支援與不支援瀏覽器、局部二維表格、紅漲綠跌及字型網路請求。 | Story/component visual tests、Playwright Chromium/WebKit responsive E2E、支援版本 Chrome／Edge／Android Chrome／實機 iOS Safari release smoke、axe-core 加人工 WCAG 2.2 AA keyboard/focus/reflow/contrast/target-size checklist、NVDA 或 VoiceOver spot checks、DOM/network/font inspection 及 screenshot regression；所有主要流程在原生 360–2560px 與 zoomed 320px-equivalent 下不得有 page-level horizontal scroll、重疊、必要截斷、功能或資料遺失，局部二維 scroll 必須具名稱、提示、標頭關係及鍵盤可達性；摘要／詳情 record/version 一致，雙主題對比與狀態可辨識，主題跨裝置同步且 system 仍跟隨當前裝置，方向不只靠色彩，無第三方 font request，不支援瀏覽器顯示非阻斷提示；自動掃描零 critical/serious violations，人工 AA checklist 全部 PASS。 | Pending execution |
+
+| AC-048 | REQ-054 | 覆蓋正常摘錄、缺單位／註記、截斷、欄位歧義、查看原文、暫時故障後重試成功、重試仍失敗、排除及排除後必要證據不足；依 DEC-109 不新增編輯器，依 DEC-110 不提供強制通過。 | Demand-owned extraction/check contract tests、既有語境缺漏反例的回歸測試、API／權限／版本／持久化 integration tests 與真實公司 Evidence 桌面／手機網頁驗收：正常案例不要求逐份確認；例外顯示原因與來源定位；查看不改變檢查狀態；重試結果須通過當前檢查，失敗保持阻擋；排除保留來源與歷史且分析不使用被排除摘錄，必要證據不足仍阻擋；原始來源／歷史不覆寫，既有資料、權限及 AI 啟用閘門不可跳過。精確規則、資源值及 golden coverage 必須先通過 ALG-0035 設計與校準關卡，再執行對應驗收；不得以本次規格確認宣稱 PASS。 | Pending design gate and execution |
 
 ## Relationships
 
@@ -1162,6 +1303,16 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-102 | refines | REQ-005 |
 | DEC-103 | refines | REQ-031 |
 | DEC-104 | refines | REQ-005 |
+| DEC-106 | refines | REQ-002 |
+| DEC-106 | refines | REQ-045 |
+| DEC-107 | refines | DEC-106 |
+| DEC-107 | refines | REQ-002 |
+| DEC-107 | refines | REQ-045 |
+| DEC-105 | refines | REQ-031 |
+| DEC-105 | depends_on | REQ-005 |
+| DEC-105 | depends_on | REQ-006 |
+| DEC-105 | depends_on | REQ-033 |
+| DEC-105 | depends_on | REQ-048 |
 | DEC-098 | depends_on | REQ-008 |
 | DEC-098 | depends_on | REQ-011 |
 | DEC-098 | depends_on | REQ-012 |
@@ -1241,6 +1392,16 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | DEC-009 | depends_on | REQ-012 |
 | DEC-010 | depends_on | REQ-013 |
 
+| REQ-054 | refines | REQ-002 |
+| REQ-054 | refines | REQ-044 |
+| REQ-054 | depends_on | REQ-003 |
+| REQ-054 | depends_on | REQ-047 |
+| DEC-108 | refines | REQ-054 |
+| DEC-109 | supersedes | DEC-108 |
+| DEC-109 | refines | REQ-054 |
+| DEC-110 | refines | DEC-109 |
+| DEC-110 | refines | REQ-054 |
+
 ## Out of Scope
 
 - 自動券商下單、保存券商密碼或交易憑證。
@@ -1274,6 +1435,16 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 
 ## Routing/Gates
 
+- Current excerpt discussion: DISC-093 resolves Q-EXTRACTION-EXCEPTION-001@110 and records DEC-110. REQ-054 / AC-048 specify view/re-extract/recheck/exclude with no editor or force-pass. User-facing decisions are settled; earlier DISC ledgers and execution/status entries below are historical.
+- Mandatory downstream design/evidence gates: exact automatic context checks, supported coverage and calibrated resource parameters remain incomplete under proposed ALG-0035 and accepted ADR-0010. SPEC confirmation does not approve these values or waive their gates. Fresh exact execution authorization permits the routed design/prototype preparation only within its approved scope; production implementation requires the exact approved algorithm/boundary/type/state/manifest design and validation admission first. Newly exposed consequential choices reopen SPEC before being selected. No current product, paid AI/OCR, native capture, DB mutation, deployment, commit or push is authorized by adoption.
+
+- Local native evidence: DISC-090 resolves Q-EXTRACTION-NATIVE-001@102; DEC-107 selects perf-ftrace for bounded local test-process evidence. Separate local profile preparation follows renewed exact execution authorization, and capture additionally requires native permission approval. No native trace, resource calibration, final ALG-0035 approval or runtime acceptance is claimed.
+
+- Extraction prototype direction: DISC-089 resolves Q-EXTRACTION-ISOLATION-001@99; DEC-106 selects the independent Docker candidate for bounded verification only. No final ALG-0035 approval, production implementation or deployment follows from this adoption; renewed exact execution authorization is required before non-spec changes.
+
+- Wave 7 reconciliation: DISC-087 resolved by user adoption; DEC-105 refines REQ-031 and AC-025. Prior gate entries below describe initial materialization, not current implementation status.
+- Wave 7 spec verification: reconcile and canonical validation PASS with zero conflicts, zero open decisions and complete REQ-to-AC traceability; no Wave 7 product implementation or runtime PASS is claimed.
+- Wave 7 product execution: renewed authorization received on 2026-09-05 with `開始執行`; project owner explicitly approved `核准 ADR-0009 與 ALG-0032、ALG-0033、ALG-0034` on 2026-09-05. Those four records are accepted. Planned-manifest design gate PASS; implementation has started with source-bound candidate/critic validation and pure decision/expiry planning. Database transactions, provider transport, fee-aware sizing repair, Workflow/API/UI integration and user/runtime acceptance remain pending. Renderer/source-symbol completeness remains pending the planned implementations. Existing accepted decisions and DEC-105 are unchanged; this approval adds no product-contract delta.
 - ask-matt: PASS
 - project state at materialization: implementation absent, stateful context absent
 - grill-me: PASS, decision-complete working spec
@@ -1284,6 +1455,29 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 - TDD and product implementation: not started
 - Architecture ADRs and Algorithm Design Records remain proposed until explicit non-AI approval.
 - Production completion requires Validation Enablement, per-change development validation, final runtime acceptance, release acceptance, architecture gate, deterministic generated-view comparison and code review.
+
+## Question Record
+
+```json
+{
+  "question_id": "Q-EXTRACTION-CONTEXT-001",
+  "history": [
+    {
+      "action": "revise",
+      "question": {
+        "id": "Q-EXTRACTION-CONTEXT-001",
+        "version": 105,
+        "question": "第一版是否採用「系統先擷取候選摘錄，由使用者核對並確認包含必要標題、單位與註記的完整原文區塊後，該摘錄才可供 AI 分析」的流程？",
+        "options": [],
+        "kind": "open-text"
+      },
+      "source_ref": "msg_01a094dc-7f2c-7670-9d10-2bae5c0c2ad3",
+      "user_text": "還有其他選項?"
+    }
+  ],
+  "failed_surfaces": {}
+}
+```
 
 ## Revision History
 
@@ -1299,3 +1493,14 @@ AI 經由 provider-neutral Ports 接入。OpenAI 為初始主 provider，Anthrop
 | 91 | 2026-08-29 | working | Selected deterministic month-end clamping for 6/12/24-calendar-month target dates, including leap-year and month-end validation. |
 | 92 | 2026-08-29 | working | Selected largest-remainder allocation for corporate-action whole shares with stable bucket-ID tie-breaking and proportional Decimal cash compensation. |
 | 93 | 2026-08-29 | working | Selected paired limited-history median/P75 candidates for 36–59 valid monthly samples, standard candidates at 60 or more, and abstention below 36. |
+| 94 | 2026-09-05 | Reopened before clarification: Wave 7 Recommendation/Owner Decision discovery: REQ-031 and AC-025 require expired decisions but do not define expiry triggers or the relationship to valuation validity and changed input versions. Resolve this user-observable lifecycle policy before finalizing ADR/ALG or product implementation. Preserve all previously approved decisions and completed Wave 1-6 evidence. |
+| 95 | 2026-09-05 | confirmed | User adopted input-bound Recommendation expiry (DEC-105 / DISC-087): no separate fixed lifetime, invalid valuation or changed decision-critical input versions expire undecided/deferred recommendations, and accepted/rejected history remains immutable. Refined REQ-031 and AC-025; product implementation evidence remains pending. |
+| 97 | 2026-09-05 | confirmed | Recorded the user's 5% (`0.05`) local-acceptance minimum annualized net total return in DISC-088. No REQ/DEC/AC or accepted architecture change; runtime configuration and the remaining Wave 7 implementation still require execution and verification. |
+| 98 | 2026-09-10 | Reopened before clarification: 既有容器 nested namespace 探測被拒絕；在接入真實 Evidence 前需由 Owner 選擇下一輪隔離原型的部署邊界（獨立無網路容器或主機隔離服務），可能影響 ADR-0010、ALG-0035、執行單元與驗收設定；僅 reopen 供決策，不修改已核准需求或放寬權限。 |
+| 100 | 2026-09-10 | confirmed | Recorded the explicit Docker parser prototype choice in DEC-106 / DISC-089 and resolved Q-EXTRACTION-ISOLATION-001@99. Safety boundaries and existing REQ/AC/ADR contents preserved; prototype execution, final design and runtime acceptance remain pending. |
+| 101 | 2026-09-10 | Reopened before clarification: DEC-106 IPC prototype has 46 matching request/recovery observations and 6 recycle observations. Before local resource acceptance, Owner must select a native evidence provider; the existing Cloudflare structured-log profile is inapplicable and hash-stale. Preserve prototype-only boundaries and pause dependent implementation; no production or ALG-0035 approval is inferred. |
+| 103 | 2026-09-10 | confirmed | Recorded adoption of bounded local perf/ftrace evidence in DEC-107 / DISC-090 and resolved Q-EXTRACTION-NATIVE-001@102. Formal Cloudflare profile and all production safety boundaries remain unchanged. Native permissions, capture and resource acceptance are still pending; renewed execution authorization is required. |
+| 104 | 2026-09-11 | Reopened before clarification: Six local synthetic HTML probes found caption/unit/note loss with selection_incomplete=false and non-unique row locators. Owner must decide the v1 excerpt completeness review/admission workflow before selecting a production algorithm. Evidence: build/extraction-prototype/context-check-20260911.md. Preserve prior eight-capture smoke PASS and all accepted ADRs; no new policy selected. |
+| 107 | 2026-09-12 | working | Recorded exception-only human review and later editing requirement in REQ-054 / DEC-108 / AC-048 / DISC-091. Resolved Q-EXTRACTION-CONTEXT-001@106; editing scope/lifecycle and check algorithm acceptance remain open. No product execution or architecture approval inferred. |
+| 109 | 2026-09-12 | working | User withdrew added excerpt editing and reaffirmed automatic checks with exception-only human intervention. DEC-109 supersedes DEC-108; update REQ-054 / AC-048 and record DISC-092. Resolve Q-EXTRACTION-EDIT-001@108; close editing questions, preserve exception-action and check-policy decisions. No source or architecture changes. |
+| 111 | 2026-09-12 | working | Recorded adopted view/re-extract/recheck/exclude exception workflow in DEC-110 / DISC-093; refined REQ-054 / AC-048, resolved Q-EXTRACTION-EXCEPTION-001@110 and completed current user-facing discussion. Retained exact algorithm/resource/coverage calibration and approval as mandatory downstream gates, without choosing parameters or claiming evidence PASS. |

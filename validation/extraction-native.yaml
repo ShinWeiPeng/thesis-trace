@@ -1,0 +1,66 @@
+# DEC-107: enablement only; no production performance or resource PASS.
+version: "1.1"
+architecture:
+  manifest: architecture/manifest.yaml
+  manifest_sha256: 6cb9583dde1f2476adf5b77accee0f4c5ad35e871e86fb76958771d2048e8e1f
+  execution_profile: linux_server_functional
+target:
+  platform: linux
+  provider: perf-ftrace
+  native_max_bytes: 1048576
+transport:
+  type: import
+  timeout_seconds: 20
+  max_bytes: 65536
+actions:
+  native-capability:
+    executable: python3
+    args: [backend/tests/prototypes/native_extraction_probe.py, capture, --output, .codex/evidence/on-device/native-enablement-20260910-a1]
+    cwd: .
+    risk: trace
+    trace_role: record
+    timeout_seconds: 15
+    max_output_bytes: 65536
+    bounded_artifact: .codex/evidence/on-device/native-enablement-20260910-a1/perf.data
+    max_artifact_bytes: 1048576
+  native-cleanup-check:
+    executable: python3
+    args: [backend/tests/prototypes/native_extraction_probe.py, cleanup-check, --output, .codex/evidence/on-device/native-enablement-20260910-a1]
+    cwd: .
+    risk: passive
+    idempotent: true
+    timeout_seconds: 5
+    max_output_bytes: 4096
+scenarios:
+  - id: local-native-enablement
+    title: 本機原生追蹤能力 Enablement
+    purpose: 確認限縮程序的原生追蹤可建立及匯出，才能進入解析容器資源測試；不判定產品效能。
+    phase: enablement
+    evidence_mode: flow
+    max_duration_ms: 15000
+    prerequisites: []
+    actions: [native-capability]
+    cleanup_actions: [native-cleanup-check]
+    architecture_refs: [linux_server_functional, evidence_collection]
+    completion:
+      trigger_criteria: [requested]
+      required_criteria: [record-export-cleanup]
+      session_end_reason: complete
+    criteria:
+      - id: requested
+        label: 追蹤請求
+        description: 以新建測試子程序提出有界追蹤請求。
+        type: event_sequence
+        events: [capture_requested]
+      - id: record-export-cleanup
+        label: 原生紀錄、匯出與回收
+        description: 依序完成原生紀錄、非空匯出並回收本次程序；缺少任一步不可進入資源驗收。
+        type: event_sequence
+        events: [native_recorded, native_exported, cleanup_confirmed]
+    guided_steps:
+      - id: native-readiness
+        instruction: 僅在原生追蹤權限核准後執行本 profile 的 native-capability，保留 capture.json、perf.data、events.log 及匯出；不要 sudo、改 sysctl 或重用既有輸出路徑。
+        expected_observation: capture_ready 為 true、原生 trace 及非空匯出存在、cleanup_confirmed 為 true；否則保留原始錯誤並停止資源測試。
+        required: true
+        evidence_required: true
+        observation_code: native_capture_available

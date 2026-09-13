@@ -68,6 +68,9 @@ class DcaSelection:
     reasons: tuple[str, ...]
     evaluated: tuple[Decimal, ...]
     policy_version: str = "dca-selection-v1"
+    post_exposure: ExposureSnapshot | None = None
+    purchase_outflow: Decimal | None = None
+    acquired_quantity: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +130,20 @@ class CostProfileSnapshot:
     tax_rate: Decimal
     effective_at: datetime
     policy_version: str = "cost-profile-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioRecommendationSnapshot:
+    snapshot_id: str
+    portfolio: PortfolioSnapshot
+    cost: CostProfileSnapshot
+    exposure: ExposureSnapshot
+    sizing: DcaSelection
+    created_at: datetime
+    target: OfficialSecuritySnapshot
+    base_amount: Decimal
+    buy_price: Decimal
+    cash_as_of: datetime
 
 
 @dataclass(frozen=True, slots=True)

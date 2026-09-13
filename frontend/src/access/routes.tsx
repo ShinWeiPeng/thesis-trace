@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { accessClient, type AccessClient, type AccountAction } from "./client";
-import type { AccountSummary, ConfirmationChallenge, SessionProfile } from "./contracts";
+import type {
+  AccountSummary,
+  ConfirmationChallenge,
+  SessionProfile,
+} from "./contracts";
 import type { Role } from "../generated/api";
 import EvidenceWorkspace from "../App";
 import { ActionInboxRoutes } from "../workflow/routes";
@@ -8,36 +12,535 @@ import { workflowClient, type WorkflowClient } from "../workflow/client";
 import { thesisClient, type ThesisClient } from "../thesis/client";
 import { ThesisRoutes } from "../thesis/routes";
 import { PortfolioRoutes } from "../portfolio/routes";
+import { RecommendationWorkspace } from "../features/recommendations/RecommendationWorkspace";
 
-const Unavailable = () => <main className="access-page unavailable"><h1>資源無法使用</h1><p>此資源不存在或你目前沒有存取權限。</p></main>;
-type Pending = { challenge: ConfirmationChallenge; action: AccountAction; targetId: string; payload: Record<string, unknown> };
+const Unavailable = () => (
+  <main className="access-page unavailable">
+    <h1>資源無法使用</h1>
+    <p>此資源不存在或你目前沒有存取權限。</p>
+  </main>
+);
+type Pending = {
+  challenge: ConfirmationChallenge;
+  action: AccountAction;
+  targetId: string;
+  payload: Record<string, unknown>;
+};
 
-function ConfirmationDialog({ pending, onClose, onConfirm }: { pending: Pending; onClose(): void; onConfirm(reason: string): Promise<void> }) {
-  const [reason, setReason] = useState(""); const summary = pending.challenge.impact_summary;
-  return <div className="dialog-backdrop" role="presentation"><section role="dialog" aria-modal="true" className="confirmation-dialog"><h2>{summary.action_label}</h2><p>{summary.subject}</p><dl><div><dt>變更前</dt><dd>{Object.entries(summary.before).map(([k,v]) => `${k}: ${v}`).join("、")}</dd></div><div><dt>變更後</dt><dd>{Object.entries(summary.after).map(([k,v]) => `${k}: ${v}`).join("、")}</dd></div><div><dt>目標版本</dt><dd>{pending.challenge.target_version}</dd></div></dl><ul>{summary.consequences.map((v) => <li key={v}>{v}</li>)}</ul><label>原因<input value={reason} onChange={(e) => setReason(e.target.value)} /></label><div className="dialog-actions"><button onClick={onClose}>取消</button><button className="danger-button" disabled={!reason.trim()} onClick={() => onConfirm(reason)}>{summary.confirmation_verb}</button></div></section></div>;
+function ConfirmationDialog({
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  pending: Pending;
+  onClose(): void;
+  onConfirm(reason: string): Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const summary = pending.challenge.impact_summary;
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section role="dialog" aria-modal="true" className="confirmation-dialog">
+        <h2>{summary.action_label}</h2>
+        <p>{summary.subject}</p>
+        <dl>
+          <div>
+            <dt>變更前</dt>
+            <dd>
+              {Object.entries(summary.before)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join("、")}
+            </dd>
+          </div>
+          <div>
+            <dt>變更後</dt>
+            <dd>
+              {Object.entries(summary.after)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join("、")}
+            </dd>
+          </div>
+          <div>
+            <dt>目標版本</dt>
+            <dd>{pending.challenge.target_version}</dd>
+          </div>
+        </dl>
+        <ul>
+          {summary.consequences.map((v) => (
+            <li key={v}>{v}</li>
+          ))}
+        </ul>
+        <label>
+          原因
+          <input value={reason} onChange={(e) => setReason(e.target.value)} />
+        </label>
+        <div className="dialog-actions">
+          <button onClick={onClose}>取消</button>
+          <button
+            className="danger-button"
+            disabled={!reason.trim()}
+            onClick={() => onConfirm(reason)}
+          >
+            {summary.confirmation_verb}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
-function AdminAccounts({ client, detailId, owner }: { client: AccessClient; detailId?: string; owner: boolean }) {
-  const [accounts, setAccounts] = useState<AccountSummary[]>([]); const [account, setAccount] = useState<AccountSummary | null>(null); const [pending, setPending] = useState<Pending | null>(null); const [error, setError] = useState("");
-  const [providerId, setProviderId] = useState(""); const [providerType, setProviderType] = useState(""); const [subject, setSubject] = useState(""); const [email, setEmail] = useState("");
-  const [oldProviderId,setOldProviderId]=useState(""); const [oldProviderType,setOldProviderType]=useState(""); const [oldSubject,setOldSubject]=useState("");
-  useEffect(() => { let active=true; (detailId ? client.getAccount(detailId).then(v=>active&&setAccount(v)) : client.listAccounts().then(v=>active&&setAccounts(v))).catch(()=>active&&setError("資源無法使用")); return()=>{active=false;setPending(null)}; }, [client,detailId]);
-  const preview = async (action: AccountAction, targetId: string, version: number, payload: Record<string, unknown>) => { setError(""); const challenge=await client.previewAccountAction(action,targetId,version,payload); setPending({challenge,action,targetId,payload}); };
-  const identity = { provider_id: providerId, provider_type: providerType, provider_subject: subject, email_fact: email };
-  const confirm = async (reason: string) => { if (!pending) return; const current=pending; setPending(null); try { if (current.action === "create_account") await client.createAccount(current.payload as typeof identity & {role:Role},current.challenge.challenge_token,reason); else await client.confirmAccountAction(current.action,current.challenge.target_version,current.payload,current.challenge.challenge_token,reason); } catch { setError("確認已失效，請重新預覽。"); } };
-  const identityFields = <div className="field-row"><label>Provider ID<input value={providerId} onChange={e=>setProviderId(e.target.value)} /></label><label>Provider type<input value={providerType} onChange={e=>setProviderType(e.target.value)} /></label><label>Provider subject<input value={subject} onChange={e=>setSubject(e.target.value)} /></label><label>Email fact<input value={email} onChange={e=>setEmail(e.target.value)} /></label><label>舊 Provider ID<input value={oldProviderId} onChange={e=>setOldProviderId(e.target.value)} /></label><label>舊 Provider type<input value={oldProviderType} onChange={e=>setOldProviderType(e.target.value)} /></label><label>舊 Provider subject<input value={oldSubject} onChange={e=>setOldSubject(e.target.value)} /></label></div>;
+function AdminAccounts({
+  client,
+  detailId,
+  owner,
+}: {
+  client: AccessClient;
+  detailId?: string;
+  owner: boolean;
+}) {
+  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [account, setAccount] = useState<AccountSummary | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [error, setError] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const [providerType, setProviderType] = useState("");
+  const [subject, setSubject] = useState("");
+  const [email, setEmail] = useState("");
+  const [oldProviderId, setOldProviderId] = useState("");
+  const [oldProviderType, setOldProviderType] = useState("");
+  const [oldSubject, setOldSubject] = useState("");
+  useEffect(() => {
+    let active = true;
+    (detailId
+      ? client.getAccount(detailId).then((v) => active && setAccount(v))
+      : client.listAccounts().then((v) => active && setAccounts(v))
+    ).catch(() => active && setError("資源無法使用"));
+    return () => {
+      active = false;
+      setPending(null);
+    };
+  }, [client, detailId]);
+  const preview = async (
+    action: AccountAction,
+    targetId: string,
+    version: number,
+    payload: Record<string, unknown>,
+  ) => {
+    setError("");
+    const challenge = await client.previewAccountAction(
+      action,
+      targetId,
+      version,
+      payload,
+    );
+    setPending({ challenge, action, targetId, payload });
+  };
+  const identity = {
+    provider_id: providerId,
+    provider_type: providerType,
+    provider_subject: subject,
+    email_fact: email,
+  };
+  const confirm = async (reason: string) => {
+    if (!pending) return;
+    const current = pending;
+    setPending(null);
+    try {
+      if (current.action === "create_account")
+        await client.createAccount(
+          current.payload as typeof identity & { role: Role },
+          current.challenge.challenge_token,
+          reason,
+        );
+      else
+        await client.confirmAccountAction(
+          current.action,
+          current.challenge.target_version,
+          current.payload,
+          current.challenge.challenge_token,
+          reason,
+        );
+    } catch {
+      setError("確認已失效，請重新預覽。");
+    }
+  };
+  const identityFields = (
+    <div className="field-row">
+      <label>
+        Provider ID
+        <input
+          value={providerId}
+          onChange={(e) => setProviderId(e.target.value)}
+        />
+      </label>
+      <label>
+        Provider type
+        <input
+          value={providerType}
+          onChange={(e) => setProviderType(e.target.value)}
+        />
+      </label>
+      <label>
+        Provider subject
+        <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+      </label>
+      <label>
+        Email fact
+        <input value={email} onChange={(e) => setEmail(e.target.value)} />
+      </label>
+      <label>
+        舊 Provider ID
+        <input
+          value={oldProviderId}
+          onChange={(e) => setOldProviderId(e.target.value)}
+        />
+      </label>
+      <label>
+        舊 Provider type
+        <input
+          value={oldProviderType}
+          onChange={(e) => setOldProviderType(e.target.value)}
+        />
+      </label>
+      <label>
+        舊 Provider subject
+        <input
+          value={oldSubject}
+          onChange={(e) => setOldSubject(e.target.value)}
+        />
+      </label>
+    </div>
+  );
   if (detailId && !account) return error ? <Unavailable /> : <p>載入中…</p>;
-  if (account) return <main className="access-page"><h1>{account.masked_identity}</h1><p>{account.role} · {account.status}</p>{error&&<p role="alert">{error}</p>}{owner && <section aria-label="Owner 帳號操作">{identityFields}<div className="dialog-actions"><button onClick={()=>preview("change_role",account.user_id,account.version,{role:"admin"})}>變更角色</button><button onClick={()=>preview("change_status",account.user_id,account.version,{status:"disabled"})}>停用帳號</button><button onClick={()=>preview("add_identity",account.user_id,account.version,identity)}>新增身分</button><button onClick={()=>preview("disable_identity",account.user_id,account.version,{provider_id:providerId,provider_type:providerType,provider_subject:subject})}>停用身分</button><button onClick={()=>preview("replace_identity",account.user_id,account.version,{old_provider_id:oldProviderId,old_provider_type:oldProviderType,old_provider_subject:oldSubject,...identity})}>替換身分</button></div></section>}{pending&&<ConfirmationDialog pending={pending} onClose={()=>setPending(null)} onConfirm={confirm}/>}</main>;
-  return <main className="access-page"><h1>帳號管理</h1>{error&&<p role="alert">{error}</p>}{owner&&<section><h2>建立帳號</h2>{identityFields}<button onClick={()=>preview("create_account","new_account",1,{role:"learner",...identity})}>預覽建立帳號</button></section>}<ul>{accounts.map(v=><li key={v.user_id}><a href={`/admin/accounts/${v.user_id}`}>{v.masked_identity}</a> · {v.role}</li>)}</ul>{pending&&<ConfirmationDialog pending={pending} onClose={()=>setPending(null)} onConfirm={confirm}/>}</main>;
+  if (account)
+    return (
+      <main className="access-page">
+        <h1>{account.masked_identity}</h1>
+        <p>
+          {account.role} · {account.status}
+        </p>
+        {error && <p role="alert">{error}</p>}
+        {owner && (
+          <section aria-label="Owner 帳號操作">
+            {identityFields}
+            <div className="dialog-actions">
+              <button
+                onClick={() =>
+                  preview("change_role", account.user_id, account.version, {
+                    role: "admin",
+                  })
+                }
+              >
+                變更角色
+              </button>
+              <button
+                onClick={() =>
+                  preview("change_status", account.user_id, account.version, {
+                    status: "disabled",
+                  })
+                }
+              >
+                停用帳號
+              </button>
+              <button
+                onClick={() =>
+                  preview(
+                    "add_identity",
+                    account.user_id,
+                    account.version,
+                    identity,
+                  )
+                }
+              >
+                新增身分
+              </button>
+              <button
+                onClick={() =>
+                  preview(
+                    "disable_identity",
+                    account.user_id,
+                    account.version,
+                    {
+                      provider_id: providerId,
+                      provider_type: providerType,
+                      provider_subject: subject,
+                    },
+                  )
+                }
+              >
+                停用身分
+              </button>
+              <button
+                onClick={() =>
+                  preview(
+                    "replace_identity",
+                    account.user_id,
+                    account.version,
+                    {
+                      old_provider_id: oldProviderId,
+                      old_provider_type: oldProviderType,
+                      old_provider_subject: oldSubject,
+                      ...identity,
+                    },
+                  )
+                }
+              >
+                替換身分
+              </button>
+            </div>
+          </section>
+        )}
+        {pending && (
+          <ConfirmationDialog
+            pending={pending}
+            onClose={() => setPending(null)}
+            onConfirm={confirm}
+          />
+        )}
+      </main>
+    );
+  return (
+    <main className="access-page">
+      <h1>帳號管理</h1>
+      {error && <p role="alert">{error}</p>}
+      {owner && (
+        <section>
+          <h2>建立帳號</h2>
+          {identityFields}
+          <button
+            onClick={() =>
+              preview("create_account", "new_account", 1, {
+                role: "learner",
+                ...identity,
+              })
+            }
+          >
+            預覽建立帳號
+          </button>
+        </section>
+      )}
+      <ul>
+        {accounts.map((v) => (
+          <li key={v.user_id}>
+            <a href={`/admin/accounts/${v.user_id}`}>{v.masked_identity}</a> ·{" "}
+            {v.role}
+          </li>
+        ))}
+      </ul>
+      {pending && (
+        <ConfirmationDialog
+          pending={pending}
+          onClose={() => setPending(null)}
+          onConfirm={confirm}
+        />
+      )}
+    </main>
+  );
 }
 
-export function AccessApp({ client=accessClient, workflow=workflowClient, theses=thesisClient, initialPath }: { client?:AccessClient; workflow?:WorkflowClient; theses?:ThesisClient; initialPath?:string }) {
-  const [profile,setProfile]=useState<SessionProfile|null>(null); const [denied,setDenied]=useState(false); const rawPath=initialPath??`${location.pathname}${location.search}`; const route=new URL(rawPath,"http://thesis-trace.local"); const path=route.pathname;
-  useEffect(()=>{let active=true;client.getSession().then(v=>active&&setProfile(v)).catch(()=>active&&setDenied(true));return()=>{active=false}},[client]);
-  if(denied)return <Unavailable/>; if(!profile)return <main className="access-page">載入工作階段…</main>;
-  const adminRoute=path.startsWith("/admin/accounts"); const actionRoute=path.startsWith("/actions"); const companyTradeRoute=/^\/companies\/[^/]+\/trades$/.test(path); const portfolioRoute=path==="/portfolio"||companyTradeRoute; const thesisRoute=/^\/companies\/[^/]+\/theses(?:\/[^/]+(?:\/(?:valuation|outcomes))?)?$/.test(path); const researchRoute=path==="/"||path.startsWith("/companies")||path.startsWith("/evidence");
-  const currentNav=path==="/profile"?"profile":adminRoute?"accounts":actionRoute?"actions":portfolioRoute?"portfolio":researchRoute?"research":"";
-  const companyId=path.startsWith("/companies/")?decodeURIComponent(path.split("/")[2]):undefined; const fromAction=route.searchParams.get("fromAction"); const returnQuery=route.searchParams.get("return"); const actionReturnHref=fromAction?`/actions/${encodeURIComponent(fromAction)}${returnQuery?`?return=${encodeURIComponent(returnQuery)}`:""}`:undefined; const sourceVersion=Number(route.searchParams.get("sourceVersion")); const actionSource=route.searchParams.get("sourceDomain")&&route.searchParams.get("sourceRecord")&&Number.isInteger(sourceVersion)?{domain:route.searchParams.get("sourceDomain")!,recordId:route.searchParams.get("sourceRecord")!,version:sourceVersion}:undefined;
-  const content=portfolioRoute?(profile.kind==="owner"?<PortfolioRoutes companyId={companyTradeRoute ? companyId : undefined}/>:<Unavailable/>):profile.kind==="admin"&&(researchRoute||actionRoute)?<Unavailable/>:actionRoute?<ActionInboxRoutes client={workflow} initialPath={initialPath}/>:adminRoute&&profile.kind==="learner"?<Unavailable/>:adminRoute?<AdminAccounts client={client} detailId={path.split("/")[3]} owner={profile.kind==="owner"}/>:path==="/profile"?<main className="access-page"><h1>{profile.kind[0].toUpperCase()+profile.kind.slice(1)} 個人資料</h1><p>{profile.display_name}</p></main>:thesisRoute&&companyId?<ThesisRoutes client={theses} companyId={companyId} initialPath={initialPath}/>:<EvidenceWorkspace canConfirmStage={profile.kind==="owner"} canRequestAnomaly={profile.kind==="owner"} canCreateActions={profile.kind==="owner"} workflow={workflow} initialCompanyId={companyId} actionReturnHref={actionReturnHref} actionSource={actionSource}/>;
-  return <div className="access-shell">{profile.kind==="owner"&&profile.is_recovery_session&&<aside className="recovery-banner" role="alert">緊急復原工作階段啟用中。{profile.recovery_task_url&&<a href={profile.recovery_task_url}>查看停用任務</a>}</aside>}<nav className="access-nav" aria-label="主要導覽"><a className="access-nav-link" aria-current={currentNav==="profile"?"page":undefined} href="/profile">個人資料</a>{profile.kind!=="learner"&&<a className="access-nav-link" aria-current={currentNav==="accounts"?"page":undefined} href="/admin/accounts">帳號管理</a>}{profile.kind!=="admin"&&<><a className="access-nav-link" aria-current={currentNav==="research"?"page":undefined} href="/">公司研究</a><a className="access-nav-link" aria-current={currentNav==="actions"?"page":undefined} href="/actions">Action Inbox</a></>}{profile.kind==="owner"&&<a className="access-nav-link" aria-current={currentNav==="portfolio"?"page":undefined} href="/portfolio">投資組合</a>}<button className="secondary-button" onClick={async()=>{await client.logout();setProfile(null);setDenied(true)}}>登出</button></nav>{content}</div>;
+export function AccessApp({
+  client = accessClient,
+  workflow = workflowClient,
+  theses = thesisClient,
+  initialPath,
+}: {
+  client?: AccessClient;
+  workflow?: WorkflowClient;
+  theses?: ThesisClient;
+  initialPath?: string;
+}) {
+  const [profile, setProfile] = useState<SessionProfile | null>(null);
+  const [denied, setDenied] = useState(false);
+  const rawPath = initialPath ?? `${location.pathname}${location.search}`;
+  const route = new URL(rawPath, "http://thesis-trace.local");
+  const path = route.pathname;
+  useEffect(() => {
+    let active = true;
+    client
+      .getSession()
+      .then((v) => active && setProfile(v))
+      .catch(() => active && setDenied(true));
+    return () => {
+      active = false;
+    };
+  }, [client]);
+  if (denied) return <Unavailable />;
+  if (!profile) return <main className="access-page">載入工作階段…</main>;
+  const adminRoute = path.startsWith("/admin/accounts");
+  const actionRoute = path.startsWith("/actions");
+  const companyTradeRoute = /^\/companies\/[^/]+\/trades$/.test(path);
+  const portfolioRoute = path === "/portfolio" || companyTradeRoute;
+  const recommendationRoute = /^\/companies\/[^/]+\/recommendations$/.test(
+    path,
+  );
+  const thesisRoute =
+    /^\/companies\/[^/]+\/theses(?:\/[^/]+(?:\/(?:valuation|outcomes))?)?$/.test(
+      path,
+    );
+  const researchRoute =
+    path === "/" ||
+    path.startsWith("/companies") ||
+    path.startsWith("/evidence");
+  const currentNav =
+    path === "/profile"
+      ? "profile"
+      : adminRoute
+        ? "accounts"
+        : actionRoute
+          ? "actions"
+          : portfolioRoute
+            ? "portfolio"
+            : researchRoute
+              ? "research"
+              : "";
+  const companyId = path.startsWith("/companies/")
+    ? decodeURIComponent(path.split("/")[2])
+    : undefined;
+  const fromAction = route.searchParams.get("fromAction");
+  const returnQuery = route.searchParams.get("return");
+  const actionReturnHref = fromAction
+    ? `/actions/${encodeURIComponent(fromAction)}${returnQuery ? `?return=${encodeURIComponent(returnQuery)}` : ""}`
+    : undefined;
+  const sourceVersion = Number(route.searchParams.get("sourceVersion"));
+  const actionSource =
+    route.searchParams.get("sourceDomain") &&
+    route.searchParams.get("sourceRecord") &&
+    Number.isInteger(sourceVersion)
+      ? {
+          domain: route.searchParams.get("sourceDomain")!,
+          recordId: route.searchParams.get("sourceRecord")!,
+          version: sourceVersion,
+        }
+      : undefined;
+  const content =
+    recommendationRoute && companyId ? (
+      profile.kind === "owner" ? (
+        <RecommendationWorkspace
+          companyId={companyId}
+          initialPath={initialPath}
+        />
+      ) : (
+        <Unavailable />
+      )
+    ) : portfolioRoute ? (
+      profile.kind === "owner" ? (
+        <PortfolioRoutes
+          companyId={companyTradeRoute ? companyId : undefined}
+        />
+      ) : (
+        <Unavailable />
+      )
+    ) : profile.kind === "admin" && (researchRoute || actionRoute) ? (
+      <Unavailable />
+    ) : actionRoute ? (
+      <ActionInboxRoutes client={workflow} initialPath={initialPath} />
+    ) : adminRoute && profile.kind === "learner" ? (
+      <Unavailable />
+    ) : adminRoute ? (
+      <AdminAccounts
+        client={client}
+        detailId={path.split("/")[3]}
+        owner={profile.kind === "owner"}
+      />
+    ) : path === "/profile" ? (
+      <main className="access-page">
+        <h1>
+          {profile.kind[0].toUpperCase() + profile.kind.slice(1)} 個人資料
+        </h1>
+        <p>{profile.display_name}</p>
+      </main>
+    ) : thesisRoute && companyId ? (
+      <ThesisRoutes
+        client={theses}
+        companyId={companyId}
+        initialPath={initialPath}
+      />
+    ) : (
+      <EvidenceWorkspace
+        canConfirmStage={profile.kind === "owner"}
+        canRequestAnomaly={profile.kind === "owner"}
+        canCreateActions={profile.kind === "owner"}
+        workflow={workflow}
+        initialCompanyId={companyId}
+        actionReturnHref={actionReturnHref}
+        actionSource={actionSource}
+      />
+    );
+  return (
+    <div className="access-shell">
+      {profile.kind === "owner" && profile.is_recovery_session && (
+        <aside className="recovery-banner" role="alert">
+          緊急復原工作階段啟用中。
+          {profile.recovery_task_url && (
+            <a href={profile.recovery_task_url}>查看停用任務</a>
+          )}
+        </aside>
+      )}
+      <nav className="access-nav" aria-label="主要導覽">
+        {profile.kind === "owner" && companyId && (
+          <a
+            className="access-nav-link"
+            aria-current={recommendationRoute ? "page" : undefined}
+            href={`/companies/${encodeURIComponent(companyId)}/recommendations`}
+          >
+            建議與決策
+          </a>
+        )}
+        <a
+          className="access-nav-link"
+          aria-current={currentNav === "profile" ? "page" : undefined}
+          href="/profile"
+        >
+          個人資料
+        </a>
+        {profile.kind !== "learner" && (
+          <a
+            className="access-nav-link"
+            aria-current={currentNav === "accounts" ? "page" : undefined}
+            href="/admin/accounts"
+          >
+            帳號管理
+          </a>
+        )}
+        {profile.kind !== "admin" && (
+          <>
+            <a
+              className="access-nav-link"
+              aria-current={currentNav === "research" ? "page" : undefined}
+              href="/"
+            >
+              公司研究
+            </a>
+            <a
+              className="access-nav-link"
+              aria-current={currentNav === "actions" ? "page" : undefined}
+              href="/actions"
+            >
+              Action Inbox
+            </a>
+          </>
+        )}
+        {profile.kind === "owner" && (
+          <a
+            className="access-nav-link"
+            aria-current={currentNav === "portfolio" ? "page" : undefined}
+            href="/portfolio"
+          >
+            投資組合
+          </a>
+        )}
+        <button
+          className="secondary-button"
+          onClick={async () => {
+            await client.logout();
+            setProfile(null);
+            setDenied(true);
+          }}
+        >
+          登出
+        </button>
+      </nav>
+      {content}
+    </div>
+  );
 }

@@ -25,6 +25,10 @@ class ActionItemStorePort(Protocol):
 
     def get(self, actor_id: str, item_id: str) -> ActionItem: ...
 
+    def get_by_source(
+        self, actor_id: str, source_domain: str, record_id: str, source_version: int
+    ) -> ActionItem | None: ...
+
     def query(self, query: ActionInboxQuery) -> ActionInboxPage: ...
 
     def transition(

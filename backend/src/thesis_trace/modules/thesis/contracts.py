@@ -116,6 +116,8 @@ class ValuationDraft:
     material_event_time: datetime | None = None
     peer_members: tuple[PeerValuationMember, ...] = ()
     policy_version: str = "valuation-draft-v1"
+    basis_date: date | None = None
+    horizon_months: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

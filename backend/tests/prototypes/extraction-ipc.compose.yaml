@@ -1,0 +1,66 @@
+# THROWAWAY: unique project only; never merge into the product Compose file.
+x-isolated: &isolated
+  image: sha256:9bc91c201c9a44439f9ab887f84fbcd191a20d180e76b758bd79ee7cf6e923ad
+  pull_policy: never
+  user: "65532:65532"
+  init: true
+  read_only: true
+  network_mode: none
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 128m
+  memswap_limit: 128m
+  pids_limit: 16
+  cpus: 1
+  logging:
+    driver: none
+  stop_grace_period: 2s
+  entrypoint: [python, -I, -B, /ipc-probe.py]
+
+services:
+  parser:
+    <<: *isolated
+    command: [--serve, --recycle, "${TT_IPC_RECYCLE:-no}"]
+    restart: always
+    tmpfs: ["/tmp:size=8388608,uid=65532,gid=65532,mode=0700"]
+    volumes:
+      - type: bind
+        source: ${TT_IPC_ROOT:?required}/extraction_ipc_probe.py
+        target: /ipc-probe.py
+        read_only: true
+      - type: bind
+        source: ${TT_IPC_ROOT:?required}/source_extraction_probe.py
+        target: /probe.py
+        read_only: true
+      - type: bind
+        source: ${TT_IPC_LIBRARY:?required}/pypdf
+        target: /library/pypdf
+        read_only: true
+      - type: volume
+        source: ipc
+        target: /ipc
+        volume:
+          nocopy: true
+  client:
+    <<: *isolated
+    command: [--idle]
+    restart: "no"
+    volumes:
+      - type: bind
+        source: ${TT_IPC_ROOT:?required}/extraction_ipc_probe.py
+        target: /ipc-probe.py
+        read_only: true
+      - type: volume
+        source: ipc
+        target: /ipc
+        read_only: true
+        volume:
+          nocopy: true
+
+volumes:
+  ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1048576,uid=65532,gid=65532,mode=0770

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Protocol
 
 from thesis_trace.modules.research.evidence_stage.contracts import (
     ConfirmDimensionFactsCommand,
@@ -20,7 +22,9 @@ from thesis_trace.modules.research.anomaly_assessment.contracts import (
     RequestAssessmentCommand,
     SourceCharacteristicSnapshot,
 )
-from thesis_trace.modules.research.anomaly_assessment.service import AnomalyAssessmentService
+from thesis_trace.modules.research.anomaly_assessment.service import (
+    AnomalyAssessmentService,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +42,69 @@ class ResearchActorContext:
     may_read_evidence_stage: bool
     may_request_anomaly_assessment: bool = False
     may_read_anomaly_assessment: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ResearchRecommendationSource:
+    evidence: ResearchRecordReference
+    snapshot_id: str
+    canonical_url: str
+    publisher: str
+    excerpt: str | None
+    source_category: str
+    lineage: str | None
+    published_at: datetime | None
+    observed_at: datetime | None
+    retrieved_at: datetime
+    stage_version: int | None
+    stage: str | None
+    stage_source_id: str | None
+    stage_digest: str | None
+
+
+class ResearchRecommendationQueryPort(Protocol):
+    def get_recommendation_source(
+        self, evidence_id: str
+    ) -> ResearchRecommendationSource | None: ...
+
+    def get_recommendation_fact(
+        self, evidence_id: str, fact_id: str
+    ) -> tuple[ResearchRecordReference, str] | None: ...
+
+
+class ResearchRecommendationFacade:
+    """Research-owned provenance read; L0 maps the result into its other children."""
+
+    def __init__(self, queries: ResearchRecommendationQueryPort) -> None:
+        self._queries = queries
+
+    def get_source(
+        self, actor: ResearchActorContext, evidence_id: str
+    ) -> ResearchRecommendationSource:
+        if not actor.actor_id or actor.may_read_evidence_stage is not True:
+            raise PermissionError("resource_unavailable")
+        source = self._queries.get_recommendation_source(evidence_id)
+        if (
+            source is None
+            or source.evidence.record_type != "evidence"
+            or source.evidence.record_id != evidence_id
+        ):
+            raise LookupError("resource_unavailable")
+        return source
+
+    def get_fact_binding(
+        self, actor: ResearchActorContext, evidence_id: str, fact_id: str
+    ) -> tuple[ResearchRecordReference, str]:
+        if not actor.actor_id or actor.may_read_evidence_stage is not True:
+            raise PermissionError("resource_unavailable")
+        result = self._queries.get_recommendation_fact(evidence_id, fact_id)
+        if (
+            result is None
+            or result[0].record_type != "valuation_fact"
+            or result[0].record_id != fact_id
+        ):
+            raise LookupError("resource_unavailable")
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,7 +357,9 @@ class ResearchAnomalyFacade:
                 anomaly_class=record.trace.anomaly_class.value,
                 source_tiers=tuple(item.value for item in record.trace.source_tiers),
                 clue_score=record.trace.clue_score,
-                clue_route=None if record.trace.clue_route is None else record.trace.clue_route.value,
+                clue_route=None
+                if record.trace.clue_route is None
+                else record.trace.clue_route.value,
                 gates=tuple(
                     ResearchAnomalyGate(item.gate, item.passed, item.code)
                     for item in record.trace.gates
@@ -330,7 +399,9 @@ class ResearchAnomalyFacade:
             )
         )
 
-    def get(self, actor: ResearchActorContext, assessment_id: str) -> ResearchAnomalyResult:
+    def get(
+        self, actor: ResearchActorContext, assessment_id: str
+    ) -> ResearchAnomalyResult:
         return self._result(
             self._service.get(
                 assessment_id=assessment_id,

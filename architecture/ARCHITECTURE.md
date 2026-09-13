@@ -26,7 +26,7 @@ flowchart TD
     n_anomaly_assessment["anomaly_assessment (L2)<br/>管理來源分類、線索評分與 anomaly 閘門"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
-    n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
+    n_recommendation_domain["recommendation_domain (L1)<br/>管理不可變建議、Owner 決策與資料綁定逾期"]
     n_workflow_domain["workflow_domain (L1)<br/>管理人工行動收件匣"]
     n_notification_domain["notification_domain (L1)<br/>管理通知分類與安全內容"]
     n_identity_registry["identity_registry (L2)<br/>管理外部身分與內部帳號映射"]
@@ -56,7 +56,7 @@ flowchart TD
 
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **子功能:** `access_domain`, `research_domain`, `thesis_domain`, `portfolio_domain`, `recommendation_domain`, `workflow_domain`, `notification_domain`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox), [`personal_thesis_lifecycle`](generated/thesis_trace_application.md#personal_thesis_lifecycle), [`owner_portfolio_management`](generated/thesis_trace_application.md#owner_portfolio_management)
+- **相關 Flows:** [`owner_recommendation_analysis`](generated/thesis_trace_application.md#owner_recommendation_analysis), [`owner_recommendation_decision`](generated/thesis_trace_application.md#owner_recommendation_decision), [`recommendation_expiry_reconciliation`](generated/thesis_trace_application.md#recommendation_expiry_reconciliation), [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox), [`personal_thesis_lifecycle`](generated/thesis_trace_application.md#personal_thesis_lifecycle), [`owner_portfolio_management`](generated/thesis_trace_application.md#owner_portfolio_management)
 - **保護理由:** Sibling domains communicate only through this parent; Domain state remains child-owned.; Reject unauthenticated or unauthorized commands → Reject unauthenticated or unauthorized commands; Propagate child admission failures. → Propagate child admission failures.
 
 ### `backend_composition`
@@ -70,7 +70,7 @@ flowchart TD
 
 - **目的:** Own authenticated actor identity and application authorization decisions.
 - **子功能:** `identity_registry`, `session_management`, `account_administration`, `confirmation_challenge`
-- **相關 Flows:** [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox), [`personal_thesis_lifecycle`](generated/thesis_trace_application.md#personal_thesis_lifecycle), [`owner_portfolio_management`](generated/thesis_trace_application.md#owner_portfolio_management)
+- **相關 Flows:** [`owner_recommendation_analysis`](generated/thesis_trace_application.md#owner_recommendation_analysis), [`owner_recommendation_decision`](generated/thesis_trace_application.md#owner_recommendation_decision), [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap), [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change), [`role_filtered_deep_link`](generated/thesis_trace_application.md#role_filtered_deep_link), [`access_session_revocation`](generated/thesis_trace_application.md#access_session_revocation), [`owner_evidence_intake`](generated/thesis_trace_application.md#owner_evidence_intake), [`owner_confirmed_evidence_stage`](generated/thesis_trace_application.md#owner_confirmed_evidence_stage), [`owner_anomaly_assessment`](generated/thesis_trace_application.md#owner_anomaly_assessment), [`owner_anomaly_review_action`](generated/thesis_trace_application.md#owner_anomaly_review_action), [`owner_action_inbox`](generated/thesis_trace_application.md#owner_action_inbox), [`personal_thesis_lifecycle`](generated/thesis_trace_application.md#personal_thesis_lifecycle), [`owner_portfolio_management`](generated/thesis_trace_application.md#owner_portfolio_management)
 - **保護理由:** Provider identity never collapses by email alone; JWT subject and provider discriminator resolve through a preapproved mapping.; Unknown provider, identity, session, role, or challenge fails closed without existence disclosure.; Authorization fails closed.; Reject absent → Reject absent; expired → expired; or unauthorized identities. → or unauthorized identities.
 
 ### `research_domain`
@@ -120,14 +120,14 @@ flowchart TD
 - **目的:** Own versioned Cost Profiles, investable cash, canonical Trades, bucket allocations, holdings and deterministic exposure snapshots.
 - **子功能:** 無
 - **相關 Flows:** [`owner_portfolio_management`](generated/thesis_trace_application.md#owner_portfolio_management)
-- **保護理由:** Risk aggregates all buckets for a security.; Reject incomplete or over-allocated trades. → Reject incomplete or over-allocated trades.
+- **保護理由:** Risk aggregates all buckets for a security.; DCA sizing uses explicit buy price and CostProfileSnapshot; cash includes buy fees and exposures use official close, with exact cap comparisons before presentation rounding.; Reject incomplete or over-allocated trades. → Reject incomplete or over-allocated trades.
 
 ### `recommendation_domain`
 
-- **目的:** Own immutable recommendations
+- **目的:** Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions under accepted ADR-0009; no trading authority.
 - **子功能:** 無
-- **相關 Flows:** 無
-- **保護理由:** AI cannot override deterministic policy.; Abstain when validation or risk inputs fail. → Abstain when validation or risk inputs fail.
+- **相關 Flows:** [`owner_recommendation_analysis`](generated/thesis_trace_application.md#owner_recommendation_analysis), [`recommendation_expiry_reconciliation`](generated/thesis_trace_application.md#recommendation_expiry_reconciliation)
+- **保護理由:** DEC-105 expires only unfinalized recommendations; accepted/rejected history is immutable.; AI cannot override valuation, risk, Owner authority or formal-Hard activation.; Cross-domain state is mapped by L0 and atomically persisted by owner adapters; no sibling access.; ADR-0009 and ALG-0032/0033/0034 accepted by project owner on 2026-09-05; Wave 7 remains planned until integration and validation complete.
 
 ### `workflow_domain`
 
@@ -180,12 +180,15 @@ flowchart TD
 - [`research_domain`](generated/research_domain.md) — Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts.
 - [`thesis_domain`](generated/thesis_domain.md) — Own personal Thesis lifecycle cycles, valuation drafts and immutable publications, invalidation conditions, Evidence links, Outcomes and Reflections.
 - [`portfolio_domain`](generated/portfolio_domain.md) — Own versioned Cost Profiles, investable cash, canonical Trades, bucket allocations, holdings and deterministic exposure snapshots.
-- [`recommendation_domain`](generated/recommendation_domain.md) — Own immutable recommendations
+- [`recommendation_domain`](generated/recommendation_domain.md) — Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions under accepted ADR-0009; no trading authority.
 - [`workflow_domain`](generated/workflow_domain.md) — Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries.
 - [`notification_domain`](generated/notification_domain.md) — Own notification classification
 
 ## 端到端 Flows
 
+- [`owner_recommendation_analysis`](generated/thesis_trace_application.md#owner_recommendation_analysis) — Planned ADR-0009 source-bound investment analysis and immutable Recommendation/Workflow publication; existing anomaly contracts stay separate.
+- [`owner_recommendation_decision`](generated/thesis_trace_application.md#owner_recommendation_decision) — Planned ADR-0009 atomic Owner Decision, exact confirmation and Workflow resolution under DEC-105.
+- [`recommendation_expiry_reconciliation`](generated/thesis_trace_application.md#recommendation_expiry_reconciliation) — Planned bounded expiry persistence; command safety independently rechecks validity even when the background worker is delayed.
 - [`production_database_migration`](generated/backend_composition.md#production_database_migration) — Apply forward-only schema changes and least-privilege runtime grants before API or collector startup.
 - [`access_session_bootstrap`](generated/thesis_trace_application.md#access_session_bootstrap) — Verify full Cloudflare identity, resolve a preapproved user, establish a bounded session, and return a role-safe profile.
 - [`confirmed_account_change`](generated/thesis_trace_application.md#confirmed_account_change) — Preview and atomically confirm one consequential identity, role, or account lifecycle change.
@@ -215,7 +218,7 @@ flowchart TD
     n_anomaly_assessment["anomaly_assessment (L2)<br/>管理來源分類、線索評分與 anomaly 閘門"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
-    n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
+    n_recommendation_domain["recommendation_domain (L1)<br/>管理不可變建議、Owner 決策與資料綁定逾期"]
     n_workflow_domain["workflow_domain (L1)<br/>管理人工行動收件匣"]
     n_notification_domain["notification_domain (L1)<br/>管理通知分類與安全內容"]
     n_fastapi_entrypoint["fastapi_entrypoint (L3+)<br/>轉換 HTTP 與應用契約"]
@@ -241,6 +244,8 @@ flowchart TD
     n_react_thesis_adapter["react_thesis_adapter (L3+)<br/>呈現個人 Thesis、結果與反思"]
     n_react_portfolio_adapter["react_portfolio_adapter (L3+)<br/>呈現投資組合與交易確認"]
     n_postgres_migration_entrypoint["postgres_migration_entrypoint (L3+)<br/>以獨立資料庫擁有者執行單次遷移"]
+    n_postgres_recommendation_adapter["postgres_recommendation_adapter (L3+)<br/>保存建議、決策與具租約的分析工作"]
+    n_react_recommendation_adapter["react_recommendation_adapter (L3+)<br/>呈現建議、決策歷史與失效處理"]
     n_thesis_trace_application -.->|depends| n_access_domain
     n_thesis_trace_application -.->|depends| n_research_domain
     n_thesis_trace_application -.->|depends| n_thesis_domain
@@ -248,6 +253,8 @@ flowchart TD
     n_thesis_trace_application -.->|depends| n_recommendation_domain
     n_thesis_trace_application -.->|depends| n_workflow_domain
     n_thesis_trace_application -.->|depends| n_notification_domain
+    n_backend_composition -.->|depends| n_recommendation_domain
+    n_backend_composition -.->|depends| n_postgres_recommendation_adapter
     n_backend_composition -.->|depends| n_thesis_trace_application
     n_backend_composition -.->|depends| n_fastapi_entrypoint
     n_backend_composition -.->|depends| n_access_domain
@@ -294,11 +301,14 @@ flowchart TD
     n_postgres_thesis_adapter -.->|depends| n_postgres_database_support
     n_postgres_portfolio_adapter -.->|depends| n_portfolio_domain
     n_postgres_portfolio_adapter -.->|depends| n_postgres_database_support
+    n_postgres_atomic_adapter -.->|depends| n_postgres_recommendation_adapter
+    n_postgres_atomic_adapter -.->|depends| n_postgres_workflow_adapter
     n_postgres_atomic_adapter -.->|depends| n_thesis_trace_application
     n_postgres_atomic_adapter -.->|depends| n_postgres_access_adapter
     n_postgres_atomic_adapter -.->|depends| n_postgres_research_adapter
     n_postgres_atomic_adapter -.->|depends| n_postgres_thesis_adapter
     n_postgres_atomic_adapter -.->|depends| n_postgres_portfolio_adapter
+    n_postgres_research_adapter -.->|depends| n_research_domain
     n_postgres_research_adapter -.->|depends| n_postgres_database_support
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
@@ -317,6 +327,7 @@ flowchart TD
     n_postgres_access_adapter -.->|depends| n_confirmation_challenge
     n_postgres_access_adapter -.->|depends| n_access_domain
     n_postgres_access_adapter -.->|depends| n_postgres_database_support
+    n_react_access_adapter -.->|depends| n_react_recommendation_adapter
     n_react_access_adapter -.->|depends| n_react_workflow_adapter
     n_react_access_adapter -.->|depends| n_react_thesis_adapter
     n_react_access_adapter -.->|depends| n_react_portfolio_adapter
@@ -326,17 +337,56 @@ flowchart TD
     n_postgres_migration_entrypoint -.->|depends| n_postgres_thesis_adapter
     n_postgres_migration_entrypoint -.->|depends| n_postgres_portfolio_adapter
     n_postgres_migration_entrypoint -.->|depends| n_postgres_database_support
+    n_postgres_recommendation_adapter -.->|depends| n_recommendation_domain
+    n_postgres_recommendation_adapter -.->|depends| n_postgres_database_support
 ```
 
 ## Type Catalog
 
+- `recommendationactor` — `recommendation_domain` / `domain-value` / `module-public`
+- `boundrecommendationinput` — `recommendation_domain` / `domain-value` / `module-public`
+- `recommendationsource` — `recommendation_domain` / `domain-value` / `module-public`
+- `recommendationinputsnapshot` — `recommendation_domain` / `domain-value` / `module-public`
+- `recommendationcandidate` — `recommendation_domain` / `domain-value` / `module-public`
+- `recommendationrecord` — `recommendation_domain` / `domain-value` / `module-public`
+- `ownerdecision` — `recommendation_domain` / `domain-value` / `module-public`
+- `recommendationjob` — `recommendation_domain` / `domain-value` / `module-public`
+- `recommendationstoreport` — `recommendation_domain` / `port` / `module-public`
+- `recommendationservice` — `recommendation_domain` / `descriptor` / `module-public`
+- `recommendationflow` — `thesis_trace_application` / `composition-mapping` / `module-public`
+- `recommendationtransactionport` — `thesis_trace_application` / `port` / `module-public`
+- `recommendationview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationfieldview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationsourceview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationclaimview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationdecisionhistoryview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationriskrow` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationrequestview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationrequestpage` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationdetailview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `recommendationadmissionbody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `recommendationdecisionbody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `recommendationconfirmbody` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `recommendationclient` — `react_recommendation_adapter` / `port` / `private`
+- `recommendationdecisioncommand` — `thesis_trace_application` / `command` / `module-public`
+- `recommendationdecisionpreview` — `thesis_trace_application` / `domain-value` / `module-public`
+- `accessconfirmationservice` — `access_domain` / `composition-mapping` / `module-public`
+- `recommendationadmissioncommand` — `thesis_trace_application` / `command` / `module-public`
+- `recommendationpublicationcommand` — `thesis_trace_application` / `command` / `module-public`
+- `investmentanalysisrequest` — `thesis_trace_application` / `domain-value` / `module-public`
+- `portfoliorecommendationsnapshot` — `portfolio_domain` / `domain-value` / `module-public`
+- `postgresrecommendationstore` — `postgres_recommendation_adapter` / `adapter-binding` / `private`
 - `postgresportfoliosecuritycontext` — `postgres_portfolio_adapter` / `adapter-binding` / `private`
+- `postgresrecommendationsecuritycontext` — `postgres_recommendation_adapter` / `adapter-binding` / `private`
 - `postgresportfolioconnection` — `postgres_portfolio_adapter` / `adapter-binding` / `private`
 - `postgresthesissecuritycontext` — `postgres_thesis_adapter` / `adapter-binding` / `private`
 - `postgresthesisconnection` — `postgres_thesis_adapter` / `adapter-binding` / `private`
 - `postgresresearchtransactionconnection` — `postgres_research_adapter` / `adapter-binding` / `private`
 - `impactsummaryvalue` — `react_portfolio_adapter` / `wire-representation` / `private`
 - `researchrecordreference` — `research_domain` / `composition-mapping` / `module-public`
+- `researchrecommendationsource` — `research_domain` / `domain-value` / `module-public`
+- `researchrecommendationqueryport` — `research_domain` / `port` / `module-public`
+- `researchrecommendationfacade` — `research_domain` / `composition-mapping` / `module-public`
 - `thesisstatus` — `thesis_domain` / `policy` / `module-public`
 - `thesisactorcontext` — `thesis_domain` / `domain-value` / `module-public`
 - `thesisresearchreference` — `thesis_domain` / `composition-mapping` / `module-public`
@@ -371,6 +421,7 @@ flowchart TD
 - `thesisreflectioncompletebody` — `fastapi_entrypoint` / `wire-representation` / `private`
 - `thesisresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
 - `thesistransitionpreviewresponse` — `fastapi_entrypoint` / `wire-representation` / `private`
+- `postgresrecommendationtransaction` — `postgres_atomic_adapter` / `adapter-binding` / `module-public`
 - `postgresconfirmedthesistransition` — `postgres_atomic_adapter` / `adapter-binding` / `module-public`
 - `postgresthesisstore` — `postgres_thesis_adapter` / `adapter-binding` / `module-public`
 - `thesisclient` — `react_thesis_adapter` / `port` / `private`
@@ -643,6 +694,11 @@ flowchart TD
 
 ## Cross-module Mapping
 
+- `owner-to-recommendation` / `thesis_trace_application` / `access_domain` to `recommendation_domain`
+- `research-to-recommendation` / `thesis_trace_application` / `research_domain` to `recommendation_domain`
+- `thesis-to-recommendation` / `thesis_trace_application` / `thesis_domain` to `recommendation_domain`
+- `portfolio-to-recommendation` / `thesis_trace_application` / `portfolio_domain` to `recommendation_domain`
+- `recommendation-to-workflow` / `thesis_trace_application` / `recommendation_domain` to `workflow_domain`
 - `cloudflare-wire-to-provider-identity` / `access_domain` / `access_domain` to `identity_registry`
 - `principal-to-session-profile` / `access_domain` / `identity_registry` to `session_management`
 - `session-to-rls-context` / `access_domain` / `access_domain` to `session_management`

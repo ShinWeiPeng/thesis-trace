@@ -47,6 +47,9 @@
           "backend/src/thesis_trace/adapters/postgres_atomic/adapter.py",
           "backend/src/thesis_trace/adapters/postgres_portfolio/__init__.py",
           "backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py",
+          "backend/src/thesis_trace/adapters/postgres_portfolio/recommendation_snapshots.py",
+          "backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py",
+          "backend/src/thesis_trace/adapters/postgres_recommendation/mapping.py",
           "backend/src/thesis_trace/adapters/postgres_thesis/__init__.py",
           "backend/src/thesis_trace/adapters/postgres_thesis/adapter.py",
           "backend/src/thesis_trace/adapters/postgres_workflow/__init__.py",
@@ -95,6 +98,8 @@
           "backend/src/thesis_trace/modules/portfolio/service.py",
           "backend/src/thesis_trace/modules/portfolio/trades.py",
           "backend/src/thesis_trace/modules/recommendation/__init__.py",
+          "backend/src/thesis_trace/modules/recommendation/contracts.py",
+          "backend/src/thesis_trace/modules/recommendation/ports.py",
           "backend/src/thesis_trace/modules/recommendation/service.py",
           "backend/src/thesis_trace/modules/research/__init__.py",
           "backend/src/thesis_trace/modules/research/anomaly_assessment/__init__.py",
@@ -127,10 +132,23 @@
           "backend/src/thesis_trace/platform/postgres.py",
           "backend/src/thesis_trace/platform/runtime.py",
           "backend/src/thesis_trace/platform/source_fetch.py",
+          "infra/postgres/alembic/env.py",
+          "infra/postgres/alembic/versions/0015_normalized_thesis_portfolio.py",
+          "infra/postgres/alembic/versions/0016_recommendation_workflow.py",
+          "infra/postgres/alembic/versions/0017_valuation_basis.py",
+          "infra/postgres/alembic/versions/0018_recommendation_risk.py",
+          "infra/postgres/alembic/versions/0019_recommendation_records.py",
+          "infra/postgres/alembic/versions/0020_recommendation_jobs.py",
+          "infra/postgres/alembic/versions/0021_recommendation_post_risk.py",
+          "infra/postgres/alembic/versions/0022_recommendation_context.py",
+          "infra/postgres/alembic/versions/0023_recommendation_owner_lock.py",
+          "infra/postgres/alembic/versions/0024_recommendation_expiry_cursor.py",
+          "infra/postgres/alembic/versions/0025_recommendation_decision_trace.py",
+          "infra/postgres/alembic/versions/0026_recommendation_request_page.py",
           "infra/postgres/run-production-migrations.py"
         ],
         "mode": "python-ast",
-        "type_count": 298
+        "type_count": 335
       },
       "typescript": {
         "analyzed_files": [
@@ -138,6 +156,9 @@
           "frontend/src/access/contracts.ts",
           "frontend/src/access/routes.test.tsx",
           "frontend/src/access/routes.tsx",
+          "frontend/src/features/recommendations/RecommendationWorkspace.test.tsx",
+          "frontend/src/features/recommendations/RecommendationWorkspace.tsx",
+          "frontend/src/features/recommendations/client.ts",
           "frontend/src/portfolio/client.ts",
           "frontend/src/portfolio/routes.test.tsx",
           "frontend/src/portfolio/routes.tsx",
@@ -149,7 +170,7 @@
           "frontend/src/workflow/routes.tsx"
         ],
         "mode": "typescript-compiler-api",
-        "type_count": 9
+        "type_count": 10
       }
     },
     "diagnostics": [

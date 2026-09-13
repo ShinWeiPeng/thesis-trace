@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Protocol
 
@@ -31,10 +32,30 @@ class FileSecretProvider:
 
 def required_setting(name: str) -> str:
     file_name = os.environ.get(f"{name}_FILE")
-    value = Path(file_name).read_text(encoding="utf-8").strip() if file_name else os.environ.get(name, "").strip()
+    value = (
+        Path(file_name).read_text(encoding="utf-8").strip()
+        if file_name
+        else os.environ.get(name, "").strip()
+    )
     if not value:
         raise RuntimeError(f"required setting is missing: {name}")
     return value
+
+
+def minimum_return_configuration() -> tuple[Decimal | None, str]:
+    """Resolve the explicit value/version pair without enabling a default policy."""
+    try:
+        raw = required_setting("THESIS_TRACE_MINIMUM_ANNUALIZED_RETURN")
+        version = required_setting("THESIS_TRACE_MINIMUM_RETURN_POLICY_VERSION")
+    except (RuntimeError, OSError, UnicodeError):
+        return None, "unconfigured"
+    try:
+        value = Decimal(raw)
+    except InvalidOperation:
+        return None, "invalid"
+    if not value.is_finite():
+        return None, "invalid"
+    return value, version
 
 
 def required_secret_provider(name: str) -> SecretProvider:
