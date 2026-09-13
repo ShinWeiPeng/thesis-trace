@@ -1,34 +1,36 @@
 # ALG-0012: DCA multiplier selection
 ## Metadata
-- Status: proposed
-- Owner module: portfolio
+- Status: accepted
+- Owner module: portfolio_domain
 - Product feature: Risk-constrained DCA sizing
-- Flow IDs: recommendation-publication-flow
-- Related ADRs: none
-- Source paths: planned portfolio risk policy
-- Test and benchmark paths: planned portfolio risk tests
+- Flow IDs: owner_portfolio_management, owner_trade_confirmation
+- Related ADRs: ADR-0008
+- Source paths: planned `backend/src/thesis_trace/modules/portfolio/policy.py`
+- Test and benchmark paths: planned `backend/tests/test_portfolio_policy.py`
 - Supersedes: none
 ## Problem and observable success
-Choose the highest permitted DCA multiplier that fits cash and exposure caps.
+Select the highest allowed multiplier fitting cash and every cap. This slice returns feasibility only; it does not publish Recommendation or trade.
 ## Inputs, outputs, units, ranges, and data-quality assumptions
-Input is base amount, immutable portfolio snapshot and raw suggestion; output is one of 1.5x,1x,0.5x,0x with trace.
+Inputs are positive Decimal base amount, raw suggestion ceiling, immutable Portfolio snapshot and policy versions. Output is `1.5x|1x|0.5x|0x` plus traces/reasons.
 ## Constraints and quantitative acceptance thresholds
-Never exceed investable cash, 10% security or 30% industry/theme caps; existing breach forces 0x for added buys.
+Never exceed cash, 10% security or 30% class/theme caps. Any current breach forces `0x` for added buys. Equality is feasible.
 ## Candidate methods and comparative evidence
-Candidates: continuous optimization; ordered discrete feasibility. SPEC selects discrete search for deterministic explainability.
+Continuous optimization adds arbitrary rounding. Ordered discrete feasibility is required and deterministic.
 ## Selected method and reasons for rejecting alternatives
-Test `[1.5,1,0.5,0]` in descending order and return the first fully feasible candidate.
+Test `[1.5,1,0.5,0]` descending, skip values above the raw ceiling, and return the first fully feasible candidate.
 ## Exact behavior, formula or pseudocode, boundaries, and tie-breaking
-For each multiplier calculate transaction costs and ALG-0011 post-trade exposures. Feasible means outflow<=cash and all exposures<=caps. Missing inputs or existing cap breach returns 0x. Equality is feasible.
+For each candidate compute costs, reject outflow above cash, run ALG-0011 and require every exposure `<=` cap. `0x` is fail closed. Candidate order is the only tie-break.
 ## Parameters, calibration, versioning, and compatibility
-Multiplier set, caps and cost/exposure policy versions bind output.
+Bind `dca-selection-v1`, multiplier set/order, caps, Cost Profile, exposure policy and snapshot versions.
 ## Time and space complexity and resource budgets
-O(4*(holdings+memberships)); bounded.
+At most four `O(holdings + memberships)` evaluations.
 ## Errors, degradation, fallback, and forbidden behavior
-Never round a failing candidate into feasibility or auto-place/sell a trade.
+Missing/invalid input, current breach or abstaining exposure returns `0x`. Never round into feasibility, exceed raw suggestion, auto-place or auto-sell.
 ## Validation cases and evidence
-Golden cases for every multiplier, exact boundaries, cross-Thesis holdings, monotonicity as cash/cap headroom decreases.
+Golden cases cover each multiplier, cap/cash equality, overlapping themes and monotonicity. `pytest backend/tests/test_portfolio_policy.py -q` must match candidate sequence and trace.
 ## Risks and monitoring
-Incorrect snapshot makes sizing unsafe; monitor abstain/0x causes.
+Preserve inputs and monitor `0x` reasons; an incomplete snapshot always fails closed.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-29
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

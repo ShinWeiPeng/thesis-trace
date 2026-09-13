@@ -34,6 +34,8 @@ services:
       THESIS_TRACE_RECOVERY_IDENTITY_FILE: /run/secrets/recovery_identity
       THESIS_TRACE_RECOVERY_POLICY_VERSION: ${THESIS_TRACE_RECOVERY_POLICY_VERSION:-unverified}
       THESIS_TRACE_RECOVERY_POLICY_ENABLED: ${THESIS_TRACE_RECOVERY_POLICY_ENABLED:-false}
+      THESIS_TRACE_OPENAI_MODEL: ${THESIS_TRACE_OPENAI_MODEL:-gpt-5}
+      THESIS_TRACE_OPENAI_CRITIC_MODEL: ${THESIS_TRACE_OPENAI_CRITIC_MODEL:-gpt-5}
     secrets:
       - api_database_url
       - access_issuer
@@ -73,6 +75,26 @@ services:
       timeout: 5s
       retries: 4
       start_period: 20s
+
+  ai-worker:
+    <<: *backend-common
+    command: ["python", "-m", "thesis_trace.entrypoints.ai_worker"]
+    environment:
+      THESIS_TRACE_BUILD_ID: ${THESIS_TRACE_IMAGE_TAG:-development}
+      THESIS_TRACE_DATABASE_URL_FILE: /run/secrets/ai_worker_database_url
+      THESIS_TRACE_OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      THESIS_TRACE_OPENAI_MODEL: ${THESIS_TRACE_OPENAI_MODEL:-gpt-5}
+      THESIS_TRACE_OPENAI_CRITIC_MODEL: ${THESIS_TRACE_OPENAI_CRITIC_MODEL:-gpt-5}
+      THESIS_TRACE_PROCESS_ROLE: ai-worker
+    secrets:
+      - ai_worker_database_url
+      - openai_api_key
+    networks:
+      - data
+      - ai-egress
+    depends_on:
+      migration:
+        condition: service_completed_successfully
 
   migration:
     <<: *backend-common
@@ -187,6 +209,7 @@ services:
       - api_database_password
       - collector_database_password
       - migration_database_password
+      - ai_worker_database_password
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/production-roles.sql:/docker-entrypoint-initdb.d/00-production-roles.sql:ro
@@ -210,6 +233,7 @@ networks:
   origin:
     internal: true
   tunnel-egress: {}
+  ai-egress: {}
 
 volumes:
   postgres-data:
@@ -227,6 +251,12 @@ secrets:
   migration_database_url:
     external: true
     name: thesis_trace_migration_database_url
+  ai_worker_database_url:
+    external: true
+    name: thesis_trace_ai_worker_database_url
+  openai_api_key:
+    external: true
+    name: thesis_trace_openai_api_key
   api_database_password:
     external: true
     name: thesis_trace_api_database_password
@@ -236,6 +266,9 @@ secrets:
   migration_database_password:
     external: true
     name: thesis_trace_migration_database_password
+  ai_worker_database_password:
+    external: true
+    name: thesis_trace_ai_worker_database_password
   access_issuer:
     external: true
     name: thesis_trace_access_issuer

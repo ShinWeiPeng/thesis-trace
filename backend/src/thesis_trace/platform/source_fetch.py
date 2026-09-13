@@ -10,7 +10,10 @@ import ssl
 from typing import Protocol
 from urllib.parse import urljoin, urlsplit
 
-from thesis_trace.modules.research.evidence_collection.contracts import FetchedSource
+from thesis_trace.modules.research.evidence_collection.contracts import (
+    FetchedSource,
+    URL_NORMALIZATION_POLICY_V1,
+)
 
 
 class SourceFetchFailure(RuntimeError):
@@ -48,6 +51,8 @@ class PinnedHttpsTransport:
         path = parsed.path or "/"
         if parsed.query:
             path = f"{path}?{parsed.query}"
+        elif "?" in url.partition("#")[0]:
+            path = f"{path}?"
         try:
             connection.request("GET", path, headers={"User-Agent": "ThesisTrace/0.1"})
             response = connection.getresponse()
@@ -75,10 +80,23 @@ class RestrictedHttpSourceFetcher:
         current_url = url
         try:
             for redirect_count in range(self._max_redirects + 1):
-                parsed = urlsplit(current_url)
+                try:
+                    parsed = urlsplit(current_url)
+                    port = parsed.port
+                except ValueError:
+                    raise SourceFetchFailure("source_policy_rejected", retryable=False) from None
                 if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-                        or parsed.port not in (None, 443)):
+                        or port not in (None, 443)):
                     raise SourceFetchFailure("source_policy_rejected", retryable=False)
+                canonical_host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+                had_query_delimiter = "?" in current_url.partition("#")[0]
+                current_url = parsed._replace(
+                    netloc=canonical_host,
+                    path=parsed.path or "/",
+                    fragment="",
+                ).geturl()
+                if had_query_delimiter and not parsed.query:
+                    current_url = f"{current_url}?"
                 addresses = list(self._resolver(parsed.hostname))
                 if not addresses or any(not ipaddress.ip_address(value).is_global for value in addresses):
                     raise SourceFetchFailure("source_address_rejected", retryable=False)
@@ -103,6 +121,7 @@ class RestrictedHttpSourceFetcher:
                 return FetchedSource(
                     canonical_url=current_url, publisher=parsed.hostname, content=response.content,
                     retrieved_at=retrieved_at, observed_at=retrieved_at,
+                    normalization_policy_version=URL_NORMALIZATION_POLICY_V1,
                     excerpt=response.content[:500].decode("utf-8", errors="replace"),
                     source_category="C", lineage=url,
                 )

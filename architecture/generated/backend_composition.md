@@ -44,8 +44,10 @@ flowchart TD
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
-| `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter` |
+| `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter`, `postgresworkflowstore`, `postgresthesisstore` |
 | `collectorruntime` | `backend_composition` | `CollectorRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `evidencecollector` |
+| `anomalyprocessor` | `backend_composition` | `AnomalyProcessor` (protocol, `backend/src/thesis_trace/bootstrap/application.py`) | private | port | `backend_composition` | 無 |
+| `aiworkerruntime` | `backend_composition` | `AiWorkerRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `anomalyprocessor` |
 
 ## State Ownership
 

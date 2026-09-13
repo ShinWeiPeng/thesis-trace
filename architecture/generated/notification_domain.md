@@ -27,7 +27,7 @@ flowchart TD
 - **副作用:** 無
 - **異常:** `notification_domain-error-1`: Dead-letter permanent delivery failures. → `application.evidence_submission_completed` → Dead-letter permanent delivery failures.
 - **不變條件:** Forbidden portfolio data never enters message content.
-- **程式入口:** [`notification_domain_contract`](../../backend/src/thesis_trace/modules/notification/service.py) (boundary)
+- **程式入口:** [`notification_domain_contract`](../../backend/src/thesis_trace/modules/notification/service.py) (boundary)<br>[`ThesisConfirmedTransitionPort`](../../backend/src/thesis_trace/application/contracts.py) (port)
 - **公開 Symbols:** [`notification_domain_contract`](../../backend/src/thesis_trace/modules/notification/service.py) (boundary)
 
 ## Port 契約

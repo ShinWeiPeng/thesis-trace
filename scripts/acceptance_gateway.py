@@ -23,6 +23,12 @@ class Gateway(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         self._proxy()
 
+    def do_PUT(self) -> None:
+        self._proxy()
+
+    def do_DELETE(self) -> None:
+        self._proxy()
+
     def _proxy(self) -> None:
         length = int(self.headers.get("content-length", "0"))
         body = self.rfile.read(length) if length else None

@@ -92,6 +92,7 @@ class EvidenceIntakeFlow:
             evidence_id=record.evidence_id,
             version=record.version,
             status=record.status,
+            source_snapshot_id=self._store.get_source_snapshot_id(evidence_id),
         )
 
 

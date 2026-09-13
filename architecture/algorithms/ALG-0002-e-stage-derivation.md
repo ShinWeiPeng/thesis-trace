@@ -1,12 +1,12 @@
 # ALG-0002: E0-E6 sequential-gate derivation
 ## Metadata
-- Status: proposed
-- Owner module: research
+- Status: accepted
+- Owner module: evidence_stage
 - Product feature: Evidence maturity stage
-- Flow IDs: evidence-evaluation-flow
-- Related ADRs: none
-- Source paths: planned research policy
-- Test and benchmark paths: planned research policy tests
+- Flow IDs: owner_confirmed_evidence_stage
+- Related ADRs: ADR-0003
+- Source paths: `backend/src/thesis_trace/modules/research/evidence_stage/service.py`
+- Test and benchmark paths: `backend/tests/test_evidence_stage.py`, `backend/tests/test_postgres_store.py`
 - Supersedes: none
 ## Problem and observable success
 Derive a reproducible summary stage without allowing AI to set it.
@@ -31,4 +31,6 @@ Golden vectors cover each boundary, jump, downgrade and conflict; properties inc
 ## Risks and monitoring
 Incorrect fact classification can contaminate gates; monitor abstentions and post-correction downgrades.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-20
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

@@ -1,12 +1,12 @@
 # ALG-0004: C-clue scoring and routing
 ## Metadata
-- Status: proposed
-- Owner module: research
+- Status: accepted
+- Owner module: anomaly_assessment
 - Product feature: Explainable clue triage
 - Flow IDs: evidence-evaluation-flow
-- Related ADRs: none
-- Source paths: planned research policy
-- Test and benchmark paths: planned research policy tests
+- Related ADRs: ADR-0005
+- Source paths: `backend/src/thesis_trace/modules/research/anomaly_assessment/policy.py`
+- Test and benchmark paths: `backend/tests/test_anomaly_policy.py`, `backend/tests/fixtures/anomaly-qualification-v1.json`
 - Supersedes: none
 ## Problem and observable success
 Prioritize unverified clues without treating them as verified evidence.
@@ -31,4 +31,6 @@ Golden boundary scores 0,4,5,7,8,10; properties assert sum range and monotonicit
 ## Risks and monitoring
 AI feature proposals may drift; track critic rejection and human disagreement.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-21
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

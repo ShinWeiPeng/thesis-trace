@@ -1,23 +1,23 @@
 # ThesisTrace Algorithm Inventory
 
-All records are `proposed`. SPEC-0001 confirms the product behavior, but a non-AI owner must provide approval metadata before any record becomes `accepted`.
+SPEC-0001 confirms the product behavior, but each record remains `proposed` until a non-AI owner provides approval metadata. Individually approved records are marked `accepted` in their own metadata.
 
 | Record | Feature | Owner module | Screening result |
 | --- | --- | --- | --- |
-| [ALG-0001](ALG-0001-evidence-canonicalization.md) | Evidence admission, canonicalization, and deduplication | research | Required |
-| [ALG-0002](ALG-0002-e-stage-derivation.md) | E0-E6 derivation | research | Required |
-| [ALG-0003](ALG-0003-source-classification.md) | A/B/C source classification and independence | research | Required |
-| [ALG-0004](ALG-0004-clue-scoring.md) | C-clue scoring and routing | research | Required |
-| [ALG-0005](ALG-0005-anomaly-policy.md) | Hard/Soft anomaly policy | research | Required |
+| [ALG-0001](ALG-0001-evidence-canonicalization.md) | Evidence admission, canonicalization, and deduplication | evidence_collection | Required |
+| [ALG-0002](ALG-0002-e-stage-derivation.md) | E0-E6 derivation | evidence_stage | Required |
+| [ALG-0003](ALG-0003-source-classification.md) | A/B/C source classification and independence | anomaly_assessment | Required |
+| [ALG-0004](ALG-0004-clue-scoring.md) | C-clue scoring and routing | anomaly_assessment | Required |
+| [ALG-0005](ALG-0005-anomaly-policy.md) | Hard/Soft anomaly policy | anomaly_assessment | Required |
 | [ALG-0006](ALG-0006-provider-failover.md) | AI provider retry and failover | recommendation | Required |
-| [ALG-0007](ALG-0007-ai-output-validation.md) | AI output validation | recommendation | Required |
-| [ALG-0008](ALG-0008-valuation-benchmarks.md) | Valuation benchmark calculation | portfolio | Required |
-| [ALG-0009](ALG-0009-valuation-validity.md) | Valuation validity and abstention | portfolio | Required |
-| [ALG-0010](ALG-0010-return-calculation.md) | Target price and return calculation | portfolio | Required |
-| [ALG-0011](ALG-0011-exposure-aggregation.md) | Portfolio exposure aggregation | portfolio | Required |
-| [ALG-0012](ALG-0012-dca-selection.md) | DCA multiplier selection | portfolio | Required |
+| [ALG-0007](ALG-0007-ai-output-validation.md) | AI output validation | thesis_trace_application | Required |
+| [ALG-0008](ALG-0008-valuation-benchmarks.md) | Valuation benchmark calculation | thesis_domain | Required |
+| [ALG-0009](ALG-0009-valuation-validity.md) | Valuation validity and abstention | thesis_domain | Required |
+| [ALG-0010](ALG-0010-return-calculation.md) | Target price and return calculation | thesis_domain | Required |
+| [ALG-0011](ALG-0011-exposure-aggregation.md) | Portfolio exposure aggregation | portfolio_domain | Required |
+| [ALG-0012](ALG-0012-dca-selection.md) | DCA multiplier selection | portfolio_domain | Required |
 | [ALG-0013](ALG-0013-research-lifecycle.md) | Research lifecycle state machines | thesis | Required |
-| [ALG-0014](ALG-0014-trade-processing.md) | Trade normalization and allocation | portfolio | Required |
+| [ALG-0014](ALG-0014-trade-processing.md) | Trade normalization and allocation | portfolio_domain | Required |
 | [ALG-0015](ALG-0015-action-item-dedup.md) | Action-item creation and recurrence | workflow | Required |
 | [ALG-0016](ALG-0016-action-priority.md) | Priority and safety lock | workflow | Required |
 | [ALG-0017](ALG-0017-action-transitions.md) | Action-item transitions | workflow | Required |
@@ -33,8 +33,13 @@ All records are `proposed`. SPEC-0001 confirms the product behavior, but a non-A
 | [ALG-0027](ALG-0027-authorization.md) | Authorization and non-disclosing denial | access | Required |
 | [ALG-0028](ALG-0028-policy-lifecycle.md) | Policy activation and re-evaluation | application | Required |
 | [ALG-0029](ALG-0029-email-delivery.md) | Email retry and idempotency | notification | Required |
-| [ALG-0030](ALG-0030-anomaly-qualification.md) | Anomaly qualification gate | research | Required |
+| [ALG-0030](ALG-0030-anomaly-qualification.md) | Anomaly qualification gate | anomaly_assessment | Required |
 | [ALG-0031](ALG-0031-claude-qualification.md) | Claude qualification gate | recommendation | Required |
+| [ALG-0032](ALG-0032-recommendation-publication.md) | Source-bound investment candidate validation and Recommendation publication | recommendation_domain | Required; accepted 2026-09-05; implementation partial |
+| [ALG-0033](ALG-0033-owner-decision-expiry.md) | Append-only Owner Decision and input-bound expiry | recommendation_domain | Required; accepted 2026-09-05; implementation partial |
+| [ALG-0034](ALG-0034-recommendation-action-projection.md) | Recommendation-derived Action Item materialization and reconciliation | workflow_domain | Required; accepted 2026-09-05; Workflow policy/store partial; atomic Recommendation parent pending |
+
+Pending design: [ALG-0035](ALG-0035-source-text-extraction.md), owned by `evidence_collection`, screens real-source text extraction under accepted ADR-0010 (project owner approval, 2026-09-09). Resource calibration and algorithm approval are still pending; no implementation or runtime PASS is claimed.
 
 ## Screened as not applicable
 

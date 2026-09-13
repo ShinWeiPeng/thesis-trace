@@ -1,34 +1,36 @@
 # ALG-0011: Portfolio exposure aggregation
 ## Metadata
-- Status: proposed
-- Owner module: portfolio
+- Status: accepted
+- Owner module: portfolio_domain
 - Product feature: NAV and post-trade exposure
-- Flow IDs: recommendation-publication-flow
-- Related ADRs: none
-- Source paths: planned portfolio risk policy
-- Test and benchmark paths: planned portfolio risk tests
+- Flow IDs: owner_portfolio_management, owner_trade_confirmation
+- Related ADRs: ADR-0008
+- Source paths: planned `backend/src/thesis_trace/modules/portfolio/policy.py`
+- Test and benchmark paths: planned `backend/tests/test_portfolio_policy.py`
 - Supersedes: none
 ## Problem and observable success
-Aggregate all allocation buckets so post-trade security, official-industry and custom-theme exposure is complete and immutable.
+Aggregate every bucket so post-trade security, official-industry and custom-theme exposure is complete, deterministic and snapshot-bound.
 ## Inputs, outputs, units, ranges, and data-quality assumptions
-Inputs are holdings, cash, official closing prices/dates/sources, classifications, themes and proposed trade; outputs are NAV and exposure ratios.
+Inputs are all owner holdings, cash, official closing prices/dates/sources, one official industry per security, confirmed themes and optional proposed trade. Outputs are NAV and Decimal exposures with exact references.
 ## Constraints and quantitative acceptance thresholds
-Security cap 10%; every official industry and custom theme cap 30%; complete holdings/cash/prices and one official classification per security are mandatory.
+Security cap is 10%; each official industry and theme cap is 30%. Complete holdings, cash, prices and classifications are mandatory. A security counts fully in every theme. Equality passes; `>` blocks.
 ## Candidate methods and comparative evidence
-Candidates: per-Thesis exposure; security-wide aggregation across buckets. SPEC selects complete aggregation because caps apply to economic exposure.
+Per-Thesis exposure understates concentration. Complete cross-bucket aggregation is required.
 ## Selected method and reasons for rejecting alternatives
-Aggregate quantities by security, value at most recent official close, add investable cash, apply proposed trade, then aggregate by classification/theme.
+Aggregate by security, value at official close, apply trade/cash flow, then aggregate every class/theme independently.
 ## Exact behavior, formula or pseudocode, boundaries, and tie-breaking
-`NAV=sum(qty*price)+cash`; `security_exposure=post_security_value/post_NAV`; each classification exposure is `sum(post values in class)/post_NAV`; a security counts fully in each assigned theme. Missing/zero NAV abstains; `>` cap blocks while equality passes.
+`pre_NAV=sum(qty*close)+cash`. A buy adds quantity and subtracts full outflow; a sell subtracts quantity and adds after-cost proceeds. `post_NAV=sum(post_qty*close)+post_cash`. Each exposure is its post-value sum divided by post_NAV. Missing/nonpositive NAV abstains. Any existing breach makes added buys infeasible.
 ## Parameters, calibration, versioning, and compatibility
-Caps, classification snapshots, price policy and decimal precision are immutable/versioned.
+Bind `exposure-policy-v1`, caps, price/source, classifications/themes, Cost Profile and Decimal policy. Historical snapshots are immutable.
 ## Time and space complexity and resource budgets
-O(holdings + memberships), O(securities + classes).
+`O(holdings + memberships)` time and `O(securities + classes)` space.
 ## Errors, degradation, fallback, and forbidden behavior
-Never use partial holdings, stale/nonofficial prices or net across themes; never expose private portfolio values in email.
+Incomplete inputs abstain. Never use partial/stale/nonofficial data, per-Thesis-only totals, theme netting or Portfolio values in email.
 ## Validation cases and evidence
-Golden multi-Thesis cases, exact-cap boundaries, multi-theme counting, missing data and order-invariance properties.
+Golden multi-bucket cases, exact caps, overlapping themes, fee/cash changes, missing data and order invariance. `pytest backend/tests/test_portfolio_policy.py -q` must match NAV/exposure traces and hard-cap outcomes.
 ## Risks and monitoring
-Stale classifications/prices; monitor abstention and snapshot age.
+Monitor abstention and snapshot age/source codes without logging amounts.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-29
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

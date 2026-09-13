@@ -60,6 +60,7 @@ class EvidenceStatusSnapshot:
     evidence_id: str
     version: int
     status: EvidenceStatus
+    source_snapshot_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

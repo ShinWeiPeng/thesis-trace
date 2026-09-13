@@ -30,7 +30,7 @@ class AccessContractTests(unittest.TestCase):
 
     def test_production_database_roles_are_separate_and_least_privilege(self) -> None:
         sql = (ROOT / "infra/postgres/production-roles.sql").read_text(encoding="utf-8").upper()
-        for role in ("THESIS_TRACE_MIGRATION", "THESIS_TRACE_API", "THESIS_TRACE_COLLECTOR"):
+        for role in ("THESIS_TRACE_MIGRATION", "THESIS_TRACE_API", "THESIS_TRACE_COLLECTOR", "THESIS_TRACE_AI_WORKER"):
             self.assertIn(role, sql)
         self.assertIn("NOBYPASSRLS", sql)
         self.assertIn("REVOKE CREATE ON SCHEMA PUBLIC", sql)
@@ -44,6 +44,7 @@ class AccessContractTests(unittest.TestCase):
         self.assertNotIn("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES", grants)
         self.assertNotIn("UPDATE,DELETE ON ACCESS.SECURITY_AUDIT_EVENTS", grants)
         self.assertNotIn("UPDATE,DELETE ON RESEARCH.AUDIT_EVENTS", grants)
+        self.assertIn("RESEARCH.CANONICAL_SOURCES", grants)
 
     def test_runtime_composition_uses_read_only_schema_compatibility_probe(self) -> None:
         composition = (ROOT / "backend/src/thesis_trace/bootstrap/application.py").read_text(encoding="utf-8")

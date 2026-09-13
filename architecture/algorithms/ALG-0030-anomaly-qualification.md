@@ -1,12 +1,12 @@
 # ALG-0030: Hard-anomaly qualification gate
 ## Metadata
-- Status: proposed
-- Owner module: research
+- Status: accepted
+- Owner module: anomaly_assessment
 - Product feature: Offline and production-shadow enablement
 - Flow IDs: anomaly-qualification-flow
-- Related ADRs: none
-- Source paths: planned research qualification policy
-- Test and benchmark paths: versioned anomaly dataset and shadow evidence
+- Related ADRs: ADR-0005
+- Source paths: `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`
+- Test and benchmark paths: `backend/tests/fixtures/anomaly-qualification-v1.json`, `backend/tests/test_anomaly_qualification.py`, `scripts/run_anomaly_qualification.py`; production shadow evidence remains pending
 - Supersedes: none
 ## Problem and observable success
 Prevent Hard notification enablement until deterministic offline accuracy and false-Hard-free production shadow evidence exist.
@@ -31,4 +31,6 @@ Meta-tests verify composition counts, version binding, reset boundaries and zero
 ## Risks and monitoring
 Sparse real events may limit confidence despite elapsed days; report event count alongside duration.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-21
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`

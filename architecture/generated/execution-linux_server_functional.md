@@ -17,20 +17,37 @@
 | `collector_worker_process` | process | default | [] | 1 | {'memory': 'bounded by deployment profile'} |
 | `ai_worker_process` | process | default | [] | 1 | {'memory': 'bounded by deployment profile'} |
 | `email_worker_process` | process | default | [] | 1 | {'memory': 'bounded by deployment profile'} |
+| `investment_transport_thread` | worker-pool | default | [] | 1 | {'memory': 'One bounded request and one bounded response per composed adapter'} |
 
 ## Workload mappings
 
 | ID | Workload | Steps | Units | Serialization | Reentrant | WCET |
 |---|---|---|---|---|---|---|
+| `anomaly_transport_mapping` | `owner_anomaly_assessment_workload` | `owner_anomaly_assessment.analyze` | `investment_transport_thread` | Same adapter-local single-flight gate as investment calls; a slow anomaly response cannot hold the caller past the deadline. | False | not established |
+| `investment_transport_mapping` | `owner_recommendation_analysis_workload` | `owner_recommendation_analysis.analyze` | `investment_transport_thread` | Adapter-local single-flight admission remains held until I/O returns; timed-out results are discarded. | False | not established |
+| `recommendation_admission_api_mapping` | `owner_recommendation_analysis_workload` | `owner_recommendation_analysis.authorize`, `owner_recommendation_analysis.resolve`, `owner_recommendation_analysis.admit`, `owner_recommendation_analysis.present` | `api_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
+| `recommendation_analysis_worker_mapping` | `owner_recommendation_analysis_workload` | `owner_recommendation_analysis.analyze`, `owner_recommendation_analysis.evaluate`, `owner_recommendation_analysis.publish` | `ai_worker_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
+| `recommendation_decision_api_mapping` | `owner_recommendation_decision_workload` | `owner_recommendation_decision.authorize`, `owner_recommendation_decision.preview`, `owner_recommendation_decision.commit`, `owner_recommendation_decision.present` | `api_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
+| `recommendation_expiry_worker_mapping` | `recommendation_expiry_reconciliation_workload` | `recommendation_expiry_reconciliation.select`, `recommendation_expiry_reconciliation.resolve`, `recommendation_expiry_reconciliation.commit` | `ai_worker_process` | Planned ADR-0009 version/lease-fenced per Owner and Thesis cycle; owner-scoped atomic transactions. | False | not established |
 | `production_database_migration_mapping` | `production_database_migration_workload` | `production_database_migration.apply` | `migration_job_process` | one migration process per deployment | False | not established |
 | `intake_api_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.authorize`, `owner_evidence_intake.map`, `owner_evidence_intake.commit`, `owner_evidence_intake.query` | `api_process` | one transaction per Evidence stream | False | not established |
 | `collection_worker_mapping` | `owner_evidence_intake_workload` | `owner_evidence_intake.collect` | `collector_worker_process` | leased per Evidence stream | False | not established |
+| `evidence_stage_api_mapping` | `owner_confirmed_evidence_stage_workload` | `owner_confirmed_evidence_stage.authorize`, `owner_confirmed_evidence_stage.map`, `owner_confirmed_evidence_stage.evaluate`, `owner_confirmed_evidence_stage.commit`, `owner_confirmed_evidence_stage.present` | `api_process` | one optimistic append transaction per Evidence stage stream | False | not established |
+| `anomaly_assessment_api_mapping` | `owner_anomaly_assessment_workload` | `owner_anomaly_assessment.authorize`, `owner_anomaly_assessment.admit`, `owner_anomaly_assessment.present` | `api_process` | one admission transaction per assessment idempotency key and one role-safe query per request | False | not established |
+| `anomaly_assessment_worker_mapping` | `owner_anomaly_assessment_workload` | `owner_anomaly_assessment.analyze`, `owner_anomaly_assessment.evaluate`, `owner_anomaly_assessment.commit` | `ai_worker_process` | leased per assessment concurrency key with stale input revalidation before result commit | False | not established |
+| `anomaly_review_action_api_mapping` | `owner_anomaly_review_action_workload` | `owner_anomaly_review_action.authorize`, `owner_anomaly_review_action.resolve`, `owner_anomaly_review_action.evaluate`, `owner_anomaly_review_action.commit`, `owner_anomaly_review_action.present` | `api_process` | one synchronous Research query followed by one Workflow transaction per idempotency key | False | not established |
+| `action_inbox_api_mapping` | `owner_action_inbox_workload` | `owner_action_inbox.authorize`, `owner_action_inbox.query`, `owner_action_inbox.transition`, `owner_action_inbox.present` | `api_process` | repeatable-read per inbox query and optimistic transaction per Action Item transition | False | not established |
+| `personal_thesis_lifecycle_api_mapping` | `personal_thesis_lifecycle_workload` | `personal_thesis_lifecycle.authorize`, `personal_thesis_lifecycle.resolve`, `personal_thesis_lifecycle.evaluate`, `personal_thesis_lifecycle.confirm`, `personal_thesis_lifecycle.commit`, `personal_thesis_lifecycle.present` | `api_process` | one optimistic transaction per personal Thesis or current-cycle learning stream; direct read query per authorized route | False | not established |
+| `owner_portfolio_management_api_mapping` | `owner_portfolio_management_workload` | `owner_portfolio_management.authorize`, `owner_portfolio_management.evaluate`, `owner_portfolio_management.confirm`, `owner_portfolio_management.commit` | `api_process` | one optimistic Portfolio transaction per Owner with exact challenge consumption for confirmed Trades | False | not established |
 
 ## Execution Channels
 
 | ID | From | To | Contracts | Capacity | Ordering | Copy | Timeout | Overload |
 |---|---|---|---|---|---|---|---|---|
+| `investment_transport_result_channel` | `investment_transport_thread` | `ai_worker_process` | `application.investment_provider`, `application.investment_critic` | 1 | One private result mailbox per synchronous attempt; no late-result reuse | Bounded untrusted UTF-8 response or redacted error only; no domain state or database handles | 30000 | `fail-safe` |
+| `recommendation_analysis_job_channel` | `api_process` | `ai_worker_process` | `recommendation.store`, `application.process_recommendation` | 1000 | Planned ADR-0009 available_at then stable ID; serialized per Owner/Thesis cycle; shared worker capacity remains unvalidated. | Persist immutable input refs/version tuple; load only admitted bounded context; never mix partial attempts. | 300000 | `backpressure` |
 | `collection_job_channel` | `api_process` | `collector_worker_process` | `research.collection_jobs`, `research.evidence_received` | 1000 | serialized per Evidence stream | persist semantic payload once and map on claim | 300000 | `backpressure` |
+| `anomaly_analysis_job_channel` | `api_process` | `ai_worker_process` | `research.anomaly_assessment_store`, `application.process_anomaly_job` | 1000 | serialized per assessment concurrency key; unrelated subjects may run in parallel | persist identifiers and exact input/version tuple once; load immutable snapshots on claim | 300000 | `fail-safe` |
 
 ## Data Access Profiles
 

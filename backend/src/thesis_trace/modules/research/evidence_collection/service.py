@@ -33,6 +33,7 @@ class EvidenceCollector:
             publisher=fetched.publisher,
             content_hash=sha256(fetched.content).hexdigest(),
             retrieved_at=fetched.retrieved_at,
+            normalization_policy_version=fetched.normalization_policy_version,
             published_at=fetched.published_at,
             observed_at=fetched.observed_at,
             excerpt=fetched.excerpt,

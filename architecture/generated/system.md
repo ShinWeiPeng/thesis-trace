@@ -10,16 +10,25 @@ flowchart TD
     n_research_domain["research_domain (L1)<br/>管理公司與研究證據"]
     n_evidence_intake["evidence_intake (L2)<br/>接收證據網址並建立工作"]
     n_evidence_collection["evidence_collection (L2)<br/>擷取來源並保存不可變快照"]
+    n_evidence_stage["evidence_stage (L2)<br/>管理 Owner 確認的事實與 E0-E6 推導"]
+    n_anomaly_assessment["anomaly_assessment (L2)<br/>管理來源分類、線索評分與 anomaly 閘門"]
     n_thesis_domain["thesis_domain (L1)<br/>管理 Thesis 生命週期與反思"]
     n_portfolio_domain["portfolio_domain (L1)<br/>管理投資組合與風險快照"]
-    n_recommendation_domain["recommendation_domain (L1)<br/>管理建議與 Owner 決策"]
+    n_recommendation_domain["recommendation_domain (L1)<br/>管理不可變建議、Owner 決策與資料綁定逾期"]
     n_workflow_domain["workflow_domain (L1)<br/>管理人工行動收件匣"]
     n_notification_domain["notification_domain (L1)<br/>管理通知分類與安全內容"]
     n_fastapi_entrypoint["fastapi_entrypoint (L3+)<br/>轉換 HTTP 與應用契約"]
+    n_postgres_workflow_adapter["postgres_workflow_adapter (L3+)<br/>保存待辦、優先級與稽核紀錄"]
+    n_postgres_database_support["postgres_database_support (L3+)<br/>建立不保存資料庫密鑰的連線邊界"]
+    n_postgres_thesis_adapter["postgres_thesis_adapter (L3+)<br/>保存個人 Thesis 生命週期與反思"]
+    n_postgres_portfolio_adapter["postgres_portfolio_adapter (L3+)<br/>保存投資組合、交易與曝險快照"]
+    n_postgres_atomic_adapter["postgres_atomic_adapter (L3+)<br/>原子提交確認與研究投資寫入"]
     n_postgres_research_adapter["postgres_research_adapter (L3+)<br/>實作研究交易與持久工作租約"]
     n_restricted_source_fetch_adapter["restricted_source_fetch_adapter (L3+)<br/>依限制政策擷取外部 HTTPS 來源"]
     n_runtime_configuration_adapter["runtime_configuration_adapter (L3+)<br/>解析必要設定與檔案引用祕密"]
     n_collector_worker_adapter["collector_worker_adapter (L3+)<br/>啟動並探測收集器程序"]
+    n_ai_worker_adapter["ai_worker_adapter (L3+)<br/>執行隔離的 anomaly AI 工作"]
+    n_openai_recommendation_adapter["openai_recommendation_adapter (L3+)<br/>以嚴格結構化輸出提供候選與獨立 critic"]
     n_identity_registry["identity_registry (L2)<br/>管理外部身分與內部帳號映射"]
     n_session_management["session_management (L2)<br/>管理受限工作階段與角色設定檔"]
     n_account_administration["account_administration (L2)<br/>管理帳號生命週期與角色"]
@@ -27,7 +36,12 @@ flowchart TD
     n_cloudflare_identity_adapter["cloudflare_identity_adapter (L3+)<br/>驗證完整 Access 身分與提供者"]
     n_postgres_access_adapter["postgres_access_adapter (L3+)<br/>保存 Access 狀態並設定 RLS 安全脈絡"]
     n_react_access_adapter["react_access_adapter (L3+)<br/>呈現角色隔離的 Access 介面"]
+    n_react_workflow_adapter["react_workflow_adapter (L3+)<br/>呈現響應式行動收件匣"]
+    n_react_thesis_adapter["react_thesis_adapter (L3+)<br/>呈現個人 Thesis、結果與反思"]
+    n_react_portfolio_adapter["react_portfolio_adapter (L3+)<br/>呈現投資組合與交易確認"]
     n_postgres_migration_entrypoint["postgres_migration_entrypoint (L3+)<br/>以獨立資料庫擁有者執行單次遷移"]
+    n_postgres_recommendation_adapter["postgres_recommendation_adapter (L3+)<br/>保存建議、決策與具租約的分析工作"]
+    n_react_recommendation_adapter["react_recommendation_adapter (L3+)<br/>呈現建議、決策歷史與失效處理"]
     n_thesis_trace_application -.->|depends| n_access_domain
     n_thesis_trace_application -.->|depends| n_research_domain
     n_thesis_trace_application -.->|depends| n_thesis_domain
@@ -35,14 +49,28 @@ flowchart TD
     n_thesis_trace_application -.->|depends| n_recommendation_domain
     n_thesis_trace_application -.->|depends| n_workflow_domain
     n_thesis_trace_application -.->|depends| n_notification_domain
+    n_backend_composition -.->|depends| n_recommendation_domain
+    n_backend_composition -.->|depends| n_postgres_recommendation_adapter
+    n_backend_composition -.->|depends| n_thesis_trace_application
     n_backend_composition -.->|depends| n_fastapi_entrypoint
     n_backend_composition -.->|depends| n_access_domain
+    n_backend_composition -.->|depends| n_research_domain
     n_backend_composition -.->|depends| n_evidence_collection
+    n_backend_composition -.->|depends| n_evidence_stage
+    n_backend_composition -.->|depends| n_anomaly_assessment
+    n_backend_composition -.->|depends| n_workflow_domain
+    n_backend_composition -.->|depends| n_thesis_domain
     n_backend_composition -.->|depends| n_postgres_research_adapter
+    n_backend_composition -.->|depends| n_postgres_workflow_adapter
+    n_backend_composition -.->|depends| n_postgres_thesis_adapter
+    n_backend_composition -.->|depends| n_postgres_portfolio_adapter
+    n_backend_composition -.->|depends| n_postgres_atomic_adapter
     n_backend_composition -.->|depends| n_restricted_source_fetch_adapter
     n_backend_composition -.->|depends| n_runtime_configuration_adapter
     n_backend_composition -.->|depends| n_postgres_access_adapter
     n_backend_composition -.->|depends| n_cloudflare_identity_adapter
+    n_backend_composition -.->|depends| n_ai_worker_adapter
+    n_backend_composition -.->|depends| n_openai_recommendation_adapter
     n_thesis_trace_application -->|owns| n_access_domain
     n_access_domain -.->|depends| n_identity_registry
     n_access_domain -.->|depends| n_session_management
@@ -51,16 +79,40 @@ flowchart TD
     n_thesis_trace_application -->|owns| n_research_domain
     n_research_domain -.->|depends| n_evidence_intake
     n_research_domain -.->|depends| n_evidence_collection
+    n_research_domain -.->|depends| n_evidence_stage
+    n_research_domain -.->|depends| n_anomaly_assessment
     n_research_domain -->|owns| n_evidence_intake
     n_research_domain -->|owns| n_evidence_collection
+    n_research_domain -->|owns| n_evidence_stage
+    n_research_domain -->|owns| n_anomaly_assessment
     n_thesis_trace_application -->|owns| n_thesis_domain
     n_thesis_trace_application -->|owns| n_portfolio_domain
     n_thesis_trace_application -->|owns| n_recommendation_domain
     n_thesis_trace_application -->|owns| n_workflow_domain
     n_thesis_trace_application -->|owns| n_notification_domain
+    n_fastapi_entrypoint -.->|depends| n_thesis_trace_application
+    n_postgres_workflow_adapter -.->|depends| n_workflow_domain
+    n_postgres_workflow_adapter -.->|depends| n_postgres_database_support
+    n_postgres_thesis_adapter -.->|depends| n_thesis_domain
+    n_postgres_thesis_adapter -.->|depends| n_postgres_database_support
+    n_postgres_portfolio_adapter -.->|depends| n_portfolio_domain
+    n_postgres_portfolio_adapter -.->|depends| n_postgres_database_support
+    n_postgres_atomic_adapter -.->|depends| n_postgres_recommendation_adapter
+    n_postgres_atomic_adapter -.->|depends| n_postgres_workflow_adapter
+    n_postgres_atomic_adapter -.->|depends| n_thesis_trace_application
+    n_postgres_atomic_adapter -.->|depends| n_postgres_access_adapter
+    n_postgres_atomic_adapter -.->|depends| n_postgres_research_adapter
+    n_postgres_atomic_adapter -.->|depends| n_postgres_thesis_adapter
+    n_postgres_atomic_adapter -.->|depends| n_postgres_portfolio_adapter
+    n_postgres_research_adapter -.->|depends| n_research_domain
+    n_postgres_research_adapter -.->|depends| n_postgres_database_support
     n_postgres_research_adapter -.->|depends| n_evidence_intake
     n_postgres_research_adapter -.->|depends| n_evidence_collection
+    n_postgres_research_adapter -.->|depends| n_evidence_stage
+    n_postgres_research_adapter -.->|depends| n_anomaly_assessment
     n_restricted_source_fetch_adapter -.->|depends| n_evidence_collection
+    n_ai_worker_adapter -.->|depends| n_thesis_trace_application
+    n_openai_recommendation_adapter -.->|depends| n_thesis_trace_application
     n_access_domain -->|owns| n_identity_registry
     n_access_domain -->|owns| n_session_management
     n_access_domain -->|owns| n_account_administration
@@ -70,8 +122,19 @@ flowchart TD
     n_postgres_access_adapter -.->|depends| n_session_management
     n_postgres_access_adapter -.->|depends| n_confirmation_challenge
     n_postgres_access_adapter -.->|depends| n_access_domain
+    n_postgres_access_adapter -.->|depends| n_postgres_database_support
+    n_react_access_adapter -.->|depends| n_react_recommendation_adapter
+    n_react_access_adapter -.->|depends| n_react_workflow_adapter
+    n_react_access_adapter -.->|depends| n_react_thesis_adapter
+    n_react_access_adapter -.->|depends| n_react_portfolio_adapter
     n_postgres_migration_entrypoint -.->|depends| n_postgres_research_adapter
     n_postgres_migration_entrypoint -.->|depends| n_postgres_access_adapter
+    n_postgres_migration_entrypoint -.->|depends| n_postgres_workflow_adapter
+    n_postgres_migration_entrypoint -.->|depends| n_postgres_thesis_adapter
+    n_postgres_migration_entrypoint -.->|depends| n_postgres_portfolio_adapter
+    n_postgres_migration_entrypoint -.->|depends| n_postgres_database_support
+    n_postgres_recommendation_adapter -.->|depends| n_recommendation_domain
+    n_postgres_recommendation_adapter -.->|depends| n_postgres_database_support
 ```
 
 ## 模組
@@ -84,16 +147,25 @@ flowchart TD
 | `research_domain` | L1 | domain | `thesis_trace_application` | implemented | Own companies, evidence provenance, collection lifecycle, evidence stages, and anomaly facts. |
 | `evidence_intake` | L2 | component | `research_domain` | implemented | Admit Evidence URLs and atomically create received state, audit fact, and collection job. |
 | `evidence_collection` | L2 | component | `research_domain` | implemented | Collect restricted sources and commit immutable snapshots or safe failures. |
-| `thesis_domain` | L1 | domain | `thesis_trace_application` | planned | Own Thesis lifecycle |
-| `portfolio_domain` | L1 | domain | `thesis_trace_application` | planned | Own holdings |
-| `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own immutable recommendations |
-| `workflow_domain` | L1 | domain | `thesis_trace_application` | planned | Own actionable work items |
+| `evidence_stage` | L2 | component | `research_domain` | implemented | Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation. |
+| `anomaly_assessment` | L2 | component | `research_domain` | implemented | Own versioned source classification, clue scoring, deterministic anomaly decisions, traces, durable analysis work, and offline qualification evaluation. |
+| `thesis_domain` | L1 | domain | `thesis_trace_application` | implemented | Own personal Thesis lifecycle cycles, valuation drafts and immutable publications, invalidation conditions, Evidence links, Outcomes and Reflections. |
+| `portfolio_domain` | L1 | domain | `thesis_trace_application` | implemented | Own versioned Cost Profiles, investable cash, canonical Trades, bucket allocations, holdings and deterministic exposure snapshots. |
+| `recommendation_domain` | L1 | domain | `thesis_trace_application` | planned | Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions under accepted ADR-0009; no trading authority. |
+| `workflow_domain` | L1 | domain | `thesis_trace_application` | implemented | Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries. |
 | `notification_domain` | L1 | domain | `thesis_trace_application` | planned | Own notification classification |
 | `fastapi_entrypoint` | L3+ | adapter | `-` | implemented | Translate versioned JSON HTTP requests into application commands and queries. |
+| `postgres_workflow_adapter` | L3+ | adapter | `-` | implemented | Persist Workflow Action Items, exact/material fingerprints, recurrence, actor-scoped receipts, priority evaluations, and append-only audit using PostgreSQL. |
+| `postgres_database_support` | L3+ | adapter | `-` | implemented | Create secret-safe SQLAlchemy 2 engines and bounded PostgreSQL connections for repository adapters. |
+| `postgres_thesis_adapter` | L3+ | adapter | `-` | implemented | Persist relational personal Thesis lifecycle state and immutable history in the Thesis-owned PostgreSQL schema under forced RLS through SQLAlchemy 2 and Psycopg. |
+| `postgres_portfolio_adapter` | L3+ | adapter | `-` | implemented | Persist normalized owner-scoped Portfolio current state, immutable versions, receipts and audit under forced RLS through SQLAlchemy 2 and Psycopg. |
+| `postgres_atomic_adapter` | L3+ | adapter | `-` | implemented | Own transaction-local coordination of confirmation consumption with consequential Thesis and Portfolio mutations. |
 | `postgres_research_adapter` | L3+ | adapter | `-` | implemented | Implement atomic Research persistence and leased collector work using PostgreSQL. |
 | `restricted_source_fetch_adapter` | L3+ | adapter | `-` | implemented | Fetch approved HTTPS sources through bounded DNS and transport policy. |
 | `runtime_configuration_adapter` | L3+ | adapter | `-` | implemented | Resolve mandatory runtime configuration and file-referenced secrets fail closed. |
 | `collector_worker_adapter` | L3+ | adapter | `-` | implemented | Start and probe the collector using only factories owned by the release composition root. |
+| `ai_worker_adapter` | L3+ | adapter | `-` | implemented | Run isolated version-bound anomaly analysis jobs through public application contracts. |
+| `openai_recommendation_adapter` | L3+ | adapter | `-` | implemented | Invoke OpenAI Responses structured outputs through provider-neutral application ports without granting policy authority. |
 | `identity_registry` | L2 | component | `access_domain` | implemented | Own preapproved provider-subject mappings to stable internal users without merging identities by email. |
 | `session_management` | L2 | component | `access_domain` | implemented | Own bounded application sessions and role-filtered session profiles derived from verified Access identity. |
 | `account_administration` | L2 | component | `access_domain` | implemented | Own Admin-visible account lifecycle commands while excluding all research and portfolio fields. |
@@ -101,22 +173,27 @@ flowchart TD
 | `cloudflare_identity_adapter` | L3+ | adapter | `-` | implemented | Verify full Cloudflare Access JWT and map get-identity provider discriminator facts into semantic identity. |
 | `postgres_access_adapter` | L3+ | adapter | `-` | implemented | Persist Access aggregates and bind request security context to PostgreSQL RLS transactions. |
 | `react_access_adapter` | L3+ | adapter | `-` | implemented | Present role-filtered session, account, workspace, denial, and volatile confirmation UI through generated contracts. |
+| `react_workflow_adapter` | L3+ | adapter | `-` | implemented | Present the Server-authoritative Action Inbox, responsive detail route, and company-context link through generated contracts. |
+| `react_thesis_adapter` | L3+ | adapter | `-` | implemented | Present personal Thesis cards, valuation drafts/publications, lifecycle cycles, Outcomes and Reflections through generated Server contracts. |
+| `react_portfolio_adapter` | L3+ | adapter | `-` | implemented | Present Owner-only Cost Profile, cash, server trade preview/confirmation, holdings and exposure. |
 | `postgres_migration_entrypoint` | L3+ | adapter | `-` | implemented | Run forward-only schema migration and least-privilege grants once under the database-owner migration credential. |
+| `postgres_recommendation_adapter` | L3+ | adapter | `-` | planned | Implement Recommendation-owned normalized persistence, leased jobs, forced RLS and append-only history; accepted ADR-0009; implementation pending. |
+| `react_recommendation_adapter` | L3+ | adapter | `-` | planned | Present Owner-only Recommendation, decision, validity and recovery flows from generated HTTP contracts. |
 
 ### `thesis_trace_application`
 
 - **目的:** Coordinate authenticated cross-domain product flows without owning domain state.
 - **父模組:** `-`
 - **實作狀態:** `implemented`
-- **輸入 Ports:** `application.submit_evidence`
-- **輸出 Ports:** `application.events`
-- **輸出 Events:** `application.evidence_submission_completed`
+- **輸入 Ports:** `application.request_recommendation`, `application.query_recommendation`, `application.decide_recommendation`, `application.process_recommendation`, `application.reconcile_recommendation_expiry`, `application.submit_evidence`, `application.confirm_evidence_stage`, `application.query_evidence_stage`, `application.request_anomaly_assessment`, `application.query_anomaly_assessment`, `application.process_anomaly_job`, `application.create_anomaly_review_action`, `application.query_action_inbox`, `application.query_action_item`, `application.transition_action_item`, `application.create_personal_thesis`, `application.query_personal_theses`, `application.save_personal_thesis`, `application.transition_personal_thesis`, `application.save_thesis_outcome`, `application.autosave_thesis_reflection`, `application.complete_thesis_reflection`, `application.save_valuation_draft`, `application.publish_valuation`, `application.manage_portfolio`, `application.confirm_portfolio_trade`
+- **輸出 Ports:** `application.recommendation_transaction`, `application.investment_provider`, `application.investment_critic`, `application.events`, `application.recommendation_provider`, `application.recommendation_critic`
+- **輸出 Events:** `application.recommendation_operation_resolved`, `application.evidence_submission_completed`, `application.action_item_operation_failed`, `application.thesis_operation_failed`
 - **擁有狀態:** 無
 - **副作用:** Coordinate child commands and map child events. (`-`)
 - **異常:** `thesis_trace_application-error-1`: Reject unauthenticated or unauthorized commands → `application.evidence_submission_completed` → Reject unauthenticated or unauthorized commands; `thesis_trace_application-error-2`: Propagate child admission failures. → `application.evidence_submission_completed` → Propagate child admission failures.
 - **不變條件:** Sibling domains communicate only through this parent; Domain state remains child-owned.
-- **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)
-- **公開 Symbols:** [`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)
+- **程式入口:** [`EvidenceIntakeFlow`](../../backend/src/thesis_trace/application/flows/evidence_intake.py) (orchestrator)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)
+- **公開 Symbols:** [`RecommendationFlow`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationTransactionPort`](../../backend/src/thesis_trace/application/contracts.py) (protocol)<br>[`RecommendationView`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`InvestmentAnalysisRequest`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationPublicationCommand`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationAdmissionCommand`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationDecisionCommand`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`RecommendationDecisionPreview`](../../backend/src/thesis_trace/application/contracts.py) (class)<br>[`SubmitEvidenceRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`EvidenceStageFlow`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (orchestrator)<br>[`ConfirmEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`QueryEvidenceStageRequest`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageFactsResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageGateResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`EvidenceStageResult`](../../backend/src/thesis_trace/application/flows/evidence_stage.py) (contract)<br>[`AnomalyAssessmentFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`AnomalyJobProcessor`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`RequestAnomalyAssessment`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalySourceInput`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyAssessmentResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyGateResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`AnomalyTraceResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxFlow`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (orchestrator)<br>[`CreateAnomalyReviewActionRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionInboxRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`QueryActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`TransitionActionItemRequest`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionItemResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ActionInboxResult`](../../backend/src/thesis_trace/application/flows/anomaly_assessment.py) (contract)<br>[`ThesisLifecycleFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`ThesisLifecycleRequest`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`ThesisLifecycleResult`](../../backend/src/thesis_trace/application/contracts.py) (contract)<br>[`ValuationFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`PortfolioFlow`](../../backend/src/thesis_trace/application/contracts.py) (orchestrator)<br>[`ThesisConfirmedTransitionPort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`ValuationConfirmedPublicationPort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`PortfolioConfirmedTradePort`](../../backend/src/thesis_trace/application/contracts.py) (port)<br>[`RecommendationProviderPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationCriticPort`](../../backend/src/thesis_trace/application/ai_ports.py) (port)<br>[`RecommendationProviderRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`RecommendationCriticRequest`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`AnalysisSource`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)<br>[`ValidatedAnomalyCandidate`](../../backend/src/thesis_trace/application/ai_ports.py) (contract)
 
 ### `backend_composition`
 
@@ -161,7 +238,7 @@ flowchart TD
 - **異常:** `research_domain-error-1`: Reject invalid URLs or stale company versions → `research.evidence_received` → Reject invalid URLs or stale company versions; `research_domain-error-2`: Record safe retry and terminal failures. → `research.evidence_received` → Record safe retry and terminal failures.
 - **不變條件:** State commits before success events; Evidence streams are serialized; Source records are immutable.
 - **程式入口:** [`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
-- **公開 Symbols:** [`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
+- **公開 Symbols:** [`ResearchActorContext`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchStageConfirmationRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageQuery`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageFacts`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchStageResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`ResearchAnomalySource`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyRequest`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchValidatedAnomalyCandidate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyJob`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyGate`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyTrace`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchAnomalyResult`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecordReference`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecommendationSource`](../../backend/src/thesis_trace/modules/research/__init__.py) (contract)<br>[`ResearchRecommendationQueryPort`](../../backend/src/thesis_trace/modules/research/__init__.py) (port)<br>[`ResearchRecommendationFacade`](../../backend/src/thesis_trace/modules/research/__init__.py) (orchestrator)<br>[`EvidenceRecord`](../../backend/src/thesis_trace/modules/research/evidence_intake/contracts.py) (contract)
 
 ### `evidence_intake`
 
@@ -193,65 +270,95 @@ flowchart TD
 - **程式入口:** [`EvidenceCollector`](../../backend/src/thesis_trace/modules/research/evidence_collection/service.py) (service)
 - **公開 Symbols:** [`CollectedSourceSnapshot`](../../backend/src/thesis_trace/modules/research/evidence_collection/contracts.py) (contract)<br>[`CollectionStorePort`](../../backend/src/thesis_trace/modules/research/evidence_collection/ports.py) (port)<br>[`SourceFetchPort`](../../backend/src/thesis_trace/modules/research/evidence_collection/ports.py) (port)
 
-### `thesis_domain`
+### `evidence_stage`
 
-- **目的:** Own Thesis lifecycle
-- **父模組:** `thesis_trace_application`
-- **實作狀態:** `planned`
-- **輸入 Ports:** 無
-- **輸出 Ports:** 無
+- **目的:** Own versioned Owner-confirmed dimension facts and deterministic E0-E6 derivation.
+- **父模組:** `research_domain`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `research.confirm_dimension_facts`, `research.query_evidence_stage`
+- **輸出 Ports:** `research.evidence_stage_store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** 無
-- **異常:** `thesis_domain-error-1`: Reject illegal lifecycle transitions. → `application.evidence_submission_completed` → Reject illegal lifecycle transitions.
-- **不變條件:** Historical decisions are append-only.
-- **程式入口:** [`thesis_domain_contract`](../../backend/src/thesis_trace/modules/thesis/service.py) (boundary)
-- **公開 Symbols:** [`thesis_domain_contract`](../../backend/src/thesis_trace/modules/thesis/service.py) (boundary)
+- **副作用:** Append confirmed facts, derived stage, gate trace and audit through a demand-owned port. (`-`)
+- **異常:** 無
+- **不變條件:** Canonical stage is derived only by ALG-0002 from confirmed facts.; Every committed version binds one immutable source snapshot, actor, Server time, reason and complete E1-E6 gate trace.; Learner and Admin, client-computed values and unconfirmed AI candidates have no mutation authority.
+- **程式入口:** [`EvidenceStageService`](../../backend/src/thesis_trace/modules/research/evidence_stage/service.py) (service)
+- **公開 Symbols:** [`StageActorContext`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`ConfirmDimensionFactsCommand`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`EvidenceStageRecord`](../../backend/src/thesis_trace/modules/research/evidence_stage/contracts.py) (contract)<br>[`EvidenceStageStorePort`](../../backend/src/thesis_trace/modules/research/evidence_stage/ports.py) (port)
+
+### `anomaly_assessment`
+
+- **目的:** Own versioned source classification, clue scoring, deterministic anomaly decisions, traces, durable analysis work, and offline qualification evaluation.
+- **父模組:** `research_domain`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `research.request_anomaly_assessment`, `research.query_anomaly_assessment`
+- **輸出 Ports:** `research.anomaly_assessment_store`
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Append pending assessments, leased jobs, immutable results, and audit through a demand-owned port. (`-`)
+- **異常:** 無
+- **不變條件:** AI, adapters, and clients cannot set source tier, clue score, anomaly class, qualification, notification, recommendation, or trade state.; Ambiguous source classification resolves downward and C-clue score never contributes to Hard quorum.; Formal Hard publication remains disabled until offline qualification, thirty consecutive shadow days, and explicit Owner activation all bind the exact version tuple.
+- **程式入口:** [`AnomalyAssessmentService`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/service.py) (service)
+- **公開 Symbols:** [`AnomalyAssessmentRecord`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`SourceTier`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`ClueRoute`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyClass`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AssessmentStatus`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`SourceCharacteristicSnapshot`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`ClueFeatureVector`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`DecisionGate`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyDecisionTrace`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`RequestAssessmentCommand`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`EvaluateAssessmentCommand`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyAnalysisJob`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyAnalysisVersions`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py) (contract)<br>[`AnomalyAssessmentStorePort`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py) (port)<br>[`QualificationCaseCategory`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)<br>[`QualificationVersionTuple`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)<br>[`QualificationCase`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)<br>[`OfflineQualificationResult`](../../backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py) (contract)
+
+### `thesis_domain`
+
+- **目的:** Own personal Thesis lifecycle cycles, valuation drafts and immutable publications, invalidation conditions, Evidence links, Outcomes and Reflections.
+- **父模組:** `thesis_trace_application`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `thesis.create`, `thesis.query`, `thesis.save`, `thesis.transition`, `thesis.save_outcome`, `thesis.autosave_reflection`, `thesis.complete_reflection`, `thesis.save_valuation_draft`, `thesis.publish_valuation`
+- **輸出 Ports:** `thesis.lifecycle_store`
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Persist owner-scoped current state, immutable lifecycle versions, cycles, conditions, links, Outcomes, Reflections, receipts and audit through a demand-owned port. (`-`)
+- **異常:** `thesis_domain-error-1`: Reject illegal lifecycle transitions. → `application.thesis_operation_failed` → Reject illegal lifecycle transitions.
+- **不變條件:** Thesis state is visible and mutable only by its personal owner.; Lifecycle versions, prior cycles, Outcomes, completed Reflections and published invalidation conditions are append-only.; Closing requires current-cycle Outcome and completed Reflection; invalidation never waits for Reflection.; Reopen starts exactly one new cycle and never rewrites a prior cycle.
+- **程式入口:** [`ThesisService`](../../backend/src/thesis_trace/modules/thesis/service.py) (service)
+- **公開 Symbols:** [`ThesisRecord`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ThesisStatus`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`CreateThesisCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`SaveThesisCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`TransitionThesisCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`SaveOutcomeCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`SaveReflectionDraftCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`CompleteReflectionCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ThesisInvalidationProjection`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ThesisOutcome`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ReflectionDraftRevision`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ThesisReflection`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ThesisTransitionPreview`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ValuationDraft`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ValuationSnapshot`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`SaveValuationDraftCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`PublishValuationCommand`](../../backend/src/thesis_trace/modules/thesis/contracts.py) (contract)<br>[`ThesisStorePort`](../../backend/src/thesis_trace/modules/thesis/ports.py) (port)<br>[`ThesisService`](../../backend/src/thesis_trace/modules/thesis/service.py) (service)
 
 ### `portfolio_domain`
 
-- **目的:** Own holdings
+- **目的:** Own versioned Cost Profiles, investable cash, canonical Trades, bucket allocations, holdings and deterministic exposure snapshots.
 - **父模組:** `thesis_trace_application`
-- **實作狀態:** `planned`
+- **實作狀態:** `implemented`
 - **輸入 Ports:** 無
-- **輸出 Ports:** 無
+- **輸出 Ports:** `portfolio.store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** 無
+- **副作用:** Persist owner-scoped current and append-only Portfolio state through a demand-owned port. (`-`)
 - **異常:** `portfolio_domain-error-1`: Reject incomplete or over-allocated trades. → `application.evidence_submission_completed` → Reject incomplete or over-allocated trades.
-- **不變條件:** Risk aggregates all buckets for a security.
-- **程式入口:** [`portfolio_domain_contract`](../../backend/src/thesis_trace/modules/portfolio/service.py) (boundary)
-- **公開 Symbols:** [`portfolio_domain_contract`](../../backend/src/thesis_trace/modules/portfolio/service.py) (boundary)
+- **不變條件:** Risk aggregates all buckets for a security.; DCA sizing uses explicit buy price and CostProfileSnapshot; cash includes buy fees and exposures use official close, with exact cap comparisons before presentation rounding.
+- **程式入口:** [`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)
+- **公開 Symbols:** [`PortfolioRecommendationSnapshot`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (class)<br>[`PortfolioService`](../../backend/src/thesis_trace/modules/portfolio/service.py) (service)<br>[`PortfolioStorePort`](../../backend/src/thesis_trace/modules/portfolio/ports.py) (port)<br>[`PortfolioRecord`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)<br>[`TradePreview`](../../backend/src/thesis_trace/modules/portfolio/contracts.py) (contract)
 
 ### `recommendation_domain`
 
-- **目的:** Own immutable recommendations
+- **目的:** Own version-bound investment recommendations, validated candidate evidence and append-only Owner decisions under accepted ADR-0009; no trading authority.
 - **父模組:** `thesis_trace_application`
 - **實作狀態:** `planned`
-- **輸入 Ports:** 無
-- **輸出 Ports:** 無
+- **輸入 Ports:** `recommendation.request`, `recommendation.query`, `recommendation.decide`, `recommendation.reconcile_expiry`
+- **輸出 Ports:** `recommendation.store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** 無
-- **異常:** `recommendation_domain-error-1`: Abstain when validation or risk inputs fail. → `application.evidence_submission_completed` → Abstain when validation or risk inputs fail.
-- **不變條件:** AI cannot override deterministic policy.
-- **程式入口:** [`recommendation_domain_contract`](../../backend/src/thesis_trace/modules/recommendation/service.py) (boundary)
-- **公開 Symbols:** [`recommendation_domain_contract`](../../backend/src/thesis_trace/modules/recommendation/service.py) (boundary)
+- **副作用:** Planned owner-scoped request/job, immutable recommendation/decision and audit writes through demand ports. (`-`)
+- **異常:** 無
+- **不變條件:** DEC-105 expires only unfinalized recommendations; accepted/rejected history is immutable.; AI cannot override valuation, risk, Owner authority or formal-Hard activation.; Cross-domain state is mapped by L0 and atomically persisted by owner adapters; no sibling access.; ADR-0009 and ALG-0032/0033/0034 accepted by project owner on 2026-09-05; Wave 7 remains planned until integration and validation complete.
+- **程式入口:** [`RecommendationService`](../../backend/src/thesis_trace/modules/recommendation/service.py) (service)
+- **公開 Symbols:** [`RecommendationActor`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`BoundRecommendationInput`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationSource`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationInputSnapshot`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationCandidate`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationRecord`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`OwnerDecision`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationJob`](../../backend/src/thesis_trace/modules/recommendation/contracts.py) (class)<br>[`RecommendationStorePort`](../../backend/src/thesis_trace/modules/recommendation/ports.py) (protocol)<br>[`RecommendationService`](../../backend/src/thesis_trace/modules/recommendation/service.py) (service)
 
 ### `workflow_domain`
 
-- **目的:** Own actionable work items
+- **目的:** Own actionable work items, deterministic priority and safety floors, assignment, lifecycle, recurrence, and consistent inbox queries.
 - **父模組:** `thesis_trace_application`
-- **實作狀態:** `planned`
-- **輸入 Ports:** 無
-- **輸出 Ports:** 無
+- **實作狀態:** `implemented`
+- **輸入 Ports:** `workflow.create_action_item`, `workflow.query_action_inbox`, `workflow.query_action_item`, `workflow.transition_action_item`
+- **輸出 Ports:** `workflow.action_item_store`
 - **輸出 Events:** 無
 - **擁有狀態:** 無
-- **副作用:** 無
-- **異常:** `workflow_domain-error-1`: Reject unsafe or unauthorized transitions. → `application.evidence_submission_completed` → Reject unsafe or unauthorized transitions.
-- **不變條件:** System priority and safety floors are server-owned.
-- **程式入口:** [`workflow_domain_contract`](../../backend/src/thesis_trace/modules/workflow/service.py) (boundary)
-- **公開 Symbols:** [`workflow_domain_contract`](../../backend/src/thesis_trace/modules/workflow/service.py) (boundary)
+- **副作用:** Persist Action Items, exact and material trigger fingerprints, recurrence links, actor-scoped idempotency receipts, priority evaluations, and append-only audit through a demand-owned port. (`-`)
+- **異常:** 無
+- **不變條件:** System priority and safety floors are server-owned.; Terminal Action Items never reopen or rewrite source records.; Assignees derive only from Server-owned identity and source ownership.; Version-only source changes with identical material handling reuse the existing item; materially new work links the most relevant terminal item.; Exact transition retries replay their committed result before stale-version rejection.
+- **程式入口:** [`WorkflowService`](../../backend/src/thesis_trace/modules/workflow/service.py) (service)
+- **公開 Symbols:** [`ActionItem`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionInboxPage`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`CreateActionItemCommand`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`TransitionActionItemCommand`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionInboxQuery`](../../backend/src/thesis_trace/modules/workflow/contracts.py) (contract)<br>[`ActionItemStorePort`](../../backend/src/thesis_trace/modules/workflow/ports.py) (port)<br>[`WorkflowService`](../../backend/src/thesis_trace/modules/workflow/service.py) (service)
 
 ### `notification_domain`
 
@@ -265,7 +372,7 @@ flowchart TD
 - **副作用:** 無
 - **異常:** `notification_domain-error-1`: Dead-letter permanent delivery failures. → `application.evidence_submission_completed` → Dead-letter permanent delivery failures.
 - **不變條件:** Forbidden portfolio data never enters message content.
-- **程式入口:** [`notification_domain_contract`](../../backend/src/thesis_trace/modules/notification/service.py) (boundary)
+- **程式入口:** [`notification_domain_contract`](../../backend/src/thesis_trace/modules/notification/service.py) (boundary)<br>[`ThesisConfirmedTransitionPort`](../../backend/src/thesis_trace/application/contracts.py) (port)
 - **公開 Symbols:** [`notification_domain_contract`](../../backend/src/thesis_trace/modules/notification/service.py) (boundary)
 
 ### `fastapi_entrypoint`
@@ -282,6 +389,81 @@ flowchart TD
 - **不變條件:** Client values never become server authority.
 - **程式入口:** [`create_fastapi_app`](../../backend/src/thesis_trace/api.py) (factory)
 - **公開 Symbols:** [`EvidenceApi`](../../backend/src/thesis_trace/api.py) (adapter)
+
+### `postgres_workflow_adapter`
+
+- **目的:** Persist Workflow Action Items, exact/material fingerprints, recurrence, actor-scoped receipts, priority evaluations, and append-only audit using PostgreSQL.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Execute bounded RLS-protected Workflow transactions and repeatable-read inbox queries. (`-`)
+- **異常:** 無
+- **不變條件:** Workflow audit is append-only.; Creation reasons remain aggregate facts while transition reasons are append-only audit facts.; Idempotency receipts are isolated by actor RLS and cannot collide across assignees.; Summary counts and page rows use one authorization scope and query snapshot.; The adapter never reads or writes Research tables to derive Workflow policy.
+- **程式入口:** [`PostgresWorkflowStore`](../../backend/src/thesis_trace/adapters/postgres_workflow/adapter.py) (adapter)
+- **公開 Symbols:** [`PostgresWorkflowStore`](../../backend/src/thesis_trace/adapters/postgres_workflow/adapter.py) (adapter)
+
+### `postgres_database_support`
+
+- **目的:** Create secret-safe SQLAlchemy 2 engines and bounded PostgreSQL connections for repository adapters.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Resolve one database URL only when Psycopg opens a connection. (`-`)
+- **異常:** 無
+- **不變條件:** Resolved database URLs are never retained in engine state.; One connection context owns one bounded SQLAlchemy transaction.
+- **程式入口:** [`create_database_engine`](../../backend/src/thesis_trace/platform/database.py) (adapter)
+- **公開 Symbols:** [`DatabaseUrlProvider`](../../backend/src/thesis_trace/platform/database.py) (contract)<br>[`PostgresUnavailable`](../../backend/src/thesis_trace/platform/database.py) (error)
+
+### `postgres_thesis_adapter`
+
+- **目的:** Persist relational personal Thesis lifecycle state and immutable history in the Thesis-owned PostgreSQL schema under forced RLS through SQLAlchemy 2 and Psycopg.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Execute bounded owner-scoped Thesis transactions and consistent list/detail queries. (`-`)
+- **異常:** 無
+- **不變條件:** Only the Thesis schema is read or written for Thesis persistence.; Current rows and immutable version, cycle, Outcome, Reflection and audit rows commit atomically.; Actor-scoped idempotency receipts reject mismatched retries.; Request-scoped SQLAlchemy connections never cross a functional Port or use process-global transaction binding.; General Thesis aggregate persistence uses declared SQLAlchemy Core mappings; bounded JSON is retained only for immutable record and valuation calculation snapshots.
+- **程式入口:** [`PostgresThesisStore`](../../backend/src/thesis_trace/adapters/postgres_thesis/adapter.py) (adapter)
+- **公開 Symbols:** [`PostgresThesisStore`](../../backend/src/thesis_trace/adapters/postgres_thesis/adapter.py) (adapter)
+
+### `postgres_portfolio_adapter`
+
+- **目的:** Persist normalized owner-scoped Portfolio current state, immutable versions, receipts and audit under forced RLS through SQLAlchemy 2 and Psycopg.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Execute bounded owner-scoped Portfolio transactions. (`-`)
+- **異常:** 無
+- **不變條件:** Only the Portfolio schema is read or written by this adapter.; Confirmed trade state, versions, receipts and audit commit atomically.; Current cash, Cost Profile, holdings, Trades, allocations, corrections and company actions use relational owner rows rather than one aggregate JSON document.; General Portfolio persistence uses declared SQLAlchemy Core mappings and the legacy aggregate JSON tables are removed after transactional migration backfill.; Recommendation analytical snapshots use append-only owner-scoped header, holding and exposure rows; snapshot replay never reads mutable current Portfolio inputs.; Request-scoped SQLAlchemy connections never cross a functional Port or use process-global transaction binding.
+- **程式入口:** [`PostgresPortfolioStore`](../../backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py) (adapter)
+- **公開 Symbols:** [`PostgresPortfolioStore`](../../backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py) (adapter)
+
+### `postgres_atomic_adapter`
+
+- **目的:** Own transaction-local coordination of confirmation consumption with consequential Thesis and Portfolio mutations.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Bind concrete PostgreSQL stores to one caller-owned SQLAlchemy transaction. (`-`)
+- **異常:** 無
+- **不變條件:** Database connections remain inside L3 adapters and never cross a functional port into L0.; Confirmation consumption, domain mutation, receipt, and audit commit or roll back together.
+- **程式入口:** [`PostgresConfirmedThesisTransition`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)<br>[`PostgresConfirmedPortfolioTrade`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)<br>[`PostgresConfirmedValuationPublication`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)
+- **公開 Symbols:** [`PostgresRecommendationTransaction`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)<br>[`PostgresConfirmedThesisTransition`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)<br>[`PostgresConfirmedPortfolioTrade`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)<br>[`PostgresConfirmedValuationPublication`](../../backend/src/thesis_trace/adapters/postgres_atomic/adapter.py) (adapter)
 
 ### `postgres_research_adapter`
 
@@ -324,9 +506,9 @@ flowchart TD
 - **擁有狀態:** 無
 - **副作用:** Read a deployment-owned secret file only at the point of use. (`-`)
 - **異常:** `runtime_configuration_adapter-error-1`: A setting, file reference, or secret value is absent. → `application.evidence_submission_completed` → Fail startup or readiness without revealing the value or file path.
-- **不變條件:** Database secrets require a file reference.; Provider representations are always redacted.
+- **不變條件:** Database secrets require a file reference.; Provider representations are always redacted.; Minimum return is explicitly configured as a Decimal unit fraction with a policy identity; missing or invalid configuration never enables a buy.
 - **程式入口:** [`required_secret_provider`](../../backend/src/thesis_trace/platform/runtime.py) (factory)
-- **公開 Symbols:** [`SecretProvider`](../../backend/src/thesis_trace/platform/runtime.py) (port)
+- **公開 Symbols:** [`minimum_return_configuration`](../../backend/src/thesis_trace/platform/runtime.py) (factory)<br>[`SecretProvider`](../../backend/src/thesis_trace/platform/runtime.py) (port)
 
 ### `collector_worker_adapter`
 
@@ -342,6 +524,36 @@ flowchart TD
 - **不變條件:** Entrypoints never select concrete stores, fetchers, or configuration providers.
 - **程式入口:** [`main`](../../backend/src/thesis_trace/entrypoints/collector_worker.py) (process-entrypoint)
 - **公開 Symbols:** [`main`](../../backend/src/thesis_trace/entrypoints/collector_worker.py) (process-entrypoint)
+
+### `ai_worker_adapter`
+
+- **目的:** Run isolated version-bound anomaly analysis jobs through public application contracts.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Lease anomaly work and invoke provider and critic through the composed application flow. (`-`)
+- **異常:** 無
+- **不變條件:** The worker never reads or writes private Research tables.; Provider latency or failure never blocks API, collector, or email processes.
+- **程式入口:** [`main`](../../backend/src/thesis_trace/entrypoints/ai_worker.py) (process-entrypoint)
+- **公開 Symbols:** [`main`](../../backend/src/thesis_trace/entrypoints/ai_worker.py) (process-entrypoint)
+
+### `openai_recommendation_adapter`
+
+- **目的:** Invoke OpenAI Responses structured outputs through provider-neutral application ports without granting policy authority.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Perform bounded HTTPS requests to the configured OpenAI Responses endpoint. (`-`)
+- **異常:** 無
+- **不變條件:** API keys and provider response bodies never cross the adapter boundary or enter logs.; Structured provider and critic bytes remain untrusted until application validation.
+- **程式入口:** [`OpenAIRecommendationAdapter`](../../backend/src/thesis_trace/adapters/openai_recommendation/adapter.py) (adapter)
+- **公開 Symbols:** [`OpenAIRecommendationAdapter`](../../backend/src/thesis_trace/adapters/openai_recommendation/adapter.py) (adapter)
 
 ### `identity_registry`
 
@@ -448,6 +660,51 @@ flowchart TD
 - **程式入口:** [`AccessRoutes`](../../frontend/src/access/routes.tsx) (router)
 - **公開 Symbols:** [`SessionProfile`](../../frontend/src/access/contracts.ts) (view-contract)
 
+### `react_workflow_adapter`
+
+- **目的:** Present the Server-authoritative Action Inbox, responsive detail route, and company-context link through generated contracts.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Submit Action Item intent and restore list query state from the URL without persistent domain caching. (`-`)
+- **異常:** 無
+- **不變條件:** The browser never computes priority safety or assignee; Selected item and list query are route-addressable; Narrow layout requires no horizontal scrolling for primary actions.
+- **程式入口:** [`ActionInboxRoutes`](../../frontend/src/workflow/routes.tsx) (router)
+- **公開 Symbols:** [`WorkflowClient`](../../frontend/src/workflow/client.ts) (view-contract)
+
+### `react_thesis_adapter`
+
+- **目的:** Present personal Thesis cards, valuation drafts/publications, lifecycle cycles, Outcomes and Reflections through generated Server contracts.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Submit explicit lifecycle intent and autosave eligible long text while keeping route and unsent drafts volatile. (`-`)
+- **異常:** 無
+- **不變條件:** The browser never computes canonical Thesis state; Company tab and selected Thesis identity remain route-addressable; Autosave conflict stops further writes until explicit user recovery.
+- **程式入口:** [`ThesisRoutes`](../../frontend/src/thesis/routes.tsx) (router)
+- **公開 Symbols:** [`ThesisClient`](../../frontend/src/thesis/client.ts) (view-contract)
+
+### `react_portfolio_adapter`
+
+- **目的:** Present Owner-only Cost Profile, cash, server trade preview/confirmation, holdings and exposure.
+- **父模組:** `-`
+- **實作狀態:** `implemented`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Submit Owner intent and retain exact challenge only in volatile dialog memory. (`-`)
+- **異常:** 無
+- **不變條件:** The browser never computes holdings or exposure authority; Learner and Admin receive no Portfolio route; Confirmed Trades require a fresh Server preview and reason.
+- **程式入口:** [`PortfolioRoutes`](../../frontend/src/portfolio/routes.tsx) (router)
+- **公開 Symbols:** [`PortfolioClient`](../../frontend/src/portfolio/client.ts) (view-contract)
+
 ### `postgres_migration_entrypoint`
 
 - **目的:** Run forward-only schema migration and least-privilege grants once under the database-owner migration credential.
@@ -463,13 +720,85 @@ flowchart TD
 - **程式入口:** [`run_production_migrations`](../../infra/postgres/run-production-migrations.py) (initializer)
 - **公開 Symbols:** [`run_production_migrations`](../../infra/postgres/run-production-migrations.py) (initializer)
 
+### `postgres_recommendation_adapter`
+
+- **目的:** Implement Recommendation-owned normalized persistence, leased jobs, forced RLS and append-only history; accepted ADR-0009; implementation pending.
+- **父模組:** `-`
+- **實作狀態:** `planned`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Owner-schema SQLAlchemy transactions and bounded lease claims. (`-`)
+- **異常:** 無
+- **不變條件:** No sibling schema writes; transaction connections stay L3-private.; Recommendation/Decision history is append-only; current projection is normalized.
+- **程式入口:** [`PostgresRecommendationStore`](../../backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py) (adapter)
+- **公開 Symbols:** [`PostgresRecommendationStore`](../../backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py) (adapter)
+
+### `react_recommendation_adapter`
+
+- **目的:** Present Owner-only Recommendation, decision, validity and recovery flows from generated HTTP contracts.
+- **父模組:** `-`
+- **實作狀態:** `planned`
+- **輸入 Ports:** 無
+- **輸出 Ports:** 無
+- **輸出 Events:** 無
+- **擁有狀態:** 無
+- **副作用:** Explicit HTTPS intents and volatile route/form state only. (`-`)
+- **異常:** 無
+- **不變條件:** No client financial/state authority or offline domain storage.; Accessible human-readable errors and Inbox return context are retained.
+- **程式入口:** [`RecommendationWorkspace`](../../frontend/src/features/recommendations/RecommendationWorkspace.tsx) (component)
+- **公開 Symbols:** [`RecommendationWorkspace`](../../frontend/src/features/recommendations/RecommendationWorkspace.tsx) (component)
+
 ## Port 契約
 
 | ID | Owner | Direction | Kind | Timing | Description | Symbols |
 |---|---|---|---|---|---|---|
+| `recommendation.request` | `recommendation_domain` | input | command | sync | Admit exact immutable inputs and typed analysis work.: Owner, active Thesis/cycle, immutable bound input identities and explicit source intent. | `RecommendationInputSnapshot` |
+| `recommendation.query` | `recommendation_domain` | input | query | sync | Return immutable history and current input validity without mutating on read.: Authorized Owner, exact Recommendation identity/version. | `RecommendationRecord` |
+| `recommendation.decide` | `recommendation_domain` | input | command | sync | Append a legal Owner Decision under ALG-0033.: Expected decision sequence, reason, action and exact confirmation when consequential. | `OwnerDecision` |
+| `recommendation.reconcile_expiry` | `recommendation_domain` | input | command | sync | Evaluate DEC-105 against current parent-resolved bound inputs.: Exact current versions and transaction time; never accepted/rejected history. | `BoundRecommendationInput` |
+| `recommendation.store` | `recommendation_domain` | output | dependency | sync | Persist normalized Recommendation state, immutable decisions and leased version-bound work.: Owner-scoped semantic request/job/record/decision values; no SQL handles. | `RecommendationStorePort` |
+| `research.recommendation_query` | `research_domain` | output | dependency | sync | Read immutable source provenance and current Evidence/stage identities through their Research owner.: ResearchRecommendationSource; no Recommendation DTO or SQL row crosses this boundary. | `ResearchRecommendationQueryPort`, `ResearchRecommendationSource` |
+| `application.request_recommendation` | `thesis_trace_application` | input | command | sync | Resolve Owner intent and immutable child inputs for planned Wave 7 admission.: Thesis/valuation/source identities, expected versions, selection reason and idempotency. | `RecommendationFlow` |
+| `application.query_recommendation` | `thesis_trace_application` | input | query | sync | Return one role-safe Recommendation workspace projection.: Owner-visible exact record, decision history, validity, reasons and allowed actions. | `RecommendationView` |
+| `application.decide_recommendation` | `thesis_trace_application` | input | command | sync | Coordinate preview and atomic Owner decision with Workflow outcome.: Exact action/target/version, reason, reminder and optional single-use challenge. | `RecommendationFlow` |
+| `application.process_recommendation` | `thesis_trace_application` | input | command | async | Lease and process one investment-analysis job outside API execution.: Pinned source/model/prompt/schema/build tuple and fenced publication. | `RecommendationFlow` |
+| `application.reconcile_recommendation_expiry` | `thesis_trace_application` | input | command | async | Coordinate bounded owner-port expiry and reminder reconciliation.: Stable cursor and exact critical-input versions; no network I/O. | `RecommendationFlow` |
+| `application.recommendation_transaction` | `thesis_trace_application` | output | command | sync | Commit owner-valid admission/publication/decision/expiry and Workflow state atomically.: SQL-free application intent, bound versions, lease/challenge, reason and idempotency. | `RecommendationTransactionPort` |
+| `application.investment_provider` | `thesis_trace_application` | output | query | async | Request an untrusted investment candidate from pinned sources, not an anomaly label.: Bound research/valuation context, candidate schema/model/prompt/build; no final financial authority. | `InvestmentAnalysisRequest` |
+| `application.investment_critic` | `thesis_trace_application` | output | query | async | Request claim-exact independent critic evidence for the investment candidate.: Pinned sources, exact candidate digest/claims and critic versions. | `InvestmentAnalysisRequest` |
 | `platform.migration_events` | `postgres_migration_entrypoint` | output | event | sync | Describe the redacted terminal outcome of the one-shot migration process.: Stable migration outcome code without credentials or schema values. | 無 |
 | `application.submit_evidence` | `thesis_trace_application` | input | command | async | Submit an authenticated Evidence URL intent.: Actor | `SubmitEvidenceRequest` |
-| `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible evidence submission results.: Record identity | `SubmitEvidenceRequest` |
+| `application.confirm_evidence_stage` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner intent to confirm dimension facts for one Evidence snapshot.: Actor, Evidence and snapshot identity, expected version, facts, reason and idempotency key. | `EvidenceStageFlow`, `ConfirmEvidenceStageRequest`, `EvidenceStageResult` |
+| `application.query_evidence_stage` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative Evidence stage projection.: Authenticated actor and Evidence identity. | `EvidenceStageFlow`, `QueryEvidenceStageRequest`, `EvidenceStageResult` |
+| `application.request_anomaly_assessment` | `thesis_trace_application` | input | command | sync | Admit an authenticated Owner request for a version-bound anomaly assessment.: Actor, Evidence and immutable snapshot identities, expected Evidence version, reason, and idempotency key; source characteristics and all policy values remain Server-owned. | `RequestAnomalyAssessment`, `AnomalyAssessmentResult` |
+| `application.query_anomaly_assessment` | `thesis_trace_application` | input | query | sync | Query one role-safe Server-authoritative anomaly assessment projection and trace.: Authenticated actor and assessment identity. | `AnomalyAssessmentResult` |
+| `application.process_anomaly_job` | `thesis_trace_application` | input | command | async | Process one leased anomaly job through provider, strict validator, critic, Research policy, and atomic result commit.: Opaque lease, assessment/input versions, correlation metadata, and exact build/model/prompt/schema/critic/policy tuple. | `AnomalyJobProcessor` |
+| `application.create_anomaly_review_action` | `thesis_trace_application` | input | command | sync | Resolve one immutable actionable anomaly version and synchronously create or return its Server-authoritative Action Item.: Authenticated Owner, assessment identity/version, optional due time, reason, and idempotency key; assignee, priority, safety, Company, and trigger facts remain Server-owned. | `CreateAnomalyReviewActionRequest`, `ActionItemResult` |
+| `application.query_action_inbox` | `thesis_trace_application` | input | query | sync | Query one role-safe Action Inbox summary and page from a single Server snapshot.: Authenticated actor, Server-whitelisted filters/search/sort, page size, and opaque cursor. | `QueryActionInboxRequest`, `ActionInboxResult` |
+| `application.query_action_item` | `thesis_trace_application` | input | query | sync | Return one assignee-scoped Action Item detail and current legal operations.: Authenticated actor and opaque Action Item identity. | `QueryActionItemRequest`, `ActionItemResult` |
+| `application.transition_action_item` | `thesis_trace_application` | input | command | sync | Revalidate assignee authority and request one versioned Server-time Action Item transition.: Actor, item/expected version, target status, reason, optional future defer time, and idempotency key. | `TransitionActionItemRequest`, `ActionItemResult` |
+| `application.thesis_confirmed_transition` | `thesis_trace_application` | output | command | sync | Atomically consume an exact confirmation and commit one consequential Thesis transition.: Authenticated actor, target/version, transition, reason, idempotency key, challenge token and Server time. | `ThesisConfirmedTransitionPort` |
+| `application.portfolio_confirmed_trade` | `thesis_trace_application` | output | command | sync | Atomically consume an exact confirmation and commit one Trade, correction, or company action.: Authenticated actor, immutable preview, reason, idempotency key, challenge token and Server time. | `PortfolioConfirmedTradePort` |
+| `application.valuation_confirmed_publication` | `thesis_trace_application` | output | command | sync | Atomically revalidate bound Evidence and Cost Profile versions, consume confirmation, and publish a Valuation snapshot.: Authenticated actor, Thesis/draft versions, exact source binding, reason, idempotency key, challenge token and Server time. | `ValuationConfirmedPublicationPort` |
+| `application.create_personal_thesis` | `thesis_trace_application` | input | command | sync | Create one authenticated Owner- or Learner-owned draft Thesis in an authorized Company.: Actor, Company identity/version, title, narrative, invalidation conditions, Evidence references and idempotency key. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.query_personal_theses` | `thesis_trace_application` | input | query | sync | Query only the authenticated actor's Thesis cards or one detail/cycle projection in a Company.: Actor, Company identity and optional Thesis identity. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.save_personal_thesis` | `thesis_trace_application` | input | command | sync | Explicitly save a personal Thesis draft, published invalidation-condition version or Evidence links.: Actor, Thesis/expected version, bounded fields, exact Research references, reason and idempotency key. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.transition_personal_thesis` | `thesis_trace_application` | input | command | sync | Preview or commit one legal direct or consequential personal Thesis lifecycle transition.: Actor, Thesis/expected version, target status, reason, idempotency and optional exact confirmation challenge. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.save_thesis_outcome` | `thesis_trace_application` | input | command | sync | Append one current-cycle personal Thesis Outcome version through explicit save.: Actor, Thesis/expected version, observation time, result text, Evidence references, reason and idempotency. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.autosave_thesis_reflection` | `thesis_trace_application` | input | command | sync | Append one eligible unfinished Reflection draft revision without completing it.: Actor, Thesis/cycle, expected draft version, one eligible long-text field and idempotency key. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.complete_thesis_reflection` | `thesis_trace_application` | input | command | sync | Explicitly append a completed current-cycle Reflection with all required learning sections.: Actor, Thesis/expected version, original assumption, judgment errors, missing Evidence, improvement, reason and idempotency. | `ThesisLifecycleFlow`, `ThesisLifecycleRequest`, `ThesisLifecycleResult` |
+| `application.save_valuation_draft` | `thesis_trace_application` | input | command | sync | Save and deterministically evaluate one Owner valuation draft against an exact Cost Profile version.: Owner, Thesis/draft versions, method, source-bound samples, horizon and Decimal forecast inputs. | `ValuationFlow` |
+| `application.publish_valuation` | `thesis_trace_application` | input | command | sync | Preview and atomically publish one immutable valuation snapshot with an exact challenge.: Owner, Thesis/draft versions, exact challenge, reason and idempotency key. | `ValuationFlow`, `ValuationConfirmedPublicationPort` |
+| `application.manage_portfolio` | `thesis_trace_application` | input | command | sync | Save/query Owner Cost Profile, cash, holdings and server exposure projections.: Owner, expected Portfolio version, Decimal values, reason and idempotency key. | `PortfolioFlow` |
+| `application.confirm_portfolio_trade` | `thesis_trace_application` | input | command | sync | Preview deterministic Trade/allocation/exposure results and atomically confirm them with an exact challenge.: Owner, canonical trade intent, explicit buckets, authoritative classifications, challenge, reason and idempotency. | `PortfolioFlow`, `PortfolioConfirmedTradePort` |
+| `thesis.save_valuation_draft` | `thesis_domain` | input | command | sync | Evaluate and save a versioned valuation draft.: SaveValuationDraftCommand. | `SaveValuationDraftCommand`, `ValuationDraft` |
+| `thesis.publish_valuation` | `thesis_domain` | input | command | sync | Append an immutable confirmed valuation snapshot.: PublishValuationCommand. | `PublishValuationCommand`, `ValuationSnapshot` |
+| `portfolio.store` | `portfolio_domain` | output | dependency | sync | Persist/query owner Portfolio state atomically.: PortfolioRecord and command receipt primitives. | `PortfolioStorePort`, `PortfolioRecord` |
+| `application.recommendation_provider` | `thesis_trace_application` | output | dependency | async | Request one provider-neutral source-bound structured analysis candidate from an immutable snapshot.: Exact snapshot/version tuple and bounded schema/model/prompt identifiers; output remains untrusted bytes until validation. | `RecommendationProviderPort`, `RecommendationProviderRequest` |
+| `application.recommendation_critic` | `thesis_trace_application` | output | dependency | async | Independently verify availability, citation support, subject, time, invalidation, B independence, and newer-A conflict for one candidate.: Immutable source snapshot and candidate; output is an exact structured PASS or non-PASS result. | `RecommendationCriticPort`, `RecommendationCriticRequest` |
+| `application.events` | `thesis_trace_application` | output | event | async | Publish application-visible committed outcomes and safe resolved errors; never a durable Workflow delivery channel.: Record identity | `SubmitEvidenceRequest` |
 | `access.authorize_owner` | `access_domain` | input | query | sync | Decide whether the actor may submit Owner evidence.: Immutable authenticated actor snapshot. | `AuthenticatedActor` |
 | `access.events` | `access_domain` | output | event | sync | Publish authorization facts after validation.: Actor ID and authorization purpose. | `AuthenticatedActor` |
 | `access.resolve_identity` | `identity_registry` | input | query | sync | Resolve a verified provider discriminator and subject through a preapproved mapping.: ProviderIdentity and verified token facts. | `ProviderIdentity` |
@@ -489,18 +818,40 @@ flowchart TD
 | `research.unit_of_work` | `evidence_intake` | output | dependency | sync | Atomically save evidence state: Semantic records without ORM representations. | `EvidenceIntakeUnitOfWorkPort` |
 | `research.collection_jobs` | `evidence_collection` | output | dependency | async | Lease: Collection request and opaque lease token. | `CollectionStorePort` |
 | `research.source_fetch` | `evidence_collection` | output | dependency | async | Fetch one admitted external source under SSRF and size restrictions.: Evidence URL and semantic fetch result. | `SourceFetchPort` |
+| `research.confirm_dimension_facts` | `evidence_stage` | input | command | sync | Confirm one complete version of Owner-authored E-stage dimension facts and derive the canonical stage.: Authorized Owner, Evidence and snapshot identity, expected version, immutable dimension facts, reason and idempotency key. | `ConfirmDimensionFactsCommand` |
+| `research.query_evidence_stage` | `evidence_stage` | input | query | sync | Return the current Server-authoritative E-stage projection for an authorized Evidence stream.: Authenticated Owner or Learner, Evidence identity and current stage version. | `EvidenceStageRecord` |
+| `research.evidence_stage_store` | `evidence_stage` | output | dependency | sync | Atomically validate snapshot membership and expected version then append confirmed facts, derived stage, trace and audit.: Semantic stage record and idempotency key without SQL or wire representations. | `EvidenceStageStorePort` |
+| `research.evidence_stage_events` | `evidence_stage` | output | event | sync | Reserved for a later notification slice that will publish committed confirmed-fact and deterministic stage versions through a durable outbox.: Evidence identity, stage version, source snapshot, canonical stage and stable event identity. | `EvidenceStageRecord` |
+| `research.request_anomaly_assessment` | `anomaly_assessment` | input | command | sync | Atomically create a version-bound pending assessment, audit fact, and durable AI job.: Authorized Owner, immutable source snapshot identities/versions, bounded source-characteristic facts, reason, and idempotency key. | `RequestAssessmentCommand`, `AnomalyAssessmentRecord` |
+| `research.query_anomaly_assessment` | `anomaly_assessment` | input | query | sync | Return the latest committed role-safe anomaly assessment state and deterministic trace.: Authorized actor and assessment identity. | `AnomalyAssessmentRecord` |
+| `research.anomaly_assessment_store` | `anomaly_assessment` | output | dependency | async | Atomically request, lease, load immutable sources, commit, supersede, and query anomaly work under immutable version bindings.: Semantic assessment, job, decision trace, source snapshot, and audit values without SQL, provider, or wire representations. | `AnomalyAssessmentStorePort`, `AnomalyAnalysisJob`, `AnomalyAnalysisVersions`, `AnomalyAssessmentRecord` |
 | `research.clock` | `research_domain` | output | dependency | sync | Supply observed and retrieved times.: Time value with provenance. | `EvidenceRecord` |
 | `research.ids` | `research_domain` | output | dependency | sync | Generate persistent semantic identifiers.: Opaque unique identifier. | `EvidenceRecord` |
 | `research.events` | `research_domain` | output | event | async | Publish committed evidence lifecycle transitions.: Persistent event envelope and semantic payload. | `EvidenceRecord` |
+| `workflow.create_action_item` | `workflow_domain` | input | command | sync | Apply deterministic fingerprint, assignment, priority, and safety policy then atomically create or return an Action Item.: Workflow-local actor and immutable Server-mapped source context without Access, Research, wire, or storage representations. | `CreateActionItemCommand`, `ActionItem` |
+| `workflow.query_action_inbox` | `workflow_domain` | input | query | sync | Return authorized counts and page rows from the same repeatable-read query snapshot.: Workflow actor scope, normalized filters/search/sort, page size, and opaque cursor. | `ActionInboxQuery`, `ActionInboxPage` |
+| `workflow.query_action_item` | `workflow_domain` | input | query | sync | Return one current assignee-scoped Action Item aggregate.: Workflow actor and Action Item identity. | `ActionItem` |
+| `workflow.transition_action_item` | `workflow_domain` | input | command | sync | Apply the versioned Action Item state machine and atomically append its audit fact.: Workflow actor, item/version, target state, reason, optional defer time, idempotency, and Server time. | `TransitionActionItemCommand`, `ActionItem` |
+| `workflow.action_item_store` | `workflow_domain` | output | dependency | sync | Atomically persist and query Action Item aggregates, exact/material fingerprints, terminal recurrence links, priority history, actor-scoped idempotency receipts, and append-only audit under assignee RLS.: Workflow semantic values including creation-rule and trigger identity, without SQL, ORM, Access, Research, or wire representations. | `ActionItemStorePort` |
+| `thesis.create` | `thesis_domain` | input | command | sync | Create one personal draft Thesis.: Thesis actor and Server-validated Company/research primitives. | `CreateThesisCommand`, `ThesisRecord` |
+| `thesis.query` | `thesis_domain` | input | query | sync | Query owner-scoped Thesis cards details cycles and invalidation projections.: Thesis actor | `ThesisRecord`, `ThesisInvalidationProjection` |
+| `thesis.save` | `thesis_domain` | input | command | sync | Save versioned Thesis fields conditions and Evidence links.: Save command with expected version and idempotency. | `SaveThesisCommand`, `ThesisRecord` |
+| `thesis.transition` | `thesis_domain` | input | command | sync | Apply ALG-0013 to one personal Thesis.: Actor target status expected version reason confirmation metadata and Server time. | `TransitionThesisCommand`, `ThesisRecord`, `ThesisTransitionPreview` |
+| `thesis.save_outcome` | `thesis_domain` | input | command | sync | Append a current-cycle Outcome version.: Outcome command and Server-validated Evidence references. | `SaveOutcomeCommand`, `ThesisOutcome`, `ThesisRecord` |
+| `thesis.autosave_reflection` | `thesis_domain` | input | command | sync | Append an unfinished Reflection draft revision under ALG-0021.: Eligible field text expected draft version and idempotency. | `SaveReflectionDraftCommand`, `ReflectionDraftRevision` |
+| `thesis.complete_reflection` | `thesis_domain` | input | command | sync | Append a completed current-cycle Reflection version.: Four required learning sections expected Thesis version reason and idempotency. | `CompleteReflectionCommand`, `ThesisReflection`, `ThesisRecord` |
+| `thesis.lifecycle_store` | `thesis_domain` | output | dependency | sync | Atomically persist and query owner-scoped Thesis current state, immutable versions/cycles/conditions/links/Outcomes/Reflections/receipts/audit.: Thesis semantic commands and values without Access, Research, HTTP, ORM, SQL or session representations. | `ThesisStorePort` |
 
 ## Event 契約
 
 | ID | Owner | Delivery | Emitted when | Purpose | Consumers |
 |---|---|---|---|---|---|
+| `application.recommendation_operation_resolved` | `thesis_trace_application` | at-most-once | After commit or completed rejection/rollback; result_code distinguishes those outcomes and never implies a state change on rejection. | Optional refresh hint for a resolved Recommendation operation, not authoritative state or a durable task trigger. | `fastapi_entrypoint` |
 | `platform.migration_failed` | `postgres_migration_entrypoint` | at-most-once | A forward migration or least-privilege grant cannot commit. | Describe a redacted terminal migration failure for process supervision. | `backend_composition` |
 | `research.evidence_received` | `research_domain` | at-least-once | The atomic intake transaction has committed. | Report that received evidence | `thesis_trace_application`, `research_domain` |
 | `research.collection_succeeded` | `research_domain` | at-least-once | The snapshot and succeeded state have committed. | Report a committed immutable source snapshot. | `thesis_trace_application` |
 | `research.collection_failed` | `research_domain` | at-least-once | Failure state and retry metadata have committed. | Report a committed retryable or terminal safe failure. | `thesis_trace_application` |
+| `research.evidence_stage_changed` | `evidence_stage` | at-least-once | Confirmed facts, stage, complete gate trace and audit have committed atomically. | Report a committed Owner-confirmed fact and deterministic E-stage version. | `thesis_trace_application`, `notification_domain` |
 | `access.owner_authorized` | `access_domain` | at-most-once | Identity and role checks have succeeded. | Record a successful Owner authorization decision. | `thesis_trace_application` |
 | `access.identity_resolved` | `access_domain` | at-most-once | Full JWT and get-identity facts match one enabled preapproved mapping. | Record successful resolution of provider-discriminated identity to one internal user. | `access_domain` |
 | `access.identity_rejected` | `access_domain` | at-most-once | Provider evidence or preapproved mapping fails closed. | Record a non-disclosing identity rejection category. | `thesis_trace_application` |
@@ -510,13 +861,215 @@ flowchart TD
 | `access.account_changed` | `access_domain` | at-least-once | Consequential mutation, confirmation consumption, and audit commit atomically. | Report a committed identity, role, or account lifecycle change. | `session_management`, `thesis_trace_application` |
 | `access.confirmation_issued` | `access_domain` | at-most-once | Challenge bindings and expiry commit. | Record issuance of a short-lived challenge without publishing its token. | `thesis_trace_application` |
 | `access.confirmation_consumed` | `access_domain` | at-least-once | Challenge, reason, mutation, and append-only audit commit. | Report atomic challenge consumption and consequential mutation. | `thesis_trace_application` |
+| `application.action_item_operation_failed` | `thesis_trace_application` | at-most-once | Authorization, source resolution, Workflow validation, query, or transaction fails and no success state is presented. | Report a stable non-disclosing rejection or execution failure category for an Action Item application operation. | `fastapi_entrypoint` |
+| `application.thesis_operation_failed` | `thesis_trace_application` | at-most-once | Authorization, reference, transition, confirmation, version, idempotency or persistence validation rejects. | Describe a stable personal Thesis command or query rejection without disclosing inaccessible record existence. | `fastapi_entrypoint` |
 | `application.evidence_submission_completed` | `thesis_trace_application` | at-most-once | A Research lifecycle event has been mapped after commit. | Notify delivery adapters that current evidence status can be queried. | `fastapi_entrypoint` |
 
 ## Type Catalog
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
-| `evidenceapi` | `fastapi_entrypoint` | `EvidenceApi` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `recommendationactor` | `recommendation_domain` | `RecommendationActor` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `boundrecommendationinput` | `recommendation_domain` | `BoundRecommendationInput` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationsource` | `recommendation_domain` | `RecommendationSource` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationinputsnapshot` | `recommendation_domain` | `RecommendationInputSnapshot` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationactor`, `boundrecommendationinput`, `recommendationsource` |
+| `recommendationcandidate` | `recommendation_domain` | `RecommendationCandidate` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationrecord` | `recommendation_domain` | `RecommendationRecord` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationinputsnapshot`, `recommendationcandidate` |
+| `ownerdecision` | `recommendation_domain` | `OwnerDecision` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationjob` | `recommendation_domain` | `RecommendationJob` (class, `backend/src/thesis_trace/modules/recommendation/contracts.py`) | module-public | domain-value | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | 無 |
+| `recommendationstoreport` | `recommendation_domain` | `RecommendationStorePort` (protocol, `backend/src/thesis_trace/modules/recommendation/ports.py`) | module-public | port | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationinputsnapshot`, `recommendationrecord`, `ownerdecision`, `recommendationjob` |
+| `recommendationservice` | `recommendation_domain` | `RecommendationService` (class, `backend/src/thesis_trace/modules/recommendation/service.py`) | module-public | descriptor | `recommendation_domain`, `thesis_trace_application`, `postgres_recommendation_adapter` | `recommendationstoreport` |
+| `recommendationflow` | `thesis_trace_application` | `RecommendationFlow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | composition-mapping | `thesis_trace_application`, `postgres_atomic_adapter`, `backend_composition` | `recommendationdecisioncommand`, `recommendationdecisionpreview`, `accessconfirmationservice`, `ownerdecision`, `recommendationadmissioncommand`, `recommendationpublicationcommand`, `recommendationview`, `thesisstoreport`, `portfoliostoreport`, `researchrecommendationqueryport`, `actionitemstoreport`, `workflowservice`, `workflowactorcontext`, `actionsourceref`, `createactionitemcommand`, `investmentanalysisrequest`, `recommendationtransactionport`, `recommendationstoreport`, `recommendationjob`, `recommendationsource`, `researchrecommendationfacade`, `researchrecommendationsource`, `researchactorcontext`, `recommendationservice`, `recommendationinputsnapshot`, `recommendationrecord`, `recommendationactor`, `boundrecommendationinput`, `portfoliorecommendationsnapshot`, `portfolioservice`, `portfolioactorcontext`, `thesisservice`, `thesisactorcontext`, `authenticatedactor`, `thesisresearchqueryport` |
+| `recommendationtransactionport` | `thesis_trace_application` | `RecommendationTransactionPort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | module-public | port | `thesis_trace_application`, `postgres_atomic_adapter`, `backend_composition` | `recommendationadmissioncommand`, `recommendationpublicationcommand`, `recommendationdecisioncommand`, `recommendationdecisionpreview`, `recommendationview` |
+| `recommendationview` | `thesis_trace_application` | `RecommendationView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `recommendationfieldview` | `thesis_trace_application` | `RecommendationFieldView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationsourceview` | `thesis_trace_application` | `RecommendationSourceView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationclaimview` | `thesis_trace_application` | `RecommendationClaimView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationdecisionhistoryview` | `thesis_trace_application` | `RecommendationDecisionHistoryView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `recommendationfieldview` |
+| `recommendationriskrow` | `thesis_trace_application` | `RecommendationRiskRow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationrequestview` | `thesis_trace_application` | `RecommendationRequestView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `recommendationrequestpage` | `thesis_trace_application` | `RecommendationRequestPage` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `recommendationrequestview` |
+| `recommendationdetailview` | `thesis_trace_application` | `RecommendationDetailView` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `recommendationfieldview`, `recommendationsourceview`, `recommendationclaimview`, `recommendationdecisionhistoryview`, `recommendationriskrow`, `recommendationview` |
+| `recommendationadmissionbody` | `fastapi_entrypoint` | `RecommendationAdmissionBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `recommendationdecisionbody` | `fastapi_entrypoint` | `RecommendationDecisionBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `recommendationconfirmbody` | `fastapi_entrypoint` | `RecommendationConfirmBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `recommendationdecisionbody` |
+| `recommendationclient` | `react_recommendation_adapter` | `RecommendationClient` (interface, `frontend/src/features/recommendations/client.ts`) | private | port | `react_recommendation_adapter` | 無 |
+| `recommendationdecisioncommand` | `thesis_trace_application` | `RecommendationDecisionCommand` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `recommendationdecisionpreview` | `thesis_trace_application` | `RecommendationDecisionPreview` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `postgres_atomic_adapter` | `recommendationview` |
+| `accessconfirmationservice` | `access_domain` | `AccessConfirmationService` (class, `backend/src/thesis_trace/modules/access/orchestration.py`) | module-public | composition-mapping | `access_domain`, `thesis_trace_application`, `postgres_access_adapter` | `confirmationservice`, `authenticatedactor`, `role` |
+| `recommendationadmissioncommand` | `thesis_trace_application` | `RecommendationAdmissionCommand` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `recommendationpublicationcommand` | `thesis_trace_application` | `RecommendationPublicationCommand` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `postgres_atomic_adapter` | 無 |
+| `investmentanalysisrequest` | `thesis_trace_application` | `InvestmentAnalysisRequest` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | domain-value | `thesis_trace_application`, `openai_recommendation_adapter` | 無 |
+| `portfoliorecommendationsnapshot` | `portfolio_domain` | `PortfolioRecommendationSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application`, `postgres_portfolio_adapter` | `portfoliosnapshot`, `costprofilesnapshot`, `exposuresnapshot`, `dcaselection`, `officialsecuritysnapshot` |
+| `postgresrecommendationstore` | `postgres_recommendation_adapter` | `PostgresRecommendationStore` (class, `backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py`) | private | adapter-binding | `postgres_recommendation_adapter` | `recommendationstoreport` |
+| `postgresportfoliosecuritycontext` | `postgres_portfolio_adapter` | `_SecurityContext` (protocol, `backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py`) | private | adapter-binding | `postgres_portfolio_adapter` | 無 |
+| `postgresrecommendationsecuritycontext` | `postgres_recommendation_adapter` | `_SecurityContext` (protocol, `backend/src/thesis_trace/adapters/postgres_recommendation/adapter.py`) | private | adapter-binding | `postgres_recommendation_adapter` | 無 |
+| `postgresportfolioconnection` | `postgres_portfolio_adapter` | `_Connection` (class, `backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py`) | private | adapter-binding | `postgres_portfolio_adapter` | 無 |
+| `postgresthesissecuritycontext` | `postgres_thesis_adapter` | `_SecurityContext` (protocol, `backend/src/thesis_trace/adapters/postgres_thesis/adapter.py`) | private | adapter-binding | `postgres_thesis_adapter` | 無 |
+| `postgresthesisconnection` | `postgres_thesis_adapter` | `_Connection` (class, `backend/src/thesis_trace/adapters/postgres_thesis/adapter.py`) | private | adapter-binding | `postgres_thesis_adapter` | 無 |
+| `postgresresearchtransactionconnection` | `postgres_research_adapter` | `_TransactionConnection` (class, `backend/src/thesis_trace/platform/postgres.py`) | private | adapter-binding | `postgres_research_adapter` | 無 |
+| `impactsummaryvalue` | `react_portfolio_adapter` | `ImpactSummaryValue` (interface, `frontend/src/portfolio/routes.tsx`) | private | wire-representation | `react_portfolio_adapter` | 無 |
+| `researchrecordreference` | `research_domain` | `ResearchRecordReference` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application`, `postgres_research_adapter` | 無 |
+| `researchrecommendationsource` | `research_domain` | `ResearchRecommendationSource` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application`, `postgres_research_adapter` | `researchrecordreference` |
+| `researchrecommendationqueryport` | `research_domain` | `ResearchRecommendationQueryPort` (protocol, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | port | `research_domain`, `postgres_research_adapter` | `researchrecommendationsource`, `researchrecordreference` |
+| `researchrecommendationfacade` | `research_domain` | `ResearchRecommendationFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application`, `backend_composition` | `researchactorcontext`, `researchrecommendationqueryport`, `researchrecommendationsource`, `researchrecordreference` |
+| `thesisstatus` | `thesis_domain` | `ThesisStatus` (enum, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | policy | `thesis_domain`, `postgres_thesis_adapter` | 無 |
+| `thesisactorcontext` | `thesis_domain` | `ThesisActorContext` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `thesis_trace_application` | 無 |
+| `thesisresearchreference` | `thesis_domain` | `ThesisResearchReference` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | composition-mapping | `thesis_domain`, `thesis_trace_application`, `postgres_thesis_adapter` | 無 |
+| `invalidationcondition` | `thesis_domain` | `InvalidationCondition` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
+| `thesisoutcome` | `thesis_domain` | `ThesisOutcome` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `thesisresearchreference` |
+| `reflectiondraftrevision` | `thesis_domain` | `ReflectionDraftRevision` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
+| `thesisreflection` | `thesis_domain` | `ThesisReflection` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
+| `thesisrecord` | `thesis_domain` | `ThesisRecord` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `thesisstatus`, `invalidationcondition`, `thesisresearchreference`, `thesisoutcome`, `thesisreflection`, `reflectiondraftrevision` |
+| `createthesiscommand` | `thesis_domain` | `CreateThesisCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain`, `postgres_thesis_adapter` | `thesisactorcontext`, `thesisresearchreference` |
+| `savethesiscommand` | `thesis_domain` | `SaveThesisCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain`, `postgres_thesis_adapter` | `thesisactorcontext`, `thesisresearchreference` |
+| `transitionthesiscommand` | `thesis_domain` | `TransitionThesisCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain`, `postgres_thesis_adapter` | `thesisactorcontext`, `thesisstatus` |
+| `saveoutcomecommand` | `thesis_domain` | `SaveOutcomeCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain`, `postgres_thesis_adapter` | `thesisactorcontext`, `thesisresearchreference` |
+| `savereflectiondraftcommand` | `thesis_domain` | `SaveReflectionDraftCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain`, `postgres_thesis_adapter` | `thesisactorcontext` |
+| `completereflectioncommand` | `thesis_domain` | `CompleteReflectionCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain`, `postgres_thesis_adapter` | `thesisactorcontext` |
+| `thesisinvalidationprojection` | `thesis_domain` | `ThesisInvalidationProjection` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | composition-mapping | `thesis_domain`, `thesis_trace_application` | 無 |
+| `thesistransitionpreview` | `thesis_domain` | `ThesisTransitionPreview` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | query | `thesis_domain`, `thesis_trace_application` | `thesisstatus` |
+| `thesisstoreport` | `thesis_domain` | `ThesisStorePort` (protocol, `backend/src/thesis_trace/modules/thesis/ports.py`) | module-public | port | `thesis_domain`, `postgres_thesis_adapter` | `thesisrecord`, `createthesiscommand`, `savethesiscommand`, `transitionthesiscommand`, `saveoutcomecommand`, `savereflectiondraftcommand`, `completereflectioncommand`, `thesisinvalidationprojection` |
+| `thesisservice` | `thesis_domain` | `ThesisService` (class, `backend/src/thesis_trace/modules/thesis/service.py`) | module-public | policy | `backend_composition`, `thesis_trace_application` | `thesisstoreport`, `thesisrecord`, `createthesiscommand`, `savethesiscommand`, `transitionthesiscommand`, `saveoutcomecommand`, `savereflectiondraftcommand`, `completereflectioncommand`, `thesisinvalidationprojection`, `thesistransitionpreview` |
+| `thesislifecyclerequest` | `thesis_trace_application` | `ThesisLifecycleRequest` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | `authenticatedactor` |
+| `thesislifecycleresult` | `thesis_trace_application` | `ThesisLifecycleResult` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `thesislifecycleflow` | `thesis_trace_application` | `ThesisLifecycleFlow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | `authenticatedactor`, `thesisservice`, `thesisactorcontext`, `thesisresearchreference`, `thesislifecyclerequest`, `thesislifecycleresult`, `thesisconfirmedtransitionport` |
+| `thesisconfirmedtransitionport` | `thesis_trace_application` | `ThesisConfirmedTransitionPort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | module-public | port | `backend_composition`, `thesis_trace_application` | `authenticatedactor`, `thesisstatus`, `thesisrecord` |
+| `thesisresearchqueryport` | `thesis_trace_application` | `ThesisResearchQueryPort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | private | port | `thesis_trace_application` | `researchrecordreference` |
+| `thesisconfirmationport` | `thesis_trace_application` | `ThesisConfirmationPort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | private | port | `thesis_trace_application` | 無 |
+| `thesisresearchreferencebody` | `fastapi_entrypoint` | `ThesisResearchReferenceBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `thesiscreatebody` | `fastapi_entrypoint` | `ThesisCreateBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `thesisresearchreferencebody` |
+| `thesissavebody` | `fastapi_entrypoint` | `ThesisSaveBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `thesisresearchreferencebody` |
+| `thesistransitionpreviewbody` | `fastapi_entrypoint` | `ThesisTransitionPreviewBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `thesistransitionbody` | `fastapi_entrypoint` | `ThesisTransitionBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `thesistransitionpreviewbody` |
+| `thesisoutcomebody` | `fastapi_entrypoint` | `ThesisOutcomeBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `thesisresearchreferencebody` |
+| `thesisreflectiondraftbody` | `fastapi_entrypoint` | `ThesisReflectionDraftBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `thesisreflectioncompletebody` | `fastapi_entrypoint` | `ThesisReflectionCompleteBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `thesisresponse` | `fastapi_entrypoint` | `ThesisResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_thesis_adapter` | 無 |
+| `thesistransitionpreviewresponse` | `fastapi_entrypoint` | `ThesisTransitionPreviewResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_thesis_adapter` | 無 |
+| `postgresrecommendationtransaction` | `postgres_atomic_adapter` | `PostgresRecommendationTransaction` (class, `backend/src/thesis_trace/adapters/postgres_atomic/adapter.py`) | module-public | adapter-binding | `postgres_atomic_adapter`, `backend_composition` | `recommendationtransactionport`, `recommendationadmissioncommand`, `recommendationpublicationcommand`, `recommendationdecisioncommand`, `recommendationdecisionpreview`, `recommendationview`, `recommendationflow`, `postgresaccessadapter`, `postgresthesisstore`, `postgresportfoliostore`, `postgresevidencestore`, `postgresrecommendationstore`, `postgresworkflowstore` |
+| `postgresconfirmedthesistransition` | `postgres_atomic_adapter` | `PostgresConfirmedThesisTransition` (class, `backend/src/thesis_trace/adapters/postgres_atomic/adapter.py`) | module-public | adapter-binding | `backend_composition`, `postgres_atomic_adapter` | `postgresaccessadapter`, `postgresthesisstore` |
+| `postgresthesisstore` | `postgres_thesis_adapter` | `PostgresThesisStore` (class, `backend/src/thesis_trace/adapters/postgres_thesis/adapter.py`) | module-public | adapter-binding | `backend_composition` | `thesisstoreport`, `thesisrecord`, `createthesiscommand`, `savethesiscommand`, `transitionthesiscommand`, `saveoutcomecommand`, `savereflectiondraftcommand`, `completereflectioncommand`, `thesisinvalidationprojection` |
+| `thesisclient` | `react_thesis_adapter` | `ThesisClient` (interface, `frontend/src/thesis/client.ts`) | private | port | `react_thesis_adapter` | 無 |
+| `valuationconfirmedpublicationport` | `thesis_trace_application` | `ValuationConfirmedPublicationPort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | private | port | `thesis_trace_application`, `backend_composition` | 無 |
+| `valuationflow` | `thesis_trace_application` | `ValuationFlow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | 無 |
+| `portfolioconfirmedtradeport` | `thesis_trace_application` | `PortfolioConfirmedTradePort` (protocol, `backend/src/thesis_trace/application/contracts.py`) | private | port | `thesis_trace_application`, `backend_composition` | 無 |
+| `portfolioflow` | `thesis_trace_application` | `PortfolioFlow` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | 無 |
+| `postgresconfirmedportfoliotrade` | `postgres_atomic_adapter` | `PostgresConfirmedPortfolioTrade` (class, `backend/src/thesis_trace/adapters/postgres_atomic/adapter.py`) | module-public | adapter-binding | `backend_composition`, `postgres_atomic_adapter` | 無 |
+| `postgresconfirmedvaluationpublication` | `postgres_atomic_adapter` | `PostgresConfirmedValuationPublication` (class, `backend/src/thesis_trace/adapters/postgres_atomic/adapter.py`) | module-public | adapter-binding | `backend_composition`, `postgres_atomic_adapter` | 無 |
+| `tradeside` | `portfolio_domain` | `TradeSide` (enum, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
+| `officialsecuritysnapshot` | `portfolio_domain` | `OfficialSecuritySnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | 無 |
+| `holdingsnapshot` | `portfolio_domain` | `HoldingSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
+| `portfoliosnapshot` | `portfolio_domain` | `PortfolioSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `holdingsnapshot` |
+| `exposuresnapshot` | `portfolio_domain` | `ExposureSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application`, `postgres_portfolio_adapter` | 無 |
+| `dcaselection` | `portfolio_domain` | `DcaSelection` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `exposuresnapshot` |
+| `canonicaltrade` | `portfolio_domain` | `CanonicalTrade` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | `tradeside` |
+| `canonicalcsvissue` | `portfolio_domain` | `CanonicalCsvIssue` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application` | 無 |
+| `canonicalcsvpreview` | `portfolio_domain` | `CanonicalCsvPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application` | `canonicaltrade`, `canonicalcsvissue` |
+| `tradeallocation` | `portfolio_domain` | `TradeAllocation` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | 無 |
+| `companyactionallocation` | `portfolio_domain` | `CompanyActionAllocation` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain` | 無 |
+| `portfolioactorcontext` | `portfolio_domain` | `PortfolioActorContext` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `thesis_trace_application` | 無 |
+| `costprofilesnapshot` | `portfolio_domain` | `CostProfileSnapshot` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | 無 |
+| `traderecord` | `portfolio_domain` | `TradeRecord` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter` | `canonicaltrade`, `tradeallocation` |
+| `tradecorrectionrecord` | `portfolio_domain` | `TradeCorrectionRecord` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | `tradeallocation` |
+| `companyactionrecord` | `portfolio_domain` | `CompanyActionRecord` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | `companyactionallocation` |
+| `portfoliorecord` | `portfolio_domain` | `PortfolioRecord` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | domain-value | `portfolio_domain`, `postgres_portfolio_adapter`, `thesis_trace_application` | `costprofilesnapshot`, `holdingsnapshot`, `traderecord`, `tradecorrectionrecord`, `companyactionrecord` |
+| `tradepreview` | `portfolio_domain` | `TradePreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application` | `canonicaltrade`, `tradeallocation`, `portfoliosnapshot`, `exposuresnapshot` |
+| `savecostprofilecommand` | `portfolio_domain` | `SaveCostProfileCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain` | `portfolioactorcontext` |
+| `saveinvestablecashcommand` | `portfolio_domain` | `SaveInvestableCashCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain` | `portfolioactorcontext` |
+| `previewtradecommand` | `portfolio_domain` | `PreviewTradeCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain` | `portfolioactorcontext`, `canonicaltrade`, `tradeallocation` |
+| `confirmtradecommand` | `portfolio_domain` | `ConfirmTradeCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain` | `portfolioactorcontext`, `tradepreview` |
+| `tradecorrectionpreview` | `portfolio_domain` | `TradeCorrectionPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application`, `backend_composition` | `portfoliosnapshot`, `exposuresnapshot` |
+| `confirmtradecorrectioncommand` | `portfolio_domain` | `ConfirmTradeCorrectionCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain`, `backend_composition` | `portfolioactorcontext`, `tradecorrectionpreview` |
+| `companyactionpreview` | `portfolio_domain` | `CompanyActionPreview` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | query | `portfolio_domain`, `thesis_trace_application`, `backend_composition` | `companyactionallocation`, `portfoliosnapshot`, `exposuresnapshot` |
+| `confirmcompanyactioncommand` | `portfolio_domain` | `ConfirmCompanyActionCommand` (class, `backend/src/thesis_trace/modules/portfolio/contracts.py`) | module-public | command | `portfolio_domain`, `backend_composition` | `portfolioactorcontext`, `companyactionpreview` |
+| `portfoliostoreport` | `portfolio_domain` | `PortfolioStorePort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain`, `postgres_portfolio_adapter` | `portfoliorecord`, `portfoliorecommendationsnapshot` |
+| `brokerstatementparserport` | `portfolio_domain` | `BrokerStatementParserPort` (protocol, `backend/src/thesis_trace/modules/portfolio/ports.py`) | module-public | port | `portfolio_domain` | `canonicalcsvpreview` |
+| `portfolioservice` | `portfolio_domain` | `PortfolioService` (class, `backend/src/thesis_trace/modules/portfolio/service.py`) | module-public | policy | `backend_composition`, `thesis_trace_application` | `portfoliostoreport`, `portfoliorecord`, `tradepreview` |
+| `postgresportfoliostore` | `postgres_portfolio_adapter` | `PostgresPortfolioStore` (class, `backend/src/thesis_trace/adapters/postgres_portfolio/adapter.py`) | module-public | adapter-binding | `backend_composition` | `portfoliostoreport`, `portfoliorecord` |
+| `valuationmethod` | `thesis_domain` | `ValuationMethod` (enum, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
+| `valuationcoverage` | `thesis_domain` | `ValuationCoverage` (enum, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter` | 無 |
+| `valuationdistribution` | `thesis_domain` | `ValuationDistribution` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `valuationcoverage` |
+| `valuationsample` | `thesis_domain` | `ValuationSample` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `thesisresearchreference` |
+| `peervaluationmember` | `thesis_domain` | `PeerValuationMember` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `valuationmethod`, `valuationsample` |
+| `valuationbenchmarksnapshot` | `thesis_domain` | `ValuationBenchmarkSnapshot` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `valuationdistribution`, `valuationsample` |
+| `valuationvalidity` | `thesis_domain` | `ValuationValidity` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
+| `valuationreturn` | `thesis_domain` | `ValuationReturn` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | 無 |
+| `valuationdraft` | `thesis_domain` | `ValuationDraft` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `valuationmethod`, `valuationdistribution`, `valuationvalidity`, `valuationreturn`, `valuationbenchmarksnapshot`, `peervaluationmember` |
+| `valuationsnapshot` | `thesis_domain` | `ValuationSnapshot` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | domain-value | `thesis_domain`, `postgres_thesis_adapter`, `thesis_trace_application` | `valuationdraft` |
+| `savevaluationdraftcommand` | `thesis_domain` | `SaveValuationDraftCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain` | `thesisactorcontext`, `valuationmethod` |
+| `publishvaluationcommand` | `thesis_domain` | `PublishValuationCommand` (class, `backend/src/thesis_trace/modules/thesis/contracts.py`) | module-public | command | `thesis_domain` | `thesisactorcontext` |
+| `valuationabstained` | `thesis_domain` | `ValuationAbstained` (class, `backend/src/thesis_trace/modules/thesis/valuation.py`) | module-public | policy | `thesis_domain`, `thesis_trace_application` | 無 |
+| `valuationsourcefact` | `evidence_collection` | `ValuationSourceFact` (class, `backend/src/thesis_trace/modules/research/evidence_collection/contracts.py`) | module-public | domain-value | `postgres_research_adapter`, `thesis_trace_application` | 無 |
+| `costprofilesavebody` | `fastapi_entrypoint` | `CostProfileSaveBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `investablecashsavebody` | `fastapi_entrypoint` | `InvestableCashSaveBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `tradeallocationbody` | `fastapi_entrypoint` | `TradeAllocationBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `tradepreviewbody` | `fastapi_entrypoint` | `TradePreviewBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `tradeallocationbody` |
+| `tradeconfirmbody` | `fastapi_entrypoint` | `TradeConfirmBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `tradepreviewbody` |
+| `portfolioresponse` | `fastapi_entrypoint` | `PortfolioResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_portfolio_adapter` | 無 |
+| `tradepreviewresponse` | `fastapi_entrypoint` | `TradePreviewResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_portfolio_adapter` | 無 |
+| `canonicalcsvpreviewbody` | `fastapi_entrypoint` | `CanonicalCsvPreviewBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `canonicalcsvpreviewresponse` | `fastapi_entrypoint` | `CanonicalCsvPreviewResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_portfolio_adapter` | 無 |
+| `tradecorrectionpreviewbody` | `fastapi_entrypoint` | `TradeCorrectionPreviewBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `tradecorrectionconfirmbody` | `fastapi_entrypoint` | `TradeCorrectionConfirmBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `tradecorrectionpreviewbody` |
+| `companyactionpreviewbody` | `fastapi_entrypoint` | `CompanyActionPreviewBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `companyactionconfirmbody` | `fastapi_entrypoint` | `CompanyActionConfirmBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `companyactionpreviewbody` |
+| `portfoliomutationpreviewresponse` | `fastapi_entrypoint` | `PortfolioMutationPreviewResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_portfolio_adapter` | 無 |
+| `valuationsourcereferencebody` | `fastapi_entrypoint` | `ValuationSourceReferenceBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `valuationhistorysamplebody` | `fastapi_entrypoint` | `ValuationHistorySampleBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `valuationsourcereferencebody` |
+| `peervaluationmemberbody` | `fastapi_entrypoint` | `PeerValuationMemberBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `valuationsourcereferencebody` |
+| `valuationdraftsavebody` | `fastapi_entrypoint` | `ValuationDraftSaveBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `valuationpublicationpreviewbody` | `fastapi_entrypoint` | `ValuationPublicationPreviewBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `valuationpublicationbody` | `fastapi_entrypoint` | `ValuationPublicationBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `valuationpublicationpreviewbody` |
+| `valuationpublicationpreviewresponse` | `fastapi_entrypoint` | `ValuationPublicationPreviewResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_thesis_adapter` | 無 |
+| `portfolioclient` | `react_portfolio_adapter` | `PortfolioClient` (interface, `frontend/src/portfolio/client.ts`) | private | port | `react_portfolio_adapter` | 無 |
+| `actionitemstatus` | `workflow_domain` | `ActionItemStatus` (enum, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | policy | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `actionpriority` | `workflow_domain` | `ActionPriority` (enum, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | policy | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `actionitemtype` | `workflow_domain` | `ActionItemType` (enum, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | policy | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `workflowactorcontext` | `workflow_domain` | `WorkflowActorContext` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain` | 無 |
+| `actionsourceref` | `workflow_domain` | `ActionSourceRef` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain`, `postgres_workflow_adapter` | 無 |
+| `createactionitemcommand` | `workflow_domain` | `CreateActionItemCommand` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | command | `workflow_domain`, `postgres_workflow_adapter` | `workflowactorcontext`, `actionsourceref` |
+| `transitionactionitemcommand` | `workflow_domain` | `TransitionActionItemCommand` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | command | `workflow_domain`, `postgres_workflow_adapter` | `workflowactorcontext`, `actionitemstatus` |
+| `actionpriorityevaluation` | `workflow_domain` | `ActionPriorityEvaluation` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain`, `postgres_workflow_adapter` | `actionpriority` |
+| `actionitem` | `workflow_domain` | `ActionItem` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | domain-value | `workflow_domain`, `postgres_workflow_adapter`, `thesis_trace_application` | `actionitemstatus`, `actionitemtype`, `actionpriorityevaluation` |
+| `actioninboxsummary` | `workflow_domain` | `ActionInboxSummary` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | query | `workflow_domain`, `thesis_trace_application` | 無 |
+| `actioninboxquery` | `workflow_domain` | `ActionInboxQuery` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | query | `workflow_domain`, `postgres_workflow_adapter` | `workflowactorcontext` |
+| `actioninboxpage` | `workflow_domain` | `ActionInboxPage` (class, `backend/src/thesis_trace/modules/workflow/contracts.py`) | module-public | query | `workflow_domain`, `thesis_trace_application` | `actioninboxsummary`, `actionitem` |
+| `actionitemstoreport` | `workflow_domain` | `ActionItemStorePort` (protocol, `backend/src/thesis_trace/modules/workflow/ports.py`) | module-public | port | `workflow_domain`, `postgres_workflow_adapter` | `createactionitemcommand`, `transitionactionitemcommand`, `actionpriorityevaluation`, `actionitem`, `actioninboxquery`, `actioninboxpage` |
+| `workflowservice` | `workflow_domain` | `WorkflowService` (class, `backend/src/thesis_trace/modules/workflow/service.py`) | module-public | policy | `backend_composition`, `thesis_trace_application` | `actionitemstoreport`, `createactionitemcommand`, `transitionactionitemcommand`, `actionpriorityevaluation`, `actionitem`, `actioninboxquery`, `actioninboxpage` |
+| `createanomalyreviewactionrequest` | `thesis_trace_application` | `CreateAnomalyReviewActionRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `queryactioninboxrequest` | `thesis_trace_application` | `QueryActionInboxRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | query | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `queryactionitemrequest` | `thesis_trace_application` | `QueryActionItemRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | query | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `transitionactionitemrequest` | `thesis_trace_application` | `TransitionActionItemRequest` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `actionitemresult` | `thesis_trace_application` | `ActionItemResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `actioninboxresult` | `thesis_trace_application` | `ActionInboxResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | `actionitemresult` |
+| `actioninboxflow` | `thesis_trace_application` | `ActionInboxFlow` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | `authenticatedactor`, `role`, `researchanomalyfacade`, `workflowservice`, `workflowactorcontext`, `actionsourceref`, `createactionitemcommand`, `transitionactionitemcommand`, `actioninboxquery`, `createanomalyreviewactionrequest`, `queryactioninboxrequest`, `queryactionitemrequest`, `transitionactionitemrequest`, `actionitemresult`, `actioninboxresult` |
+| `actionitemcreatebody` | `fastapi_entrypoint` | `ActionItemCreateBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `actionitemtransitionbody` | `fastapi_entrypoint` | `ActionItemTransitionBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `actioninboxsummaryresponse` | `fastapi_entrypoint` | `ActionInboxSummaryResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_workflow_adapter` | 無 |
+| `actionitemresponse` | `fastapi_entrypoint` | `ActionItemResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_workflow_adapter` | 無 |
+| `actioninboxresponse` | `fastapi_entrypoint` | `ActionInboxResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint`, `react_workflow_adapter` | `actioninboxsummaryresponse`, `actionitemresponse` |
+| `postgresworkflowstore` | `postgres_workflow_adapter` | `PostgresWorkflowStore` (class, `backend/src/thesis_trace/adapters/postgres_workflow/adapter.py`) | module-public | adapter-binding | `backend_composition`, `postgres_atomic_adapter` | `actionitemstoreport`, `createactionitemcommand`, `transitionactionitemcommand`, `actionpriorityevaluation`, `actionitem`, `actioninboxquery`, `actioninboxpage` |
+| `workflowclient` | `react_workflow_adapter` | `WorkflowClient` (interface, `frontend/src/workflow/client.ts`) | private | port | `react_workflow_adapter` | 無 |
+| `actioninboxquerywire` | `react_workflow_adapter` | `ActionInboxQuery` (alias, `frontend/src/workflow/client.ts`) | module-public | wire-representation | `react_workflow_adapter` | 無 |
+| `dimensionfactsbody` | `fastapi_entrypoint` | `DimensionFactsBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `evidencestageconfirmationbody` | `fastapi_entrypoint` | `EvidenceStageConfirmationBody` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `dimensionfactsbody` |
+| `gateresultresponse` | `fastapi_entrypoint` | `GateResultResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
+| `evidencestageresponse` | `fastapi_entrypoint` | `EvidenceStageResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `dimensionfactsbody`, `gateresultresponse` |
+| `evidencestageflow` | `thesis_trace_application` | `EvidenceStageFlow` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | composition-mapping | `fastapi_entrypoint`, `backend_composition` | `authenticatedactor`, `role`, `researchactorcontext`, `researchstagefacade`, `researchstageconfirmationrequest`, `researchstagequery`, `researchstageresult`, `confirmevidencestagerequest`, `queryevidencestagerequest`, `evidencestagefactsresult`, `evidencestagegateresult`, `evidencestageresult` |
+| `confirmevidencestagerequest` | `thesis_trace_application` | `ConfirmEvidenceStageRequest` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `queryevidencestagerequest` | `thesis_trace_application` | `QueryEvidenceStageRequest` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | query | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `evidencestagefactsresult` | `thesis_trace_application` | `EvidenceStageFactsResult` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `evidencestagegateresult` | `thesis_trace_application` | `EvidenceStageGateResult` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `evidencestageresult` | `thesis_trace_application` | `EvidenceStageResult` (class, `backend/src/thesis_trace/application/flows/evidence_stage.py`) | module-public | domain-value | `thesis_trace_application`, `fastapi_entrypoint` | `evidencestagefactsresult`, `evidencestagegateresult` |
+| `researchactorcontext` | `research_domain` | `ResearchActorContext` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstageconfirmationrequest` | `research_domain` | `ResearchStageConfirmationRequest` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | command | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstagequery` | `research_domain` | `ResearchStageQuery` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | query | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstagefacts` | `research_domain` | `ResearchStageFacts` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstagegate` | `research_domain` | `ResearchStageGate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | 無 |
+| `researchstageresult` | `research_domain` | `ResearchStageResult` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | domain-value | `research_domain`, `thesis_trace_application` | `researchstagefacts`, `researchstagegate` |
+| `researchstagefacade` | `research_domain` | `ResearchStageFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `thesis_trace_application`, `backend_composition` | `researchactorcontext`, `researchstageconfirmationrequest`, `researchstagequery`, `researchstagefacts`, `researchstagegate`, `researchstageresult`, `stageactorcontext`, `confirmdimensionfactscommand`, `dimensionfacts`, `sourceconfirmation`, `evidencestagerecord`, `evidencestageservice` |
+| `evidenceapi` | `fastapi_entrypoint` | `EvidenceApi` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | `evidencestageflow`, `confirmevidencestagerequest`, `queryevidencestagerequest`, `evidencestageresult`, `anomalyassessmentflow`, `anomalysourceinput`, `requestanomalyassessment`, `anomalyassessmentresult` |
 | `submitevidencerequest` | `thesis_trace_application` | `SubmitEvidenceRequest` (class, `backend/src/thesis_trace/application/contracts.py`) | module-public | command | `thesis_trace_application` | `authenticatedactor` |
 | `evidenceintakeflow` | `thesis_trace_application` | `EvidenceIntakeFlow` (class, `backend/src/thesis_trace/application/flows/evidence_intake.py`) | private | private-helper | `thesis_trace_application` | 無 |
 | `role` | `access_domain` | `Role` (enum, `backend/src/thesis_trace/modules/access/contracts.py`) | module-public | policy | `access_domain` | 無 |
@@ -547,17 +1100,19 @@ flowchart TD
 | `evidenceresponse` | `fastapi_entrypoint` | `EvidenceResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
 | `secretprovider` | `runtime_configuration_adapter` | `SecretProvider` (protocol, `backend/src/thesis_trace/platform/runtime.py`) | module-public | port | `backend_composition`, `postgres_research_adapter` | 無 |
 | `filesecretprovider` | `runtime_configuration_adapter` | `FileSecretProvider` (class, `backend/src/thesis_trace/platform/runtime.py`) | private | adapter-binding | `runtime_configuration_adapter` | `secretprovider` |
-| `postgresunavailable` | `postgres_research_adapter` | `PostgresUnavailable` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | domain-value | `backend_composition` | 無 |
-| `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter` |
+| `postgresunavailable` | `postgres_database_support` | `PostgresUnavailable` (class, `backend/src/thesis_trace/platform/database.py`) | module-public | domain-value | `postgres_database_support`, `postgres_research_adapter`, `postgres_access_adapter`, `postgres_thesis_adapter`, `postgres_portfolio_adapter`, `backend_composition` | 無 |
+| `apiruntime` | `backend_composition` | `ApiRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `postgresevidencestore`, `cloudflarejwtverifier`, `postgresaccessadapter`, `cloudflareidentityadapter`, `postgresworkflowstore`, `postgresthesisstore` |
 | `collectorruntime` | `backend_composition` | `CollectorRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `evidencecollector` |
-| `postgresevidencestore` | `postgres_research_adapter` | `PostgresEvidenceStore` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | adapter-binding | `backend_composition` | `databaseurlprovider` |
+| `anomalyprocessor` | `backend_composition` | `AnomalyProcessor` (protocol, `backend/src/thesis_trace/bootstrap/application.py`) | private | port | `backend_composition` | 無 |
+| `aiworkerruntime` | `backend_composition` | `AiWorkerRuntime` (class, `backend/src/thesis_trace/bootstrap/application.py`) | private | runtime-state | `backend_composition` | `anomalyprocessor` |
+| `postgresevidencestore` | `postgres_research_adapter` | `PostgresEvidenceStore` (class, `backend/src/thesis_trace/platform/postgres.py`) | module-public | adapter-binding | `backend_composition` | `databaseurlprovider`, `companyrecord`, `evidenceaccepted`, `evidencerecord`, `evidenceauditfact`, `collectionrequest`, `evidencestatus`, `leasedcollectionjob`, `collectedsourcesnapshot`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageevaluation`, `anomalyanalysisjob`, `anomalyanalysisversions`, `anomalyassessmentrecord`, `anomalyclass`, `anomalydecisiontrace`, `assessmentstatus`, `clueroute`, `decisiongate`, `evaluateassessmentcommand`, `requestassessmentcommand`, `sourcecharacteristicsnapshot`, `sourcetier` |
 | `sourcefetchfailure` | `restricted_source_fetch_adapter` | `SourceFetchFailure` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | module-public | domain-value | `evidence_collection` | 無 |
 | `transportresponse` | `restricted_source_fetch_adapter` | `TransportResponse` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | private | wire-representation | `restricted_source_fetch_adapter` | 無 |
 | `sourcetransport` | `restricted_source_fetch_adapter` | `SourceTransport` (protocol, `backend/src/thesis_trace/platform/source_fetch.py`) | private | port | `restricted_source_fetch_adapter` | `transportresponse` |
 | `pinnedhttpsconnection` | `restricted_source_fetch_adapter` | `_PinnedHttpsConnection` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | private | private-helper | `restricted_source_fetch_adapter` | 無 |
 | `pinnedhttpstransport` | `restricted_source_fetch_adapter` | `PinnedHttpsTransport` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | private | adapter-binding | `restricted_source_fetch_adapter` | `sourcetransport`, `transportresponse`, `pinnedhttpsconnection` |
 | `restrictedhttpsourcefetcher` | `restricted_source_fetch_adapter` | `RestrictedHttpSourceFetcher` (class, `backend/src/thesis_trace/platform/source_fetch.py`) | module-public | adapter-binding | `backend_composition` | `sourcetransport`, `sourcefetchfailure` |
-| `databaseurlprovider` | `postgres_research_adapter` | `DatabaseUrlProvider` (protocol, `backend/src/thesis_trace/platform/postgres.py`) | private | port | `postgres_research_adapter` | 無 |
+| `databaseurlprovider` | `postgres_database_support` | `DatabaseUrlProvider` (protocol, `backend/src/thesis_trace/platform/database.py`) | module-public | port | `postgres_database_support`, `postgres_research_adapter`, `postgres_access_adapter`, `postgres_workflow_adapter`, `postgres_thesis_adapter`, `postgres_portfolio_adapter`, `backend_composition` | 無 |
 | `provideridentity` | `identity_registry` | `ProviderIdentity` (class, `backend/src/thesis_trace/modules/access/identity_registry/contracts.py`) | module-public | domain-value | `session_management`, `cloudflare_identity_adapter` | 無 |
 | `verifiedprincipal` | `identity_registry` | `VerifiedPrincipal` (class, `backend/src/thesis_trace/modules/access/identity_registry/contracts.py`) | module-public | domain-value | `identity_registry`, `session_management` | `provideridentity` |
 | `accessaccount` | `identity_registry` | `AccessAccount` (class, `backend/src/thesis_trace/modules/access/identity_registry/contracts.py`) | module-public | domain-value | `session_management`, `account_administration`, `postgres_access_adapter` | 無 |
@@ -571,7 +1126,7 @@ flowchart TD
 | `accessclient` | `react_access_adapter` | `AccessClient` (interface, `frontend/src/access/client.ts`) | private | port | `react_access_adapter` | 無 |
 | `cloudflareidentityadapter` | `cloudflare_identity_adapter` | `CloudflareIdentityAdapter` (class, `backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py`) | module-public | adapter-binding | `backend_composition` | `verifiedprincipal` |
 | `cloudflaregetidentityclient` | `cloudflare_identity_adapter` | `CloudflareGetIdentityClient` (class, `backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py`) | module-public | adapter-binding | `backend_composition` | 無 |
-| `postgresaccessadapter` | `postgres_access_adapter` | `PostgresAccessAdapter` (class, `backend/src/thesis_trace/adapters/postgres_access/adapter.py`) | module-public | adapter-binding | `backend_composition` | 無 |
+| `postgresaccessadapter` | `postgres_access_adapter` | `PostgresAccessAdapter` (class, `backend/src/thesis_trace/adapters/postgres_access/adapter.py`) | module-public | adapter-binding | `backend_composition` | `authenticatedactor`, `securitycontext` |
 | `accessapiport` | `fastapi_entrypoint` | `AccessApiPort` (protocol, `backend/src/thesis_trace/api.py`) | private | port | `fastapi_entrypoint` | 無 |
 | `accessapi` | `fastapi_entrypoint` | `AccessApi` (class, `backend/src/thesis_trace/api.py`) | module-public | adapter-binding | `backend_composition` | 無 |
 | `ownersessionresponse` | `fastapi_entrypoint` | `OwnerSessionResponse` (class, `backend/src/thesis_trace/api.py`) | private | wire-representation | `fastapi_entrypoint` | 無 |
@@ -603,6 +1158,62 @@ flowchart TD
 | `cloudflarejwksdecoder` | `cloudflare_identity_adapter` | `CloudflareJwksDecoder` (class, `backend/src/thesis_trace/adapters/cloudflare_identity/adapter.py`) | module-public | adapter-binding | `backend_composition`, `cloudflare_identity_adapter` | 無 |
 | `accountactionview` | `react_access_adapter` | `AccountAction` (alias, `frontend/src/access/client.ts`) | private | policy | `react_access_adapter` | 無 |
 | `pendingaccountconfirmation` | `react_access_adapter` | `Pending` (alias, `frontend/src/access/routes.tsx`) | private | runtime-state | `react_access_adapter` | `accountactionview` |
+| `evidencestage` | `evidence_stage` | `EvidenceStage` (enum, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | policy | `evidence_stage`, `postgres_research_adapter` | 無 |
+| `sourceconfirmation` | `evidence_stage` | `SourceConfirmation` (enum, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | policy | `evidence_stage`, `postgres_research_adapter`, `research_domain` | 無 |
+| `dimensionfacts` | `evidence_stage` | `DimensionFacts` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `sourceconfirmation` |
+| `stageactorcontext` | `evidence_stage` | `StageActorContext` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `research_domain` | 無 |
+| `confirmdimensionfactscommand` | `evidence_stage` | `ConfirmDimensionFactsCommand` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | command | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `stageactorcontext`, `dimensionfacts` |
+| `gateresult` | `evidence_stage` | `GateResult` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter` | `evidencestage` |
+| `stageevaluation` | `evidence_stage` | `StageEvaluation` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter` | `evidencestage`, `gateresult` |
+| `evidencestagerecord` | `evidence_stage` | `EvidenceStageRecord` (class, `backend/src/thesis_trace/modules/research/evidence_stage/contracts.py`) | module-public | domain-value | `evidence_stage`, `postgres_research_adapter`, `research_domain` | `dimensionfacts`, `stageevaluation` |
+| `evidencestagestoreport` | `evidence_stage` | `EvidenceStageStorePort` (protocol, `backend/src/thesis_trace/modules/research/evidence_stage/ports.py`) | module-public | port | `evidence_stage`, `postgres_research_adapter` | `confirmdimensionfactscommand`, `evidencestagerecord`, `stageevaluation` |
+| `evidencestageservice` | `evidence_stage` | `EvidenceStageService` (class, `backend/src/thesis_trace/modules/research/evidence_stage/service.py`) | module-public | policy | `backend_composition`, `research_domain` | `evidencestagestoreport`, `confirmdimensionfactscommand`, `dimensionfacts`, `evidencestage`, `evidencestagerecord`, `gateresult`, `sourceconfirmation`, `stageactorcontext`, `stageevaluation` |
+| `sourcetier` | `anomaly_assessment` | `SourceTier` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | policy | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `anomalyclass` | `anomaly_assessment` | `AnomalyClass` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | policy | `anomaly_assessment`, `postgres_research_adapter`, `research_domain` | 無 |
+| `assessmentstatus` | `anomaly_assessment` | `AssessmentStatus` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `decisiongate` | `anomaly_assessment` | `DecisionGate` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `sourcecharacteristicsnapshot` | `anomaly_assessment` | `SourceCharacteristicSnapshot` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `cluefeaturevector` | `anomaly_assessment` | `ClueFeatureVector` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `clueroute` | `anomaly_assessment` | `ClueRoute` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | policy | `anomaly_assessment`, `postgres_research_adapter` | 無 |
+| `anomalydecisiontrace` | `anomaly_assessment` | `AnomalyDecisionTrace` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter`, `research_domain` | `anomalyclass`, `sourcetier`, `clueroute`, `decisiongate` |
+| `requestassessmentcommand` | `anomaly_assessment` | `RequestAssessmentCommand` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | command | `anomaly_assessment`, `research_domain` | `sourcecharacteristicsnapshot` |
+| `evaluateassessmentcommand` | `anomaly_assessment` | `EvaluateAssessmentCommand` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | command | `anomaly_assessment`, `research_domain` | `cluefeaturevector`, `sourcecharacteristicsnapshot` |
+| `anomalyanalysisjob` | `anomaly_assessment` | `AnomalyAnalysisJob` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | command | `anomaly_assessment`, `postgres_research_adapter`, `thesis_trace_application` | 無 |
+| `anomalyanalysisversions` | `anomaly_assessment` | `AnomalyAnalysisVersions` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | configuration | `anomaly_assessment`, `postgres_research_adapter`, `thesis_trace_application` | 無 |
+| `anomalyassessmentrecord` | `anomaly_assessment` | `AnomalyAssessmentRecord` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/contracts.py`) | module-public | domain-value | `anomaly_assessment`, `postgres_research_adapter`, `research_domain` | `assessmentstatus`, `anomalydecisiontrace` |
+| `anomalyassessmentstoreport` | `anomaly_assessment` | `AnomalyAssessmentStorePort` (protocol, `backend/src/thesis_trace/modules/research/anomaly_assessment/ports.py`) | module-public | port | `anomaly_assessment`, `postgres_research_adapter` | `requestassessmentcommand`, `evaluateassessmentcommand`, `anomalyanalysisjob`, `anomalyanalysisversions`, `anomalyassessmentrecord`, `anomalydecisiontrace`, `sourcecharacteristicsnapshot` |
+| `anomalyassessmentservice` | `anomaly_assessment` | `AnomalyAssessmentService` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/service.py`) | module-public | policy | `backend_composition`, `research_domain` | `anomalyassessmentstoreport`, `anomalyanalysisversions`, `sourcecharacteristicsnapshot`, `requestassessmentcommand`, `evaluateassessmentcommand`, `anomalyassessmentrecord`, `anomalyanalysisjob` |
+| `anomalysourcebody` | `fastapi_entrypoint` | `AnomalySourceBody` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint` | 無 |
+| `anomalyassessmentrequestbody` | `fastapi_entrypoint` | `AnomalyAssessmentRequestBody` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint` | `anomalysourcebody` |
+| `anomalygateresponse` | `fastapi_entrypoint` | `AnomalyGateResponse` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint`, `react_access_adapter` | 無 |
+| `anomalytraceresponse` | `fastapi_entrypoint` | `AnomalyTraceResponse` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint`, `react_access_adapter` | `anomalygateresponse` |
+| `anomalyassessmentresponse` | `fastapi_entrypoint` | `AnomalyAssessmentResponse` (class, `backend/src/thesis_trace/api.py`) | module-public | wire-representation | `fastapi_entrypoint`, `react_access_adapter` | `anomalytraceresponse` |
+| `analysissource` | `thesis_trace_application` | `AnalysisSource` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | composition-mapping | `thesis_trace_application`, `openai_recommendation_adapter` | 無 |
+| `recommendationproviderrequest` | `thesis_trace_application` | `RecommendationProviderRequest` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | command | `thesis_trace_application`, `openai_recommendation_adapter` | `analysissource` |
+| `recommendationcriticrequest` | `thesis_trace_application` | `RecommendationCriticRequest` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | command | `thesis_trace_application`, `openai_recommendation_adapter` | `analysissource` |
+| `validatedanomalycandidate` | `thesis_trace_application` | `ValidatedAnomalyCandidate` (class, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | domain-value | `thesis_trace_application`, `research_domain` | 無 |
+| `recommendationproviderport` | `thesis_trace_application` | `RecommendationProviderPort` (protocol, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | port | `thesis_trace_application`, `openai_recommendation_adapter` | `recommendationproviderrequest` |
+| `recommendationcriticport` | `thesis_trace_application` | `RecommendationCriticPort` (protocol, `backend/src/thesis_trace/application/ai_ports.py`) | module-public | port | `thesis_trace_application`, `openai_recommendation_adapter` | `recommendationcriticrequest` |
+| `anomalysourceinput` | `thesis_trace_application` | `AnomalySourceInput` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `requestanomalyassessment` | `thesis_trace_application` | `RequestAnomalyAssessment` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | command | `thesis_trace_application`, `fastapi_entrypoint` | `anomalysourceinput` |
+| `anomalygateresult` | `thesis_trace_application` | `AnomalyGateResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | 無 |
+| `anomalytraceresult` | `thesis_trace_application` | `AnomalyTraceResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | `anomalygateresult` |
+| `anomalyassessmentresult` | `thesis_trace_application` | `AnomalyAssessmentResult` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `thesis_trace_application`, `fastapi_entrypoint` | `anomalytraceresult` |
+| `anomalyassessmentflow` | `thesis_trace_application` | `AnomalyAssessmentFlow` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `backend_composition`, `fastapi_entrypoint` | `authenticatedactor`, `role`, `anomalysourceinput`, `anomalygateresult`, `anomalytraceresult`, `researchactorcontext`, `researchanomalyfacade`, `researchanomalysource`, `researchanomalyrequest`, `researchanomalyresult`, `requestanomalyassessment`, `anomalyassessmentresult` |
+| `anomalyjobprocessor` | `thesis_trace_application` | `AnomalyJobProcessor` (class, `backend/src/thesis_trace/application/flows/anomaly_assessment.py`) | module-public | composition-mapping | `backend_composition`, `ai_worker_adapter` | `researchanomalyfacade`, `researchanomalyjob`, `researchanomalysource`, `researchvalidatedanomalycandidate`, `recommendationproviderport`, `recommendationcriticport`, `recommendationproviderrequest`, `recommendationcriticrequest`, `analysissource`, `validatedanomalycandidate` |
+| `researchanomalysource` | `research_domain` | `ResearchAnomalySource` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `researchanomalyrequest` | `research_domain` | `ResearchAnomalyRequest` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | command | `research_domain`, `thesis_trace_application` | `researchanomalysource` |
+| `researchanomalyjob` | `research_domain` | `ResearchAnomalyJob` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | command | `research_domain`, `thesis_trace_application` | 無 |
+| `researchanomalygate` | `research_domain` | `ResearchAnomalyGate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `researchanomalytrace` | `research_domain` | `ResearchAnomalyTrace` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | `researchanomalygate` |
+| `researchanomalyresult` | `research_domain` | `ResearchAnomalyResult` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | `researchanomalytrace` |
+| `researchanomalyfacade` | `research_domain` | `ResearchAnomalyFacade` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `backend_composition`, `thesis_trace_application` | `anomalyassessmentservice`, `requestassessmentcommand`, `evaluateassessmentcommand`, `anomalyanalysisjob`, `anomalyassessmentrecord`, `sourcecharacteristicsnapshot`, `cluefeaturevector`, `researchactorcontext`, `researchanomalysource`, `researchanomalyrequest`, `researchanomalyjob`, `researchanomalygate`, `researchanomalytrace`, `researchanomalyresult`, `researchvalidatedanomalycandidate` |
+| `researchvalidatedanomalycandidate` | `research_domain` | `ResearchValidatedAnomalyCandidate` (class, `backend/src/thesis_trace/modules/research/__init__.py`) | module-public | composition-mapping | `research_domain`, `thesis_trace_application` | 無 |
+| `openairecommendationadapter` | `openai_recommendation_adapter` | `OpenAIRecommendationAdapter` (class, `backend/src/thesis_trace/adapters/openai_recommendation/adapter.py`) | module-public | adapter-binding | `backend_composition` | `recommendationproviderport`, `recommendationcriticport`, `recommendationproviderrequest`, `recommendationcriticrequest`, `analysissource`, `investmentanalysisrequest` |
+| `qualificationcasecategory` | `anomaly_assessment` | `QualificationCaseCategory` (enum, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | policy | `anomaly_assessment` | 無 |
+| `qualificationversiontuple` | `anomaly_assessment` | `QualificationVersionTuple` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | configuration | `anomaly_assessment` | 無 |
+| `qualificationcase` | `anomaly_assessment` | `QualificationCase` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | domain-value | `anomaly_assessment` | `qualificationversiontuple`, `qualificationcasecategory`, `sourcecharacteristicsnapshot`, `cluefeaturevector`, `anomalyclass`, `sourcetier`, `clueroute` |
+| `offlinequalificationresult` | `anomaly_assessment` | `OfflineQualificationResult` (class, `backend/src/thesis_trace/modules/research/anomaly_assessment/qualification.py`) | module-public | domain-value | `anomaly_assessment` | `qualificationversiontuple` |
 
 ## State Ownership
 
@@ -613,8 +1224,24 @@ flowchart TD
 
 | Interaction | Producer | Consumer | Parent | Producer contract | Consumer contract | Mapping owner | State accessed | Allowed edges | Forbidden edges |
 |---|---|---|---|---|---|---|---|---|---|
+| `owner-to-recommendation`: Map authenticated Owner capability. | `access_domain` | `recommendation_domain` | `thesis_trace_application` | `authenticatedactor` | `recommendationactor` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->recommendation_domain` | `access_domain->recommendation_domain`, `recommendation_domain->access_domain` |
+| `research-to-recommendation`: Map immutable provenance and exact source versions. | `research_domain` | `recommendation_domain` | `thesis_trace_application` | `researchanomalysource` | `recommendationsource` | `thesis_trace_application` | 無 | `thesis_trace_application->research_domain`, `thesis_trace_application->recommendation_domain` | `research_domain->recommendation_domain`, `recommendation_domain->research_domain` |
+| `thesis-to-recommendation`: Map active personal Thesis cycle, conditions and published valuation binding. | `thesis_domain` | `recommendation_domain` | `thesis_trace_application` | `thesisrecord` | `recommendationinputsnapshot` | `thesis_trace_application` | 無 | `thesis_trace_application->thesis_domain`, `thesis_trace_application->recommendation_domain` | `thesis_domain->recommendation_domain`, `recommendation_domain->thesis_domain` |
+| `portfolio-to-recommendation`: Map immutable Portfolio-owned sizing/risk snapshot identity and trusted gate values. | `portfolio_domain` | `recommendation_domain` | `thesis_trace_application` | `portfoliorecommendationsnapshot` | `recommendationinputsnapshot` | `thesis_trace_application` | 無 | `thesis_trace_application->portfolio_domain`, `thesis_trace_application->recommendation_domain` | `portfolio_domain->recommendation_domain`, `recommendation_domain->portfolio_domain` |
+| `recommendation-to-workflow`: Map immutable Recommendation/decision source identity into Workflow-owned task intent. | `recommendation_domain` | `workflow_domain` | `thesis_trace_application` | `recommendationrecord` | `actionsourceref` | `thesis_trace_application` | 無 | `thesis_trace_application->recommendation_domain`, `thesis_trace_application->workflow_domain` | `recommendation_domain->workflow_domain`, `workflow_domain->recommendation_domain` |
 | `cloudflare-wire-to-provider-identity`: Map a cryptographically verified Cloudflare token and token-bound full identity response into a preapproved provider identity. | `access_domain` | `identity_registry` | `access_domain` | `-` | `provideridentity` | `access_domain` | 無 | `access_domain->identity_registry` | `identity_registry->access_domain`, `identity_registry->cloudflare_identity_adapter` |
 | `principal-to-session-profile`: Map an enabled provider identity and internal account snapshot into a bounded role-safe application session profile. | `identity_registry` | `session_management` | `access_domain` | `provideridentity` | `sessionprofile` | `access_domain` | 無 | 無 | `identity_registry->session_management`, `session_management->identity_registry` |
 | `session-to-rls-context`: Convert a validated application session into transaction-local PostgreSQL RLS context without exposing SQL handles. | `access_domain` | `session_management` | `access_domain` | `securitycontext` | `sessionprofile` | `access_domain` | 無 | `access_domain->session_management` | `session_management->access_domain`, `session_management->postgres_access_adapter` |
 | `account-intent-to-confirmed-change`: Map an exact versioned account mutation intent into a single-use confirmation and resume the mutation only after atomic validation. | `account_administration` | `confirmation_challenge` | `access_domain` | `accountsummary` | `confirmationchallenge` | `access_domain` | 無 | 無 | `account_administration->confirmation_challenge`, `confirmation_challenge->account_administration` |
 | `access-response-to-react-view`: Deliver server-authoritative role-discriminated Access projections to responsive React routes through generated transport contracts. | `thesis_trace_application` | `access_domain` | `thesis_trace_application` | `-` | `-` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain` | `access_domain->thesis_trace_application` |
+| `authenticated-owner-to-stage-command`: Map a revalidated Owner actor and HTTP intent into a semantic confirmed-dimension command without granting Access-to-Research dependency. | `access_domain` | `research_domain` | `thesis_trace_application` | `authenticatedactor` | `researchactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->research_domain` | `access_domain->research_domain`, `research_domain->access_domain`, `evidence_stage->access_domain`, `evidence_stage->fastapi_entrypoint` |
+| `source-snapshot-to-confirmed-stage`: Validate an immutable collected source snapshot as the provenance target of one confirmed fact and stage version. | `evidence_collection` | `evidence_stage` | `research_domain` | `collectedsourcesnapshot` | `evidencestagerecord` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->evidence_stage` | `evidence_collection->evidence_stage`, `evidence_stage->evidence_collection` |
+| `source-snapshot-to-anomaly-assessment`: Resolve immutable snapshot identities into Server-owned publisher characteristics, source category, and lineage components and bind them to one anomaly assessment. | `evidence_collection` | `anomaly_assessment` | `research_domain` | `collectedsourcesnapshot` | `sourcecharacteristicsnapshot` | `research_domain` | 無 | `research_domain->evidence_collection`, `research_domain->anomaly_assessment` | `evidence_collection->anomaly_assessment`, `anomaly_assessment->evidence_collection` |
+| `authenticated-personal-actor-to-thesis`: Map a revalidated Owner or Learner into personal Thesis capabilities without importing Access contracts into Thesis. | `access_domain` | `thesis_domain` | `thesis_trace_application` | `authenticatedactor` | `thesisactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->thesis_domain` | `access_domain->thesis_domain`, `thesis_domain->access_domain`, `fastapi_entrypoint->thesis_domain` |
+| `research-reference-to-personal-thesis`: Validate shared Company and Evidence identities and versions then map stable primitives into a personal Thesis command without transferring state ownership. | `research_domain` | `thesis_domain` | `thesis_trace_application` | `researchrecordreference` | `thesisresearchreference` | `thesis_trace_application` | 無 | `thesis_trace_application->research_domain`, `thesis_trace_application->thesis_domain` | `research_domain->thesis_domain`, `thesis_domain->research_domain`, `postgres_thesis_adapter->postgres_research_adapter` |
+| `evidence-reference-to-personal-thesis`: Validate shared Evidence identity and version in its Company then map a stable reference into a personal Thesis Evidence link or Outcome. | `research_domain` | `thesis_domain` | `thesis_trace_application` | `researchrecordreference` | `thesisresearchreference` | `thesis_trace_application` | 無 | `thesis_trace_application->research_domain`, `thesis_trace_application->thesis_domain` | `research_domain->thesis_domain`, `thesis_domain->research_domain`, `postgres_thesis_adapter->postgres_research_adapter` |
+| `thesis-invalidation-to-anomaly-assessment`: Map a Server-owned immutable published Thesis invalidation projection into Research assessment primitives without accepting client or AI authority. | `thesis_domain` | `research_domain` | `thesis_trace_application` | `thesisinvalidationprojection` | `researchanomalyrequest` | `thesis_trace_application` | 無 | `thesis_trace_application->thesis_domain`, `thesis_trace_application->research_domain` | `thesis_domain->research_domain`, `research_domain->thesis_domain`, `anomaly_assessment->thesis_domain` |
+| `personal-thesis-to-application-result`: Copy owner-scoped Thesis cards, current-cycle learning state and legal operations into application primitives before HTTP presentation. | `thesis_domain` | `thesis_trace_application` | `thesis_trace_application` | `thesisrecord` | `thesislifecycleresult` | `thesis_trace_application` | 無 | `thesis_trace_application->thesis_domain`, `fastapi_entrypoint->thesis_trace_application` | `react_thesis_adapter->thesis_domain`, `react_thesis_adapter->postgres_thesis_adapter`, `fastapi_entrypoint->thesis_domain` |
+| `anomaly-assessment-to-action-source`: Resolve an immutable authorized anomaly, Evidence, and Company projection into Workflow-local source primitives for a manual review item. | `research_domain` | `workflow_domain` | `thesis_trace_application` | `researchanomalyresult` | `actionsourceref` | `thesis_trace_application` | 無 | `thesis_trace_application->research_domain`, `thesis_trace_application->workflow_domain` | `research_domain->workflow_domain`, `workflow_domain->research_domain`, `postgres_research_adapter->workflow_domain` |
+| `authenticated-owner-to-workflow-actor`: Map a revalidated Access actor into Workflow-local create, read, and transition capabilities without exposing Access contracts to Workflow. | `access_domain` | `workflow_domain` | `thesis_trace_application` | `authenticatedactor` | `workflowactorcontext` | `thesis_trace_application` | 無 | `thesis_trace_application->access_domain`, `thesis_trace_application->workflow_domain` | `access_domain->workflow_domain`, `workflow_domain->access_domain`, `fastapi_entrypoint->workflow_domain` |
+| `action-item-to-application-result`: Map Workflow-owned Action Item summaries, rows, detail, and allowed transitions into application-owned primitives before HTTP presentation. | `workflow_domain` | `thesis_trace_application` | `thesis_trace_application` | `actioninboxpage` | `actioninboxresult` | `thesis_trace_application` | 無 | `thesis_trace_application->workflow_domain`, `fastapi_entrypoint->thesis_trace_application` | `react_workflow_adapter->workflow_domain`, `react_workflow_adapter->postgres_workflow_adapter`, `fastapi_entrypoint->workflow_domain`, `fastapi_entrypoint->postgres_workflow_adapter` |

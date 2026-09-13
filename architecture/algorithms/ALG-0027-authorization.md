@@ -1,6 +1,6 @@
 # ALG-0027: Authorization and non-disclosing denial
 ## Metadata
-- Status: proposed
+- Status: accepted
 - Owner module: access
 - Product feature: Role, ownership and RLS isolation
 - Flow IDs: authenticated-request-flow
@@ -15,7 +15,7 @@ Inputs are internal actor, role, action, resource owner/class and requested fiel
 ## Constraints and quantitative acceptance thresholds
 Owner gets personal research/recommendation/trade; Learner shared evidence and own manual Thesis; Admin account/operations but no other portfolios; max ten active accounts.
 ## Candidate methods and comparative evidence
-Candidates: (A) UI filtering, (B) application-only authorization, and (C) application capability/field policy plus transaction-local PostgreSQL identity and matching forced RLS. A is client-controlled. B leaves direct/query mistakes without a storage backstop. C is the authoring candidate because both layers fail closed and can be cross-checked; it remains pending non-AI approval.
+Candidates: (A) UI filtering, (B) application-only authorization, and (C) application capability/field policy plus transaction-local PostgreSQL identity and matching forced RLS. A is client-controlled. B leaves direct/query mistakes without a storage backstop. C is selected because both layers fail closed and can be cross-checked.
 ## Selected method and reasons for rejecting alternatives
 Compute server capability/field projection, establish transaction-local DB identity and rely on matching RLS predicates.
 ## Exact behavior, formula or pseudocode, boundaries, and tie-breaking
@@ -31,7 +31,9 @@ Role/action/resource matrix at API and real PostgreSQL RLS, field absence, ID pr
 ## Risks and monitoring
 Policy/RLS drift; contract tests compare both layers.
 ## Human approval
-Pending non-AI owner approval.
+- Approver: project owner
+- Approval date: 2026-08-29
+- Approval reference: `codex://threads/01a0197a-d1c9-7b83-a660-6613830f44a1`
 
 ## Design links
 - `architecture/design/access-wave1.md`

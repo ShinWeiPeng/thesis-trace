@@ -143,6 +143,7 @@ flowchart TD
 
 | ID | Owner | Declaration | Visibility | Semantic kind | Consumers | References |
 |---|---|---|---|---|---|---|
+| `accessconfirmationservice` | `access_domain` | `AccessConfirmationService` (class, `backend/src/thesis_trace/modules/access/orchestration.py`) | module-public | composition-mapping | `access_domain`, `thesis_trace_application`, `postgres_access_adapter` | `confirmationservice`, `authenticatedactor`, `role` |
 | `role` | `access_domain` | `Role` (enum, `backend/src/thesis_trace/modules/access/contracts.py`) | module-public | policy | `access_domain` | 無 |
 | `authenticatedactor` | `access_domain` | `AuthenticatedActor` (class, `backend/src/thesis_trace/modules/access/contracts.py`) | module-public | domain-value | `access_domain` | `role` |
 | `jwtverificationerror` | `access_domain` | `JwtVerificationError` (class, `backend/src/thesis_trace/modules/access/jwt_verifier.py`) | module-public | domain-value | `fastapi_entrypoint` | 無 |

@@ -1,0 +1,1 @@
+"""PostgreSQL atomic confirmation coordinators."""

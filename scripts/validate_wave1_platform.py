@@ -105,10 +105,11 @@ def normalized_names(values: list[Any]) -> set[str]:
 def validate_compose(root: Path, secret_contract: dict[str, Any]) -> None:
     model = compose_model(root)
     services = model.get("services", {})
-    required = {"migration", "api", "collector", "web", "postgres", "origin-gateway", "cloudflared"}
+    required = {"migration", "api", "collector", "ai-worker", "web", "postgres", "origin-gateway", "cloudflared"}
     require(required <= set(services), "Compose is missing a Wave 1 process")
     expected_networks = {
-        "migration": {"data"}, "api": {"edge-app", "data"}, "collector": {"data"}, "web": {"edge-app"},
+        "migration": {"data"}, "api": {"edge-app", "data"}, "collector": {"data"},
+        "ai-worker": {"data", "ai-egress"}, "web": {"edge-app"},
         "postgres": {"data"}, "origin-gateway": {"edge-app", "origin"},
         "cloudflared": {"origin", "tunnel-egress"},
     }
@@ -134,6 +135,7 @@ def validate_compose(root: Path, secret_contract: dict[str, Any]) -> None:
     require(networks.get("data", {}).get("internal") is True, "data network must be internal")
     require(networks.get("origin", {}).get("internal") is True, "origin network must be internal")
     require(networks.get("tunnel-egress", {}).get("internal") is not True, "cloudflared needs the sole egress network")
+    require(networks.get("ai-egress", {}).get("internal") is not True, "AI worker needs bounded provider egress")
 
     require(secret_contract.get("delivery") == "root_owned_read_only_files", "secret delivery contract is unsafe")
     require(secret_contract.get("direct_secret_environment_values") is False, "direct secret environment values are forbidden")
@@ -228,9 +230,9 @@ def validate_rls_contract(root: Path) -> None:
     require("GRANT UPDATE ON WAVE1_CONTRACT.SECURITY_AUDIT" not in sql, "audit rows must be append-only")
 
     production = (root / "infra/postgres/production-roles.sql").read_text(encoding="utf-8").upper()
-    for role in ("THESIS_TRACE_MIGRATION", "THESIS_TRACE_API", "THESIS_TRACE_COLLECTOR"):
+    for role in ("THESIS_TRACE_MIGRATION", "THESIS_TRACE_API", "THESIS_TRACE_COLLECTOR", "THESIS_TRACE_AI_WORKER"):
         require(role in production, f"production database role is missing: {role}")
-    require(production.count("NOBYPASSRLS") >= 3, "all production roles must be NOBYPASSRLS")
+    require(production.count("NOBYPASSRLS") >= 4, "all production roles must be NOBYPASSRLS")
     require("ALTER DATABASE THESIS_TRACE OWNER TO THESIS_TRACE_MIGRATION" in production, "migration role must own the database")
     require("GRANT CREATE ON DATABASE THESIS_TRACE TO THESIS_TRACE_API" not in production, "API runtime must not receive DDL")
     require("GRANT CREATE ON DATABASE THESIS_TRACE TO THESIS_TRACE_COLLECTOR" not in production, "collector runtime must not receive DDL")

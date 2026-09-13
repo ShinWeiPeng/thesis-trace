@@ -1,0 +1,13 @@
+VAL_SESSION_BEGIN run=synthetic-only scenario=container-native-smoke observer=test t_ms=0 seq=1
+VAL_EVENT name=batch_requested t_ms=1 seq=2
+VAL_EVENT name=case_1_covered t_ms=2 seq=3
+VAL_EVENT name=case_2_covered t_ms=3 seq=4
+VAL_EVENT name=case_3_covered t_ms=4 seq=5
+VAL_EVENT name=case_4_covered t_ms=5 seq=6
+VAL_EVENT name=case_5_covered t_ms=6 seq=7
+VAL_EVENT name=case_6_covered t_ms=7 seq=8
+VAL_EVENT name=case_7_covered t_ms=8 seq=9
+VAL_EVENT name=case_8_covered t_ms=9 seq=10
+VAL_EVENT name=diagnostics_covered t_ms=10 seq=11
+VAL_EVENT name=cleanup_confirmed t_ms=11 seq=12
+VAL_SESSION_END run=synthetic-only reason=complete records=13 dropped=0 duration_ms=12 t_ms=12 seq=13

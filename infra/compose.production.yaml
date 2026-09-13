@@ -16,6 +16,14 @@
       "external": false,
       "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/migration_database_url"
     },
+    "ai_worker_database_url": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/ai_worker_database_url"
+    },
+    "openai_api_key": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/openai_api_key"
+    },
     "api_database_password": {
       "external": false,
       "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/api_database_password"
@@ -27,6 +35,10 @@
     "migration_database_password": {
       "external": false,
       "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/migration_database_password"
+    },
+    "ai_worker_database_password": {
+      "external": false,
+      "file": "${THESIS_TRACE_SECRETS_DIR:?THESIS_TRACE_SECRETS_DIR is required}/ai_worker_database_password"
     },
     "access_issuer": {
       "external": false,

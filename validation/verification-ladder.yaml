@@ -1,0 +1,62 @@
+schema_version: "1.0"
+architecture_manifest: architecture/manifest.yaml
+# Scope: Wave 7 host/adapter checkpoint only. This matrix does not certify deployment,
+# live provider activation, browser acceptance, timing, or system/soak completion.
+layers:
+  module-contract:
+    scope: Recommendation, Portfolio, Thesis and Workflow public policy seams under SPEC-0001/ADR-0009.
+    inputs: [Exact source/version tuples, Decimal financial vectors, Fake Clock expiry boundaries, Legal and rejected Owner decisions]
+    metrics: [Test failures, Bound violations, Unauthorized transitions, Financial conservation]
+    thresholds:
+      pass: All selected native policy tests pass with no skipped required case.
+      fail: Any wrong formula, unauthorized transition, missed bound or stale acceptance.
+      blocked: Missing approved input, policy or executable case.
+    evidence: architecture/design/recommendation-owner-decision-wave7.md
+    stop_condition: Stop on the first contract failure and repair before claiming conformance.
+    next_layers: [sil, adapter-contract]
+  sil:
+    scope: Production RecommendationFlow with Fake owner Ports, transport and Clock; no duplicate financial model.
+    inputs: [Frozen admitted context, Candidate and critic fixture responses, Lease loss, Configuration and source changes]
+    metrics: [Call order, Network call count, Publication count, Retry classification, Private data leakage]
+    thresholds:
+      pass: All selected flow/worker tests pass and no forbidden call is observed.
+      fail: Unvalidated output reaches publication, split completion occurs, or an unavailable dependency is treated as valid.
+      blocked: Required production orchestration is not implemented or Fake Port lacks an exercised contract.
+    evidence: architecture/design/recommendation-owner-decision-wave7.md
+    stop_condition: Stop on forbidden publication or unresolved dependency behavior.
+    next_layers: [adapter-contract]
+  adapter-contract:
+    scope: Demand-owned reusable contract cases across Fake and real PostgreSQL/provider adapters; adapter-specific tests are supplemental evidence.
+    inputs: [Isolated Wave 7 verification database, Actual forward migrations, NOSUPERUSER NOBYPASSRLS roles, Bounded injected transport]
+    metrics: [Atomic rollback, Owner isolation, Lease fencing, Queue capacity, Error redaction, Caller timeout, Exact immutable roundtrip]
+    thresholds:
+      pass: Shared demand-side cases pass for each selected adapter and supplemental real transaction/security cases pass.
+      fail: Partial write, foreign access, stale lease success, changed history, unbounded admission or unredacted error.
+      blocked: Shared suite, real adapter capability, grants or required scenario is absent; database skips are not PASS.
+    evidence: architecture/design/recommendation-owner-decision-wave7.md
+    stop_condition: Roll back test-only roles/faults; stop on persistence or authorization failure.
+    next_layers: []
+rules:
+  - id: wave7-host-domain-contracts
+    architecture_refs: [recommendation_domain, portfolio_domain, thesis_domain, workflow_domain, thesis_trace_application]
+    contract_dimensions: [input-output-units, state-transition, call-order, error-reset, batch-capacity]
+    execution_changes: []
+    evidence_claims: [host-semantics]
+    layers: [module-contract, sil]
+    on_device_scenarios: []
+    execution_profiles: []
+  - id: wave7-adapter-contracts
+    architecture_refs: [recommendation.store, application.recommendation_transaction, application.investment_provider, application.investment_critic]
+    contract_dimensions: [external-port, state-transition, call-order, error-reset, batch-capacity]
+    execution_changes: [transport-protocol]
+    evidence_claims: [adapter-conformance]
+    layers: [module-contract, sil, adapter-contract]
+    on_device_scenarios: []
+    execution_profiles: []
+not_applicable:
+  - layer: pil
+    rationale: This checkpoint makes no controlled target-cost or embedded processor claim.
+  - layer: hil
+    rationale: This checkpoint makes no hardware, production timing or real-time scheduling claim.
+  - layer: system-soak
+    rationale: Not selected for this host/adapter checkpoint; integrated worker/browser and live deployment acceptance remain separately required and unverified, not waived.

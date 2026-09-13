@@ -1,0 +1,60 @@
+# DEC-107 Owner approved eight diagnostic captures; not formal resource acceptance.
+version: "1.1"
+architecture:
+  manifest: architecture/manifest.yaml
+  manifest_sha256: 6cb9583dde1f2476adf5b77accee0f4c5ad35e871e86fb76958771d2048e8e1f
+  execution_profile: linux_server_functional
+target:
+  platform: linux
+  provider: perf-ftrace
+  native_max_bytes: 33554432
+transport:
+  type: import
+  timeout_seconds: 300
+  max_bytes: 65536
+actions:
+  container-native-batch:
+    executable: python3
+    args: [backend/tests/prototypes/container_native_smoke.py, run, --output, .codex/evidence/on-device/container-native-smoke-20260911-a1, --library, /tmp/thesis-trace-extraction-prototype.H66cBJ/venv/lib/python3.14/site-packages]
+    cwd: .
+    risk: trace
+    trace_role: record
+    timeout_seconds: 300
+    max_output_bytes: 65536
+    # First trace monitored by runner; helper independently hard-limits all eight.
+    bounded_artifact: .codex/evidence/on-device/container-native-smoke-20260911-a1/01-html/perf.data
+    max_artifact_bytes: 4194304
+  container-cleanup-check:
+    executable: python3
+    args: [backend/tests/prototypes/container_native_smoke.py, cleanup-check, --output, .codex/evidence/on-device/container-native-smoke-20260911-a1]
+    cwd: .
+    risk: passive
+    idempotent: true
+    timeout_seconds: 5
+    max_output_bytes: 4096
+scenarios:
+  - id: container-native-smoke
+    title: 隔離解析容器原生追蹤 Smoke
+    purpose: 確認正常解析、故障與恢復可保留限縮原生證據，供後續正式驗收設計使用；不判定效能或發布資格。
+    phase: smoke
+    evidence_mode: flow
+    max_duration_ms: 300000
+    prerequisites: []
+    actions: [container-native-batch]
+    cleanup_actions: [container-cleanup-check]
+    architecture_refs: [linux_server_functional, evidence_collection]
+    completion:
+      trigger_criteria: [requested]
+      required_criteria: [coverage-cleanup]
+      session_end_reason: complete
+    criteria:
+      - id: requested
+        label: 已核准批次請求
+        description: 一個唯一執行識別碼提出最多八次追蹤的測試請求。
+        type: event_sequence
+        events: [batch_requested]
+      - id: coverage-cleanup
+        label: 八項診斷覆蓋與清理
+        description: 八次解析或故障結果符合預期，原生紀錄可匯出且無遺失標記，恢復程序重新綁定，最後回收本次容器與追蹤程序；不包含資源門檻。
+        type: event_sequence
+        events: [case_1_covered, case_2_covered, case_3_covered, case_4_covered, case_5_covered, case_6_covered, case_7_covered, case_8_covered, diagnostics_covered, cleanup_confirmed]
